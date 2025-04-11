@@ -1,0 +1,146 @@
+[Clostridium] ultunense Esp
+[Eubacterium] hallii DSM 3353
+Acidovorax ebreus TPSY
+Acidovorax temperans
+Acinetobacter baumannii
+Acinetobacter bereziniae LMG 1003 = CIP 70.12
+Acinetobacter bohemicus ANC 3994
+Acinetobacter bouvetii DSM 14964 = CIP 107468
+Acinetobacter brisouii CIP 110357
+Acinetobacter gerneri DSM 14967 = CIP 107464
+Acinetobacter harbinensis
+Acinetobacter indicus CIP 110367
+Acinetobacter johnsonii XBB1
+Acinetobacter lwoffii NCTC 5866 = CIP 64.10 = NIPH 512
+Acinetobacter parvus DSM 16617 = CIP 108168
+Acinetobacter radioresistens DSM 6976 = NBRC 102413 = CIP 103788
+Acinetobacter schindleri CIP 107287
+Acinetobacter sp. HR7
+Acinetobacter sp. TTH0-4
+Acinetobacter sp. Ver3
+Acinetobacter tandoii DSM 14970 = CIP 107469
+Acinetobacter towneri DSM 14962 = CIP 107472
+Acinetobacter ursingii DSM 16037 = CIP 107286
+Acinetobacter venetianus VE-C3
+Actinomyces massiliensis 4401292
+Alcanivorax hongdengensis A-11-3
+Alishewanella agri BL06
+Aquabacterium parvum
+Bacillus bataviensis LMG 21833
+Bacillus mycoides
+Bacillus sp. EGD-AK10
+Bacillus subtilis subsp. subtilis str. 168
+Brachybacterium paraconglomeratum LC44
+Campylobacter mucosalis
+Capnocytophaga gingivalis ATCC 33624
+Cardiobacterium hominis ATCC 15826
+Catellicoccus marimammalium M35/04/3
+Catenibacterium mitsuokai DSM 15897
+Cellvibrio sp. BR
+Chroococcidiopsis thermalis PCC 7203
+Chryseobacterium aquaticum
+Chryseobacterium formosense
+Chryseobacterium halperniae
+Chryseobacterium indologenes
+Chryseobacterium sp. Leaf404
+Corynebacterium camporealensis
+Corynebacterium efficiens YS-314
+Corynebacterium pseudodiphtheriticum DSM 44287
+Corynebacterium pseudogenitalium ATCC 33035
+Corynebacterium xerosis NBRC 16721
+Curvibacter lanceolatus ATCC 14669
+Cutibacterium acnes KPA171202
+Cutibacterium granulosum TM11
+Delftia acidovorans SPH-1
+Desulfocarbo indianensis
+Devosia sp. H5989
+Enterococcus cecorum
+Enterococcus durans
+Enterococcus faecalis V583
+Enterococcus faecium DO
+Enterococcus italicus DSM 15952
+Escherichia coli O104:H4 str. 2011C-3493
+Escherichia coli O157:H7 str. Sakai
+Escherichia coli O83:H1 str. NRG 857C
+Escherichia coli str. K-12 substr. MG1655
+Escherichia coli UMN026
+Finegoldia magna ATCC 29328
+Frigoribacterium sp. Leaf254
+Gemella haemolysans ATCC 10379
+Herminiimonas arsenicoxydans
+Hydrogenophaga sp. Root209
+Ideonella sakaiensis
+Kingella kingae
+Klebsiella pneumoniae subsp. pneumoniae HS11286
+Kocuria palustris
+Kocuria sp. ZOR0020
+Lactobacillus amylotrophicus DSM 20534
+Lactobacillus brevis ATCC 367
+Lactobacillus fermentum IFO 3956
+Lactococcus garvieae Lg2
+Lactococcus lactis subsp. lactis Il1403
+Lactococcus piscium MKFS47
+Lampropedia cohaerens
+Leclercia adecarboxylata
+Leuconostoc lactis
+Listeria monocytogenes EGD-e
+Macrococcus caseolyticus JCSC5402
+Massilia timonae CCUG 45783
+Microbacterium barkeri 2011-R4
+Micromonospora sp. HK10
+Mycobacterium sp. Root265
+Oligella ureolytica DSM 18253
+Pannonibacter phragmitetus
+Pantoea agglomerans
+Pantoea ananatis LMG 5342
+Planomicrobium glaciei CHR43
+Prevotella sp. oral taxon 473 str. F0040
+Prevotella sp. P4-76
+Pseudomonas aeruginosa PAO1
+Pseudomonas alkylphenolica
+Pseudomonas balearica DSM 6083
+Pseudomonas entomophila L48
+Pseudomonas fluorescens F113
+Pseudomonas fluorescens Pf0-1
+Pseudomonas fluorescens SBW25
+Pseudomonas fragi
+Pseudomonas japonica NBRC 103040 = DSM 22348
+Pseudomonas lutea
+Pseudomonas protegens CHA0
+Pseudomonas putida KT2440
+Pseudomonas resinovorans NBRC 106553
+Pseudomonas saudimassiliensis
+Pseudomonas saudiphocaensis
+Pseudomonas syringae pv. tomato str. DC3000
+Pseudopedobacter saltans DSM 12145
+Psychrobacter alimentarius
+Psychrobacter phenylpyruvicus DSM 7000 = NBRC 102152
+Psychrobacter sp. ENNN9_III
+Psychrobacter sp. PAMC 21119
+Psychrobacter sp. TB15
+Psychrobacter urativorans
+Ralstonia mannitolilytica
+Ralstonia pickettii 12J
+Rothia dentocariosa ATCC 17931
+Salmonella enterica subsp. enterica serovar Typhi str. CT18
+Salmonella enterica subsp. enterica serovar Typhimurium str. LT2
+Shigella flexneri 2a str. 301
+Staphylococcus aureus subsp. aureus NCTC 8325
+Staphylococcus cohnii subsp. cohnii
+Staphylococcus epidermidis ATCC 12228
+Staphylococcus hominis subsp. hominis C80
+Staphylococcus saprophyticus subsp. saprophyticus ATCC 15305
+Staphylococcus sciuri subsp. sciuri
+Staphylococcus warneri SG1
+Staphylococcus xylosus
+Stenotrophomonas maltophilia K279a
+Streptococcus gordonii str. Challis substr. CH1
+Streptococcus hyovaginalis DSM 12219
+Streptococcus minor DSM 17118
+Streptococcus mitis B6
+Streptococcus parauberis KCTC 11537
+Tepidimonas taiwanensis
+Terrabacter sp. 28
+Tetragenococcus halophilus NBRC 12172
+Veillonella sp. oral taxon 780 str. F0422
+Xenophilus azovorans DSM 13620
