@@ -1,0 +1,15 @@
+Acinetobacter
+Micromonospora
+Campylobacter
+Pseudomonas
+Eubacterium
+Catenibacterium
+Pantoea
+Klebsiella
+Kluyvera
+Bacillus
+Shewanella
+Escherichia
+Enterobacter
+Leclercia
+Serratia
