@@ -37,7 +37,7 @@ def safe_filename(name):
     return name.replace(" ", "_").replace("/", "_")
 
 def search_gene_protein_batch(gene, species_batch, retries=3):
-    queries = [f'("{gene}"[Gene] OR "{gene}"[Protein]) AND "{species}"[Organism]' for species in species_batch]
+    queries = [f'("{gene}"[Gene]) AND "{species}"[Organism]' for species in species_batch]
     full_query = " OR ".join(f"({q})" for q in queries)
 
     attempt = 0
@@ -74,7 +74,7 @@ all_successful = True
 
 for gene in genes:
     gene_dir = os.path.join(output_base, gene)
-    os.makedirs(gene_dir, exist_ok=True)
+    gene_written = False  # Track if we wrote anything for this gene
 
     for i in range(0, len(species_list), batch_size):
         species_batch = species_list[i:i + batch_size]
@@ -100,14 +100,19 @@ for gene in genes:
                     species_to_records[species].append(record)
 
         for species, recs in species_to_records.items():
-            fasta_out = os.path.join(gene_dir, f"{safe_filename(species)}.fasta")
-            if recs:
+            if len(recs) >= 5:
+                if not gene_written:
+                    os.makedirs(gene_dir, exist_ok=True)  # Only now create gene folder
+                    gene_written = True
+
+                fasta_out = os.path.join(gene_dir, f"{safe_filename(species)}.fasta")
                 if not (os.path.exists(fasta_out) and os.path.getsize(fasta_out) > 0):
                     with open(fasta_out, "w") as f:
                         SeqIO.write(recs, f, "fasta")
-                    logging.info(f"Successfully wrote: {fasta_out}")
+                    logging.info(f"✅ Saved {len(recs)} sequences to: {fasta_out}")
             else:
-                logging.warning(f"No records matched precisely for {gene}-{species}")
+                logging.warning(f"⚠️ Skipped saving {gene}-{species} due to fewer than 5 sequences ({len(recs)})")
+                all_successful = False
 
         time.sleep(0.2)  # To maintain safely below 10 req/sec
 
