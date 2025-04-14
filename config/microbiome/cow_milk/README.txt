@@ -10,15 +10,15 @@ This dataset (genera_species_cow_milk.xlsx) includes microbial genera and specie
 
 ### Genera
 
-_genera.txt: Contains the combined genera identified by both MG-RAST and PathoScope.
-_genera_mg-rast.txt: Genera identified exclusively by MG-RAST.
-_genera_pathoscope.txt: Genera identified exclusively by PathoScope.
-_genera_taxids.txt: NCBI Taxonomy IDs associated with each genus.
+genera.txt: Contains the combined genera identified by both MG-RAST and PathoScope.
+genera_mg-rast.txt: Genera identified exclusively by MG-RAST.
+genera_pathoscope.txt: Genera identified exclusively by PathoScope.
+genera_taxids.txt: NCBI Taxonomy IDs associated with each genus.
 
 ### Species
 
-_species_CM.txt: Species identified specifically in cow milk samples from cows with clinical mastitis (CM). 
-_species_H.txt: Species identified specifically in cow milk samples from healthy (H) cows. 
+species_CM.txt: Species identified specifically in cow milk samples from cows with clinical mastitis (CM). 
+species_H.txt: Species identified specifically in cow milk samples from healthy (H) cows. 
 
 ---
 
