@@ -66,11 +66,11 @@ rule download_bacdive_data:
 # ---------------------
 rule download_quickgo_data:
     input:
-        go_ids="config/quickgo/go_ids_test.txt",
-        taxon_ids="config/quickgo/taxon_ids_test.txt"
+        go_ids="config/quickgo/go_ids.txt",
+        taxon_ids="config/quickgo/taxon_ids.txt"
     output:
-        annotations="data/quickgo_test/annotations_all.json",
-        symbols="data/quickgo_test/gene_symbols.txt"
+        annotations="data/quickgo/annotations_all_test.json",
+        symbols="data/quickgo/gene_symbols.txt"
     script:
         "scripts/quickgo_data.py"
 
@@ -81,9 +81,9 @@ rule download_quickgo_data:
 rule get_protein_names:
     input:
         ncbi_info="config/login/ncbi_info.txt",
-        gene_file="data/quickgo_test/gene_symbols.txt"
+        gene_file="data/quickgo/gene_symbols.txt"
     output:
-        protein_names="data/quickgo_test/protein_name.tsv"
+        protein_names="data/quickgo/protein_name.tsv"
     params:
         species="bacteria"
     script:
@@ -95,11 +95,11 @@ rule get_protein_names:
 # ---------------------
 rule download_proteins_by_gene:
     input:
-        proteins="data/quickgo/gene_symbols.txt",
-        species="data/bacdive/gram_negative.txt",
+        proteins="data/quickgo/gene_symbols_test.txt",
+        species="data/bacdive/gram_stain/gram_positive.txt",
         ncbi_info="config/login/ncbi_info.txt"
     output:
-        complete_flag="data/proteins/gram_negative/.download_complete"
+        complete_flag="data/proteins/gram_positive/.download_complete"
     script:
         "scripts/download_protein_per_species.py"
 
