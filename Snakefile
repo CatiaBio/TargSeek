@@ -66,11 +66,11 @@ rule download_bacdive_data:
 # ---------------------
 rule download_quickgo_data:
     input:
-        go_ids="config/quickgo/go_ids.txt",
-        taxon_ids="config/quickgo/taxon_ids_test.txt"
+        go_ids="config/quickgo/go_ids.tsv",
+        taxon_ids="config/quickgo/taxon_ids.tsv"
     output:
-        annotations="data/quickgo_test2/annotations_all_test.json",
-        symbols="data/quickgo_test2/gene_symbols_gram_positive.txt"
+        annotations="data/quickgo/annotations_all_bacteria.json",
+        symbols="data/quickgo/gene_symbols_bacteria.txt"
     script:
         "scripts/quickgo_data.py"
 
@@ -95,13 +95,14 @@ rule get_protein_names:
 # ---------------------
 rule download_proteins_by_gene:
     input:
-        proteins="data/quickgo_test/gene_symbols_gram_negative.txt",
-        species="data/bacdive/gram_negative.txt",
+        proteins="data/gene_symbols.txt",
+        species=expand("data/bacdive/gram_stain/{group}.txt", group=["gram_positive", "gram_negative"]),
         ncbi_info="config/login/ncbi_info.txt"
     output:
-        complete_flag="data/proteins_test/gram_negative/.download_complete"
+        complete_flag="data/proteins/.download_complete"
     script:
         "scripts/download_protein_per_species.py"
+
 
 # # ---------------------
 # # Run MAFFT on all downloaded FASTAs (after ALL downloads)
