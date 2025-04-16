@@ -18,7 +18,7 @@ with open(snakemake.input.ncbi_info, "r") as f:
     Entrez.api_key = lines[1].strip() if len(lines) > 1 else None
 
 protein_file = snakemake.input.proteins
-species_file = snakemake.input.species
+species_files = snakemake.input.species if isinstance(snakemake.input.species, list) else [snakemake.input.species]
 output_base = os.path.dirname(snakemake.output.complete_flag)
 
 os.makedirs(output_base, exist_ok=True)
@@ -27,9 +27,6 @@ os.makedirs(output_base, exist_ok=True)
 
 with open(protein_file) as pf:
     genes = [line.strip() for line in pf if line.strip()]
-
-with open(species_file) as sf:
-    species_list = [line.strip() for line in sf if line.strip()]
 
 # ---------------- FUNCTIONS ----------------
 
@@ -69,52 +66,77 @@ def fetch_protein_sequences(id_list, retries=3):
 
 # ---------------- MAIN LOOP ----------------
 
+# ---------------- MAIN LOOP ----------------
+
 batch_size = 10
 all_successful = True
 
-for gene in genes:
-    gene_dir = os.path.join(output_base, gene)
-    gene_written = False  # Track if we wrote anything for this gene
+# Define order explicitly
+ordered_groups = ["gram_positive", "gram_negative"]
 
-    for i in range(0, len(species_list), batch_size):
-        species_batch = species_list[i:i + batch_size]
-        logging.info(f"Processing gene '{gene}' for species batch {species_batch}")
+# Map group names to their files
+group_file_map = {os.path.splitext(os.path.basename(fp))[0]: fp for fp in species_files}
 
-        ids = search_gene_protein_batch(gene, species_batch)
-        if not ids:
-            logging.warning(f"No IDs found for batch {gene}-{species_batch}")
-            all_successful = False
-            continue
+for group in ordered_groups:
+    species_file = group_file_map.get(group)
+    if not species_file:
+        logging.warning(f"Species file for group '{group}' not found in input.")
+        continue
 
-        records = fetch_protein_sequences(ids)
-        if not records:
-            logging.warning(f"No sequences retrieved for batch {gene}-{species_batch}")
-            all_successful = False
-            continue
+    print(f"\n▶️ Starting download for: {group.replace('_', ' ').title()}")
+    logging.info(f"Starting group: {group}")
 
-        # Organize sequences per species
-        species_to_records = {species: [] for species in species_batch}
-        for record in records:
-            for species in species_batch:
-                if species.lower() in record.description.lower():
-                    species_to_records[species].append(record)
+    with open(species_file) as sf:
+        species_list = [line.strip() for line in sf if line.strip()]
 
-        for species, recs in species_to_records.items():
-            if len(recs) >= 5:
-                if not gene_written:
-                    os.makedirs(gene_dir, exist_ok=True)  # Only now create gene folder
-                    gene_written = True
+    group_output_dir = os.path.join(output_base, group)
 
-                fasta_out = os.path.join(gene_dir, f"{safe_filename(species)}.fasta")
-                if not (os.path.exists(fasta_out) and os.path.getsize(fasta_out) > 0):
-                    with open(fasta_out, "w") as f:
-                        SeqIO.write(recs, f, "fasta")
-                    logging.info(f"✅ Saved {len(recs)} sequences to: {fasta_out}")
-            else:
-                logging.warning(f"⚠️ Skipped saving {gene}-{species} due to fewer than 5 sequences ({len(recs)})")
+    for gene in genes:
+        gene_dir = os.path.join(group_output_dir, gene)
+        gene_written = False
+
+        for i in range(0, len(species_list), batch_size):
+            species_batch = species_list[i:i + batch_size]
+            logging.info(f"[{group}] Processing gene '{gene}' for species batch {species_batch}")
+
+            ids = search_gene_protein_batch(gene, species_batch)
+            if not ids:
+                logging.warning(f"No IDs found for batch {gene}-{species_batch}")
                 all_successful = False
+                continue
 
-        time.sleep(0.2)  # To maintain safely below 10 req/sec
+            records = fetch_protein_sequences(ids)
+            if not records:
+                logging.warning(f"No sequences retrieved for batch {gene}-{species_batch}")
+                all_successful = False
+                continue
+
+            species_to_records = {species: [] for species in species_batch}
+            for record in records:
+                for species in species_batch:
+                    if species.lower() in record.description.lower():
+                        species_to_records[species].append(record)
+
+            for species, recs in species_to_records.items():
+                if len(recs) >= 5:
+                    if not gene_written:
+                        os.makedirs(gene_dir, exist_ok=True)
+                        gene_written = True
+
+                    fasta_out = os.path.join(gene_dir, f"{safe_filename(species)}.fasta")
+                    if not (os.path.exists(fasta_out) and os.path.getsize(fasta_out) > 0):
+                        with open(fasta_out, "w") as f:
+                            SeqIO.write(recs, f, "fasta")
+                        logging.info(f"✅ [{group}] Saved {len(recs)} sequences to: {fasta_out}")
+                else:
+                    logging.warning(f"⚠️ [{group}] Skipped saving {gene}-{species} due to fewer than 5 sequences ({len(recs)})")
+                    all_successful = False
+
+            time.sleep(0.2)
+
+    print(f"✅ Finished download for: {group.replace('_', ' ').title()}")
+    logging.info(f"Finished group: {group}")
+
 
 # ---------------- WRITE COMPLETE FLAG ----------------
 

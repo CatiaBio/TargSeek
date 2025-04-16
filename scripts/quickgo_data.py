@@ -9,12 +9,31 @@ taxonid_file = snakemake.input.taxon_ids
 annotations_output = snakemake.output.annotations
 symbols_output = snakemake.output.symbols
 
-# Read GO IDs and taxon IDs from input files
+# Read GO IDs from TSV file, ignoring lines that start with #
+go_ids_list = []
+
 with open(goid_file, 'r', encoding='utf-8') as f:
-    go_ids = f.read().strip()
+    for line in f:
+        line = line.strip()
+        if not line or line.startswith('#') or line.lower().startswith("gene"):
+            continue  # skip empty lines, comments, or headers
+        go_id = line.split()[0]
+        go_ids_list.append(go_id)
+
+go_ids = ",".join(go_ids_list)
+
+# Read Taxon IDs from file, skipping headers and comments
+taxon_ids_list = []
 
 with open(taxonid_file, 'r', encoding='utf-8') as f:
-    taxon_ids = f.read().strip()
+    for line in f:
+        line = line.strip()
+        if not line or line.startswith('#') or line.lower().startswith("taxon"):
+            continue  # skip empty lines, comments, or headers
+        taxon_id = line.split()[0]
+        taxon_ids_list.append(taxon_id)
+
+taxon_ids = ",".join(taxon_ids_list)
 
 # Ensure output directory exists
 output_dir = os.path.dirname(annotations_output)
@@ -88,10 +107,25 @@ with open(annotations_output, "w", encoding="utf-8") as f:
 print(f"All data successfully combined and saved to JSON. Total items: {len(all_results)}")
 
 # Step 5: Extract gene names (symbols) from the JSON and save to list file
-symbols = sorted({entry["symbol"] for entry in all_results if "symbol" in entry and entry["symbol"]})
+# symbols = sorted({entry["symbol"] for entry in all_results if "symbol" in entry and entry["symbol"]})
+
+# with open(symbols_output, "w", encoding="utf-8") as f:
+#     for symbol in symbols:
+#         f.write(symbol + "\n")
+
+# print(f"Extracted {len(symbols)} unique gene symbols and saved to quickgo_gene_symbols.txt")
+
+def is_valid_symbol(symbol):
+    return not symbol[0].isupper()
+
+symbols = sorted({
+    entry["symbol"]
+    for entry in all_results
+    if "symbol" in entry and entry["symbol"] and is_valid_symbol(entry["symbol"])
+})
 
 with open(symbols_output, "w", encoding="utf-8") as f:
     for symbol in symbols:
         f.write(symbol + "\n")
 
-print(f"Extracted {len(symbols)} unique gene symbols and saved to quickgo_gene_symbols.txt")
+print(f"Extracted {len(symbols)} unique gene symbols (filtered) and saved to quickgo_gene_symbols.txt")
