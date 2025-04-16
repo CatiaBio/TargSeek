@@ -82,7 +82,7 @@ for page in range(1, total_pages + 1):
     os.remove(filename)
 
 # Step 4: Save combined results to a single JSON file
-with open(os.path.join(output_dir, "annotations_all.json"), "w", encoding="utf-8") as f:
+with open(annotations_output, "w", encoding="utf-8") as f:
     json.dump(all_results, f, indent=4)
 
 print(f"All data successfully combined and saved to JSON. Total items: {len(all_results)}")
@@ -90,7 +90,7 @@ print(f"All data successfully combined and saved to JSON. Total items: {len(all_
 # Step 5: Extract gene names (symbols) from the JSON and save to list file
 symbols = sorted({entry["symbol"] for entry in all_results if "symbol" in entry and entry["symbol"]})
 
-with open(os.path.join(output_dir, "gene_symbols.txt"), "w", encoding="utf-8") as f:
+with open(symbols_output, "w", encoding="utf-8") as f:
     for symbol in symbols:
         f.write(symbol + "\n")
 
