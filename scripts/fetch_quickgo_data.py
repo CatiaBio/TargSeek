@@ -128,4 +128,4 @@ with open(symbols_output, "w", encoding="utf-8") as f:
     for symbol in symbols:
         f.write(symbol + "\n")
 
-print(f"Extracted {len(symbols)} unique gene symbols (filtered) and saved to quickgo_gene_symbols.txt")
+print(f"Extracted {len(symbols)} unique gene symbols (filtered) and saved to quickgo/gene_symbols.txt")

@@ -6,14 +6,15 @@ import time
 
 # ---------------- CONFIG ----------------
 
-with open("config/login/ncbi_info.txt") as f:
+credentials_file = snakemake.input.ncbi_info
+species_file = snakemake.input.species
+gene_file = snakemake.input.genes
+output_file = snakemake.output.coverage
+
+with open(credentials_file) as f:
     lines = f.readlines()
     Entrez.email = lines[0].strip()
     Entrez.api_key = lines[1].strip() if len(lines) > 1 else None
-
-species_file = "data/bacdive/gram_stain/gram_positive.txt"
-gene_file = "data/quickgo/new_genes.txt"
-output_file = "results/gene_species_coverage_gram_positive_bacteria.tsv"
 
 os.makedirs(os.path.dirname(output_file), exist_ok=True)
 
@@ -34,7 +35,7 @@ def chunk_list(lst, size):
 # ---------------- MAIN ----------------
 
 with open(output_file, "w") as out:
-    out.write("gene\tspecies_number\tspecies_with_gene\n")  # write header
+    out.write("Gene\tCount\tSpecies\n")  # write header
     out.flush()
 
     for gene in genes:
