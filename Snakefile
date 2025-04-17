@@ -3,8 +3,8 @@
 # ---------------------
 rule all:
     input:
-        "results/unique_in_positive.txt",
-        "results/unique_in_negative.txt"
+        "results/proteins_unique_in_positive.txt",
+        "results/proteins_unique_in_negative.txt"
 
 # ---------------------
 # Download BacDive metadata and classify taxa
@@ -12,7 +12,7 @@ rule all:
 rule classify_taxa_by_gram:
     """Use BacDive API to classify taxa into Gram-positive/negative."""
     input:
-        species="config/microbiome/cow_milk/unique_species_test.txt",
+        species="config/microbiome/cow_milk/unique_species.txt",
         bacdive_info="config/login/bacdive_info.txt"
     output:
         all_json="data/bacdive/all_species.json",
@@ -87,8 +87,8 @@ rule assess_gene_taxa_coverage:
 # Filter and sort gene coverage by threshold
 # ---------------------
 GRAM_THRESHOLDS = {
-    "positive": 20,
-    "negative": 50,
+    "positive": 5,
+    "negative": 7,
 }
 
 rule filter_and_sort_coverage:
@@ -120,3 +120,16 @@ rule find_unique_genes:
         comm -13 <(cut -f1 {input.negative} | tail -n +2 | sort) <(cut -f1 {input.positive} | tail -n +2 | sort) > {output.unique_in_positive}
         comm -23 <(cut -f1 {input.negative} | tail -n +2 | sort) <(cut -f1 {input.positive} | tail -n +2 | sort) > {output.unique_in_negative}
         """
+    
+# ---------------------
+# Fetch protein names for unique gene sets
+# ---------------------
+rule get_protein_names_for_unique_genes:
+    """Search NCBI for protein names using gene names only."""
+    input:
+        gene_file="results/unique_in_{group}.txt",
+        ncbi_info="config/login/ncbi_info.txt"
+    output:
+        protein_names="results/proteins_unique_in_{group}.txt"
+    script:
+        "scripts/get_protein_names_from_ncbi.py"
