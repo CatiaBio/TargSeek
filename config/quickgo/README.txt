@@ -21,36 +21,53 @@ Data was retrieved from the European Bioinformatics Institute (EBI) QuickGO reso
 ## Data Selection Criteria
 
 Proteins were selected based on Gene Ontology (GO) terms relevant to bacterial cellular compartments and structures, using the following GO relationships: "is_a", "part_of", and "occurs_in". The selected GO terms include:
-GO:0046930    pore complex
-GO:0015288    porin activity
-GO:0090729    toxin activity
-GO:0016020    membrane
-GO:0005576    extracellular region
-GO:0007155    cell adhesion
-GO:0030288 – Outer membrane-bounded periplasmic space
-GO:0050840 - extracellular matrix binding
-GO:0005576 - extracellular region
-GO:0005615 - extracellular space
-GO:0005618 – Cell wall: A rigid structure outside the plasma membrane, primarily composed of peptidoglycan in bacteria.​
-GO:0005886 – Plasma membrane: Semipermeable membrane enclosing the cytoplasm of bacterial cells.​
-GO:0009270 – Bacterial-type flagellum motor: Rotary motor driving the rotation of the bacterial flagellum.​
-GO:0009271 – Bacterial-type flagellum filament: Long, helical filament that propels the bacterium.​
-GO:0009272 – Bacterial-type flagellum hook: Flexible coupling between the basal body and the filament of the flagellum.​
-GO:0009273 – Gram-positive cell wall: Thick peptidoglycan-rich wall characteristic of Gram-positive bacteria.​
-GO:0009274 – Peptidoglycan-based cell wall: A structural component unique to bacteria, providing rigidity and shape.​
-GO:0009275 – Gram-negative cell wall: Thin peptidoglycan layer located between the inner and outer membranes in Gram-negative bacteria.​
-GO:0009277 – Bacterial-type flagellum basal body: Anchoring structure of the flagellum embedded in the cell envelope.​
-GO:0009278 – Bacterial-type flagellum: Long, whip-like structures enabling bacterial motility.​
-GO:0009279 – Cell outer membrane: The outermost layer in Gram-negative bacteria, containing lipopolysaccharides.​
-GO:0009288 – Fimbriae: Thin, filamentous structures aiding in bacterial attachment to surfaces.​
-GO:0009289 – Pilus: Hair-like appendages on bacterial surfaces involved in adhesion and conjugation.​
-GO:0009425 – Lipopolysaccharide biosynthetic process: Formation of lipopolysaccharides, key components of the outer membrane in Gram-negative bacteria.​
-GO:0010339 – Cell wall polysaccharide biosynthetic process: Synthesis of polysaccharides that are integral to the bacterial cell wall.​
-GO:0019861 – Outer membrane: External membrane found in Gram-negative bacteria, distinct from the plasma membrane.​
-GO:0030312 – External encapsulating structure: Structures like capsules or sheaths that enclose the cell, external to the cell wall.​
-GO:0030313 – Cell envelope: Combined structure of the plasma membrane, cell wall, and, in Gram-negative bacteria, the outer membrane.​
-GO:0097313 – Bacterial-type cell wall organization: Processes involved in the assembly and arrangement of the bacterial cell wall.​
-GO:0099008 – Bacterial-type flagellum-dependent cell motility: Movement of bacterial cells facilitated by the rotation of flagella.
+
+🧫 Cell Surface & Extracellular
+GO ID	Name	Description
+GO:0005576	Extracellular region	Any space outside the cell, including secreted proteins and fluid-exposed molecules.
+GO:0005615	Extracellular space	The space external to the cell membrane, where secreted proteins may be detected.
+GO:0005618	Cell wall	Rigid structure outside the plasma membrane; varies between Gram-positive and Gram-negative bacteria.
+GO:0019861	Outer membrane	The outermost membrane in Gram-negative bacteria, enriched in LPS and porins.
+GO:0030312	External encapsulating structure	Surface structures such as capsules or sheaths that enclose the bacterial cell.
+GO:0030313	Cell envelope	The multilayered structure enclosing the cell, including membranes and the wall.
+GO:0030288	Outer membrane-bounded periplasmic space	Space between the inner and outer membranes in Gram-negative bacteria.
+GO:0016020	Membrane	Generic term for any lipid bilayer surrounding a compartment, including plasma, inner, and outer membranes.
+
+🧬 Motility (Flagella)
+GO ID	Name	Description
+GO:0009278	Bacterial-type flagellum	The full motility structure (motor, hook, filament).
+GO:0009270	Flagellum motor	The rotary engine embedded in the cell envelope driving flagellar rotation.
+GO:0009271	Flagellum filament	The long, whip-like filament that extends into the extracellular space.
+GO:0009272	Flagellum hook	Connects the motor and filament; provides flexibility and torque transfer.
+GO:0009277	Flagellum basal body	The anchoring structure embedded in the membrane layers.
+GO:0099008	Flagellum-dependent cell motility	Movement of cells using rotation of flagella.
+
+🦠 Adhesion & Appendages
+GO ID	Name	Description
+GO:0007155	Cell adhesion	Proteins that mediate attachment to host cells or surfaces.
+GO:0050840	Extracellular matrix binding	Proteins that bind host ECM components like collagen or fibronectin.
+GO:0009288	Fimbriae	Short, hair-like structures aiding in bacterial adhesion.
+GO:0009289	Pilus	Long filamentous structures used for adhesion or conjugation.
+
+🧱 Cell Wall & Membrane Types
+GO ID	Name	Description
+GO:0009273	Gram-positive cell wall	Thick peptidoglycan layer with teichoic acids; lacks outer membrane.
+GO:0009274	Peptidoglycan-based cell wall	Common to all bacteria; provides rigidity and shape.
+GO:0009275	Gram-negative cell wall	Thin peptidoglycan layer between inner and outer membranes.
+GO:0009276	Gram-negative-bacterium-type cell wall	Specific term for Gram-negative wall structure, similar to above.
+GO:0009279	Cell outer membrane	Specific outer membrane found in Gram-negative bacteria.
+
+🧬 Transport & Permeability
+GO ID	Name	Description
+GO:0015288	Porin activity	Channel proteins forming pores in the outer membrane.
+GO:0046930	Pore complex	Multi-protein assemblies that form selective pores across membranes.
+
+💥 Toxins & Biosynthesis
+GO ID	Name	Description
+GO:0090729	Toxin activity	Proteins that damage or disrupt host functions.
+GO:0009425	Lipopolysaccharide biosynthetic process	Assembly of LPS — a major antigen in Gram-negative bacteria.
+GO:0010339	Cell wall polysaccharide biosynthesis	Creation of complex sugars for the cell wall and capsule.
+GO:0097313	Cell wall organization	Processes that build, maintain, or remodel the bacterial cell wall.
 
 ## Data Format
 
