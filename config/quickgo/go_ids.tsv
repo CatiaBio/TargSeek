@@ -3,7 +3,7 @@ GeneOntology	Description
 GO:0005576  Extracellular region
 GO:0005615  Extracellular space
 GO:0005618  Cell wall
-GO:0005886  Plasma membrane
+#GO:0005886  Plasma membrane
 GO:0007155  Cell adhesion
 #GO:0009270  Bacterial-type flagellum motor
 GO:0009271	Bacterial-type flagellum filament
