@@ -107,25 +107,25 @@ with open(annotations_output, "w", encoding="utf-8") as f:
 print(f"All data successfully combined and saved to JSON. Total items: {len(all_results)}")
 
 # Step 5: Extract gene names (symbols) from the JSON and save to list file
-# symbols = sorted({entry["symbol"] for entry in all_results if "symbol" in entry and entry["symbol"]})
-
-# with open(symbols_output, "w", encoding="utf-8") as f:
-#     for symbol in symbols:
-#         f.write(symbol + "\n")
-
-# print(f"Extracted {len(symbols)} unique gene symbols and saved to quickgo_gene_symbols.txt")
-
-def is_valid_symbol(symbol):
-    return not symbol[0].isupper()
-
-symbols = sorted({
-    entry["symbol"]
-    for entry in all_results
-    if "symbol" in entry and entry["symbol"] and is_valid_symbol(entry["symbol"])
-})
+symbols = sorted({entry["symbol"] for entry in all_results if "symbol" in entry and entry["symbol"]})
 
 with open(symbols_output, "w", encoding="utf-8") as f:
     for symbol in symbols:
         f.write(symbol + "\n")
 
-print(f"Extracted {len(symbols)} unique gene symbols (filtered) and saved to quickgo/gene_symbols.txt")
+print(f"Extracted {len(symbols)} unique gene symbols and saved to quickgo_gene_symbols.txt")
+
+# def is_valid_symbol(symbol):
+#     return not symbol[0].isupper()
+
+# symbols = sorted({
+#     entry["symbol"]
+#     for entry in all_results
+#     if "symbol" in entry and entry["symbol"] and is_valid_symbol(entry["symbol"])
+# })
+
+# with open(symbols_output, "w", encoding="utf-8") as f:
+#     for symbol in symbols:
+#         f.write(symbol + "\n")
+
+# print(f"Extracted {len(symbols)} unique gene symbols (filtered) and saved to quickgo/gene_symbols.txt")
