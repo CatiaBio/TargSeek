@@ -44,16 +44,28 @@ rule split_species_by_gram:
 # ---------------------
 # Download GO annotations & extract gene symbols
 # ---------------------
+# rule fetch_quickgo_annotations:
+#     """Fetch GO annotations and extract gene symbols using QuickGO API."""
+#     input:
+#         go_ids="config/quickgo/go_ids.tsv",
+#         taxon_ids="config/quickgo/taxon_ids.tsv"
+#     output:
+#         annotations="data/quickgo/annotations_all.json",
+#         symbols="data/quickgo/gene_symbols.txt"
+#     script:
+#         "scripts/fetch_quickgo_data.py"
+
 rule fetch_quickgo_annotations:
     """Fetch GO annotations and extract gene symbols using QuickGO API."""
     input:
         go_ids="config/quickgo/go_ids.tsv",
         taxon_ids="config/quickgo/taxon_ids.tsv"
     output:
-        annotations="data/quickgo/annotations_all.json",
-        symbols="data/quickgo/gene_symbols.txt"
+        annotations="data/quickgo/annotations_extracellular_region.json",
+        symbols="data/quickgo/gene_symbols_extracellular_region.txt"
     script:
         "scripts/fetch_quickgo_data.py"
+
 
 # ---------------------
 # Download protein sequences by gene and species
@@ -146,3 +158,4 @@ rule get_protein_names_for_unique_genes:
         protein_names="results/proteins_unique_in_{group}.txt"
     script:
         "scripts/get_protein_names_from_ncbi.py"
+
