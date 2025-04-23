@@ -72,23 +72,36 @@ rule fetch_ncbi_proteins:
 # ---------------------
 # Check coverage: how many taxa have each gene?
 # ---------------------
+# rule assess_gene_taxa_coverage:
+#     """Check how many taxa have a protein hit for each gene."""
+#     input:
+#         species="data/bacdive/gram_{group}.txt",
+#         genes="data/quickgo/gene_symbols.txt",
+#         ncbi_info="config/login/ncbi_info.txt"
+#     output:
+#         coverage="results/gene_coverage_gram_{group}.tsv"
+#     script:
+#         "scripts/gene_taxa_coverage.py"
+
+
 rule assess_gene_taxa_coverage:
     """Check how many taxa have a protein hit for each gene."""
     input:
-        species="data/bacdive/gram_{group}.txt",
-        genes="data/quickgo/gene_symbols.txt",
+        species="data/bacdive/gram_negative.txt",
+        genes="data/quickgo/gene_symbols_missing.txt",
         ncbi_info="config/login/ncbi_info.txt"
     output:
-        coverage="results/gene_coverage_gram_{group}.tsv"
+        coverage="results/gene_coverage_gram_negative_missing.tsv"
     script:
         "scripts/gene_taxa_coverage.py"
+
 
 # ---------------------
 # Filter and sort gene coverage by threshold
 # ---------------------
 GRAM_THRESHOLDS = {
-    "positive": 5,
-    "negative": 7,
+    "positive": 25,
+    "negative": 50,
 }
 
 rule filter_and_sort_coverage:
