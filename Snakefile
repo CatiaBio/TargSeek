@@ -99,11 +99,11 @@ rule fetch_ncbi_proteins:
 rule assess_gene_taxa_coverage:
     """Check how many taxa have a protein hit for each gene."""
     input:
-        species="data/bacdive/gram_negative.txt",
-        genes="data/quickgo/gene_symbols_missing.txt",
+        species="data/bacdive/gram_positive.txt",
+        genes="data/quickgo/genes_to_test.txt",
         ncbi_info="config/login/ncbi_info.txt"
     output:
-        coverage="results/gene_coverage_gram_negative_missing.tsv"
+        coverage="results/gene_coverage_gram_positive_test.tsv"
     script:
         "scripts/gene_taxa_coverage.py"
 
