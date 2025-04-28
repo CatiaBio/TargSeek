@@ -1,7 +1,18 @@
+# Snakefile
+# ------------------------------------------------------
+# PureMilk Snakemake Workflow
+# 
+# This pipeline downloads BacDive metadata, classifies species by Gram stain,
+# fetches QuickGO annotations, selects important proteins, downloads protein sequences,
+# performs MSA (MAFFT), and finds conserved amino acid regions.
+#
+# Configurations are loaded from config/config.yaml.
+# ------------------------------------------------------
+
 # Load configuration
 configfile: "config/config.yaml"
 
-# Helper function to load selected genes dynamically
+# Helper function to dynamically load selected protein names
 def get_selected_genes(group):
     file_path = f"results/proteins_unique_in_{group}.txt"
     with open(file_path) as f:
@@ -68,7 +79,7 @@ rule fetch_quickgo_annotations:
 # Assess how many species have each gene annotated
 rule assess_gene_taxa_coverage:
     input:
-        species="data/bacdive/gram_{group}.txt",
+        species=lambda wildcards: config["bacdive"]["gram_species_template"].format(group=wildcards.group),
         genes=config["quickgo"]["genes"],
         ncbi_info=config["login"]["ncbi_info"]
     output:
@@ -89,6 +100,18 @@ rule filter_and_sort_coverage:
         (head -n 1 {input} && awk -F'\t' 'NR > 1 && $2 > {params.threshold}' {input} | sort -k2,2nr) > {output}
         """
 
+# Select top proteins to analyse further (after coverage filtering)
+rule select_proteins_to_analyse:
+    input:
+        "results/gene_coverage_gram_{group}_filtered.tsv"
+    output:
+        "results/proteins_unique_in_{group}.txt"
+    params:
+        num_proteins_gram_positive=config["protein_selection"]["positive"],
+        num_proteins_gram_negative=config["protein_selection"]["negative"]
+    script:
+        config["scripts"]["select_proteins"]
+
 # Download protein sequences from NCBI for selected genes and species
 rule download_proteins_to_analyse:
     input:
@@ -99,18 +122,6 @@ rule download_proteins_to_analyse:
         output_folder=directory("results/{group}_proteins_downloaded")
     params:
         group="{group}"
-    script:
-        config["scripts"]["download_proteins"]
-
-
-# Download protein sequences from NCBI for selected genes and species
-rule download_proteins_to_analyse:
-    input:
-        protein_selection="results/proteins_unique_in_{group}.txt",
-        species="data/bacdive/gram_{group}.txt",
-        ncbi_info=config["login"]["ncbi_info"]
-    output:
-        complete_flag="results/proteins_downloaded_{group}.txt"
     script:
         config["scripts"]["download_proteins"]
 

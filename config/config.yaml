@@ -1,9 +1,19 @@
-# Login information
+# config/config.yaml
+# ------------------------------------------------------
+# Configuration file for PureMilk Snakemake Pipeline
+#
+# Defines all paths, thresholds, script locations.
+# 
+# Only this file needs to be edited to adjust thresholds, protein selection,
+# or update paths without modifying the Snakefile.
+# ------------------------------------------------------
+
+# Login information for BacDive and NCBI
 login:
   bacdive_info: "config/login/bacdive_info.txt"
   ncbi_info: "config/login/ncbi_info.txt"
 
-# BacDive files
+# BacDive data files
 bacdive:
   species: "config/microbiome/cow_milk/unique_species.txt"
   all_json: "data/bacdive/all_species.json"
@@ -13,6 +23,7 @@ bacdive:
   gram_classification: "data/bacdive/gram_classification.tsv"
   gram_positive: "data/bacdive/gram_positive.txt"
   gram_negative: "data/bacdive/gram_negative.txt"
+  gram_species_template: "data/bacdive/gram_{group}.txt"
 
 # QuickGO files
 quickgo:
@@ -33,9 +44,7 @@ scripts:
 
 # MAFFT settings
 mafft:
-  threads: 8
-  input: "sequence.fasta"
-  output: "sequence_alg.fasta"
+  threads: 8  # number of threads to use for alignment
 
 # Gram thresholds for gene filtering
 gram_thresholds:
