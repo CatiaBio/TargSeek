@@ -1,161 +1,155 @@
+# Load configuration
+configfile: "config/config.yaml"
+
+# Helper function to load selected genes dynamically
+def get_selected_genes(group):
+    file_path = f"results/proteins_unique_in_{group}.txt"
+    with open(file_path) as f:
+        genes = [line.strip() for line in f if line.strip()]
+    return genes
+
 # ---------------------
-# Final targets
+# Final Target
 # ---------------------
 rule all:
     input:
-        "results/proteins_unique_in_positive.txt",
-        "results/proteins_unique_in_negative.txt"
+        expand(
+            "results/positive_proteins_aligned/{gene}_aligned.fasta",
+            gene=get_selected_genes("positive")
+        ) +
+        expand(
+            "results/negative_proteins_aligned/{gene}_aligned.fasta",
+            gene=get_selected_genes("negative")
+        )
 
 # ---------------------
-# Download BacDive metadata and classify taxa
+# Rules
 # ---------------------
+
+# Classify species as Gram-positive or Gram-negative using BacDive API
 rule classify_taxa_by_gram:
-    """Use BacDive API to classify taxa into Gram-positive/negative."""
     input:
-        species="config/microbiome/cow_milk/unique_species.txt",
-        bacdive_info="config/login/bacdive_info.txt"
+        species=config["bacdive"]["species"],
+        bacdive_info=config["login"]["bacdive_info"]
     output:
-        all_json="data/bacdive/all_species.json",
-        not_found="data/bacdive/not_found.txt",
-        errors="data/bacdive/errors.txt",
-        downloaded="data/bacdive/downloaded.txt",
-        gram_classification="data/bacdive/gram_classification.tsv"
+        config["bacdive"]["all_json"],
+        config["bacdive"]["not_found"],
+        config["bacdive"]["errors"],
+        config["bacdive"]["downloaded"],
+        config["bacdive"]["gram_classification"]
     script:
-        "scripts/bacdive_classification.py"
+        config["scripts"]["classify_gram"]
 
-# ---------------------
-# Split species into Gram-positive and Gram-negative lists
-# ---------------------
+# Split species list into Gram-positive and Gram-negative text files
 rule split_species_by_gram:
-    """Split species by Gram classification into two files without headers."""
     input:
-        "data/bacdive/gram_classification.tsv"
+        config["bacdive"]["gram_classification"]
     output:
-        gram_positive="data/bacdive/gram_positive.txt",
-        gram_negative="data/bacdive/gram_negative.txt"
+        gram_positive=config["bacdive"]["gram_positive"],
+        gram_negative=config["bacdive"]["gram_negative"]
     shell:
         """
         mkdir -p data/bacdive
-
         awk -F'\t' 'NR > 1 && $2 == "positive" {{ print $1 }}' {input} > {output.gram_positive}
         awk -F'\t' 'NR > 1 && $2 == "negative" {{ print $1 }}' {input} > {output.gram_negative}
         """
 
-# ---------------------
-# Download GO annotations & extract gene symbols
-# ---------------------
-# rule fetch_quickgo_annotations:
-#     """Fetch GO annotations and extract gene symbols using QuickGO API."""
-#     input:
-#         go_ids="config/quickgo/go_ids.tsv",
-#         taxon_ids="config/quickgo/taxon_ids.tsv"
-#     output:
-#         annotations="data/quickgo/annotations_all.json",
-#         symbols="data/quickgo/gene_symbols.txt"
-#     script:
-#         "scripts/fetch_quickgo_data.py"
-
+# Fetch GO annotations and gene symbols from QuickGO
 rule fetch_quickgo_annotations:
-    """Fetch GO annotations and extract gene symbols using QuickGO API."""
     input:
-        go_ids="config/quickgo/go_ids.tsv",
-        taxon_ids="config/quickgo/taxon_ids.tsv"
+        config["quickgo"]["go_ids"],
+        config["quickgo"]["taxon_ids"]
     output:
-        annotations="data/quickgo/annotations_extracellular_region.json",
-        symbols="data/quickgo/gene_symbols_extracellular_region.txt"
+        config["quickgo"]["annotations"],
+        config["quickgo"]["genes"]
     script:
-        "scripts/fetch_quickgo_data.py"
+        config["scripts"]["fetch_quickgo"]
 
-
-# ---------------------
-# Download protein sequences by gene and species
-# ---------------------
-rule fetch_ncbi_proteins:
-    """Download proteins for each gene/taxon pair using NCBI Entrez."""
-    input:
-        proteins="data/gene_symbols.txt",
-        species=expand("data/bacdive/gram_{group}.txt", group=["positive", "negative"]),
-        ncbi_info="config/login/ncbi_info.txt"
-    output:
-        complete_flag="data/proteins/.download_complete"
-    script:
-        "scripts/fetch_ncbi_proteins.py"
-
-# ---------------------
-# Check coverage: how many taxa have each gene?
-# ---------------------
-# rule assess_gene_taxa_coverage:
-#     """Check how many taxa have a protein hit for each gene."""
-#     input:
-#         species="data/bacdive/gram_{group}.txt",
-#         genes="data/quickgo/gene_symbols.txt",
-#         ncbi_info="config/login/ncbi_info.txt"
-#     output:
-#         coverage="results/gene_coverage_gram_{group}.tsv"
-#     script:
-#         "scripts/gene_taxa_coverage.py"
-
-
+# Assess how many species have each gene annotated
 rule assess_gene_taxa_coverage:
-    """Check how many taxa have a protein hit for each gene."""
     input:
-        species="data/bacdive/gram_positive.txt",
-        genes="data/quickgo/genes_to_test.txt",
-        ncbi_info="config/login/ncbi_info.txt"
+        species="data/bacdive/gram_{group}.txt",
+        genes=config["quickgo"]["genes"],
+        ncbi_info=config["login"]["ncbi_info"]
     output:
-        coverage="results/gene_coverage_gram_positive_test.tsv"
+        coverage="results/gene_coverage_gram_{group}.tsv"
     script:
-        "scripts/gene_taxa_coverage.py"
+        config["scripts"]["gene_coverage"]
 
-
-# ---------------------
-# Filter and sort gene coverage by threshold
-# ---------------------
-GRAM_THRESHOLDS = {
-    "positive": 25,
-    "negative": 50,
-}
-
+# Filter genes by minimum species coverage and sort them
 rule filter_and_sort_coverage:
-    """Filter genes by abundance threshold and sort by number of taxa, keeping the header."""
     input:
         "results/gene_coverage_gram_{group}.tsv"
     output:
         "results/gene_coverage_gram_{group}_filtered.tsv"
     params:
-        threshold=lambda wildcards: GRAM_THRESHOLDS[wildcards.group]
+        threshold=lambda wildcards: config["gram_thresholds"][wildcards.group]
     shell:
         """
         (head -n 1 {input} && awk -F'\t' 'NR > 1 && $2 > {params.threshold}' {input} | sort -k2,2nr) > {output}
         """
 
-# ---------------------
-# Compare Gram groups to find unique gene symbols
-# ---------------------
-rule find_unique_genes:
-    """Find genes unique to each Gram group by comparing filtered gene lists directly."""
+# Download protein sequences from NCBI for selected genes and species
+rule download_proteins_to_analyse:
     input:
-        positive="results/gene_coverage_gram_positive_filtered.tsv",
-        negative="results/gene_coverage_gram_negative_filtered.tsv"
+        proteins="results/proteins_unique_in_{group}.txt",
+        species=lambda wildcards: config["bacdive"]["gram_species_template"].format(group=wildcards.group),
+        ncbi_info=config["login"]["ncbi_info"]
     output:
-        unique_in_positive="results/unique_in_positive.txt",
-        unique_in_negative="results/unique_in_negative.txt"
+        output_folder=directory("results/{group}_proteins_downloaded")
+    params:
+        group="{group}"
+    script:
+        config["scripts"]["download_proteins"]
+
+
+# Download protein sequences from NCBI for selected genes and species
+rule download_proteins_to_analyse:
+    input:
+        protein_selection="results/proteins_unique_in_{group}.txt",
+        species="data/bacdive/gram_{group}.txt",
+        ncbi_info=config["login"]["ncbi_info"]
+    output:
+        complete_flag="results/proteins_downloaded_{group}.txt"
+    script:
+        config["scripts"]["download_proteins"]
+
+# Select one representative protein per species for MSA
+rule select_proteins_for_msa:
+    input:
+        input_folder="results/{group}_proteins_downloaded",
+    output:
+        output_folder=directory("results/{group}_proteins_merged"),
+    params:
+        group="{group}"
+    script:
+        config["scripts"]["get_msa_sequences"]
+
+# Perform multiple sequence alignment (MSA) using MAFFT with threading
+rule run_mafft:
+    input:
+        fasta="results/{group}_proteins_merged/{gene}.fasta"
+    output:
+        msa="results/{group}_proteins_aligned/{gene}_aligned.fasta"
+    threads: config["mafft"]["threads"]
     shell:
         """
-        comm -13 <(cut -f1 {input.negative} | tail -n +2 | sort) <(cut -f1 {input.positive} | tail -n +2 | sort) > {output.unique_in_positive}
-        comm -23 <(cut -f1 {input.negative} | tail -n +2 | sort) <(cut -f1 {input.positive} | tail -n +2 | sort) > {output.unique_in_negative}
+        mkdir -p results/{wildcards.group}_proteins_aligned
+        mafft --thread {threads} --maxiterate 10000 --localpair {input.fasta} > {output.msa}
         """
-    
-# ---------------------
-# Fetch protein names for unique gene sets
-# ---------------------
-rule get_protein_names_for_unique_genes:
-    """Search NCBI for protein names using gene names only."""
+
+# Find conserved amino acid positions in the MSA
+rule find_conserved_amino_acids:
     input:
-        gene_file="results/unique_in_{group}.txt",
-        ncbi_info="config/login/ncbi_info.txt"
-    output:
-        protein_names="results/proteins_unique_in_{group}.txt"
+        expand(
+            "results/positive_proteins_aligned/{gene}_aligned.fasta",
+            gene=get_selected_genes("positive")
+        ) +
+        expand(
+            "results/negative_proteins_aligned/{gene}_aligned.fasta",
+            gene=get_selected_genes("negative")
+        )
     script:
-        "scripts/get_protein_names_from_ncbi.py"
+        config["scripts"]["conserved_aminoacids"]
+
 

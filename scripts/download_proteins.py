@@ -19,7 +19,7 @@ with open(snakemake.input.ncbi_info, "r") as f:
 
 protein_file = snakemake.input.proteins
 species_file = snakemake.input.species
-output_base = os.path.dirname(snakemake.output.complete_flag)
+output_base = snakemake.output.output_folder
 
 os.makedirs(output_base, exist_ok=True)
 
@@ -111,11 +111,11 @@ for gene in genes:
 
         time.sleep(0.2)  # To maintain safely below 10 req/sec
 
-# ---------------- WRITE COMPLETE FLAG ----------------
+# # ---------------- WRITE COMPLETE FLAG ----------------
 
-if all_successful:
-    with open(snakemake.output.complete_flag, 'w') as f:
-        f.write('Download complete\n')
-    logging.info("Download complete flag written successfully.")
-else:
-    logging.warning("Some downloads failed; no complete flag written.")
+# if all_successful:
+#     with open(snakemake.output.complete_flag, 'w') as f:
+#         f.write('Download complete\n')
+#     logging.info("Download complete flag written successfully.")
+# else:
+#     logging.warning("Some downloads failed; no complete flag written.")
