@@ -2,6 +2,7 @@ import os
 import json
 import time
 import bacdive
+import shutil
 
 # ----------------------
 # Snakemake I/O
@@ -168,3 +169,8 @@ with open(output_gram_path, "w", encoding="utf-8") as gf:
     gf.write("species\tgram_classification\n")
     for species, gram in sorted(gram_classification.items()):
         gf.write(f"{species}\t{gram}\n")
+
+# ----------------------
+# Cleanup temporary files
+# ----------------------
+shutil.rmtree(temp_dir)

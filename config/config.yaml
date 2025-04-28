@@ -1,0 +1,48 @@
+# Login information
+login:
+  bacdive_info: "config/login/bacdive_info.txt"
+  ncbi_info: "config/login/ncbi_info.txt"
+
+# BacDive files
+bacdive:
+  species: "config/microbiome/cow_milk/unique_species.txt"
+  all_json: "data/bacdive/all_species.json"
+  not_found: "data/bacdive/not_found.txt"
+  errors: "data/bacdive/errors.txt"
+  downloaded: "data/bacdive/downloaded.txt"
+  gram_classification: "data/bacdive/gram_classification.tsv"
+  gram_positive: "data/bacdive/gram_positive.txt"
+  gram_negative: "data/bacdive/gram_negative.txt"
+
+# QuickGO files
+quickgo:
+  go_ids: "config/quickgo/go_ids.tsv"
+  taxon_ids: "config/quickgo/taxon_ids.tsv"
+  annotations: "data/quickgo/annotations_all.json"
+  genes: "data/quickgo/gene_symbols.txt"
+
+# Scripts
+scripts:
+  classify_gram: "scripts/bacdive_classification.py"
+  fetch_quickgo: "scripts/fetch_quickgo_data.py"
+  gene_coverage: "scripts/gene_taxa_coverage.py"
+  select_proteins: "scripts/select_proteins.py"
+  download_proteins: "scripts/download_proteins.py"
+  get_msa_sequences: "scripts/get_msa_sequences.py"
+  conserved_aminoacids: "scripts/conserved_aminoacids.py"
+
+# MAFFT settings
+mafft:
+  threads: 8
+  input: "sequence.fasta"
+  output: "sequence_alg.fasta"
+
+# Gram thresholds for gene filtering
+gram_thresholds:
+  positive: 25
+  negative: 50
+
+# Protein selection numbers
+protein_selection:
+  positive: 3
+  negative: 5
