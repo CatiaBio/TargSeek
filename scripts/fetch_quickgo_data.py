@@ -7,7 +7,7 @@ import time
 goid_file = snakemake.input.go_ids
 taxonid_file = snakemake.input.taxon_ids
 annotations_output = snakemake.output.annotations
-symbols_output = snakemake.output.symbols
+symbols_output = snakemake.output.genes
 
 # Read GO IDs from TSV file, ignoring lines that start with #
 go_ids_list = []
@@ -21,6 +21,7 @@ with open(goid_file, 'r', encoding='utf-8') as f:
         go_ids_list.append(go_id)
 
 go_ids = ",".join(go_ids_list)
+#print(go_ids)
 
 # Read Taxon IDs from file, skipping headers and comments
 taxon_ids_list = []
@@ -34,6 +35,7 @@ with open(taxonid_file, 'r', encoding='utf-8') as f:
         taxon_ids_list.append(taxon_id)
 
 taxon_ids = ",".join(taxon_ids_list)
+#print(taxon_ids)
 
 # Ensure output directory exists
 output_dir = os.path.dirname(annotations_output)
@@ -41,16 +43,16 @@ os.makedirs(output_dir, exist_ok=True)
 
 base_url = "https://www.ebi.ac.uk/QuickGO/services/annotation/search"
 params = {
-    "proteome" : "complete",
-    "includeFields": "taxonName",
-    "selectedFields": "symbol",
-    "geneProductType": "protein",
     "goId": go_ids,
-    "goUsage": "exact",
-    "goUsageRelationships": "is_a,part_of,occurs_in",
     "taxonId": taxon_ids,
     "taxonUsage": "descendants",
+    "geneProductType": "complex,protein",    
     "aspect": "cellular_component",
+    "goUsage": "descendants",
+    "goUsageRelationships": "is_a,part_of,occurs_in",
+    "qualifier": "part_of,located_in",        
+    "includeFields": "taxonName",
+    "selectedFields": "symbol",
     "limit": 200,
     "page": 1
 }
@@ -71,15 +73,16 @@ print(f"Total pages to fetch: {total_pages}")
 
 # Step 2: Download each page and save temporarily with a delay
 for page in range(1, total_pages + 1):
-    params["page"] = page
+    page_params = params.copy()
+    page_params["page"] = page
 
     # Adjust limit for the last page
     if page == total_pages and total_results % 200 != 0:
-        params["limit"] = total_results % 200
+        page_params["limit"] = total_results % 200
     else:
-        params["limit"] = 200
+        page_params["limit"] = 200
 
-    response = requests.get(base_url, params=params, headers=headers)
+    response = requests.get(base_url, params=page_params, headers=headers)
     if response.ok:
         data = response.json()
         filename = os.path.join(output_dir, f"annotations_page{page}.json")
@@ -114,18 +117,3 @@ with open(symbols_output, "w", encoding="utf-8") as f:
         f.write(symbol + "\n")
 
 print(f"Extracted {len(symbols)} unique gene symbols and saved to quickgo_gene_symbols.txt")
-
-# def is_valid_symbol(symbol):
-#     return not symbol[0].isupper()
-
-# symbols = sorted({
-#     entry["symbol"]
-#     for entry in all_results
-#     if "symbol" in entry and entry["symbol"] and is_valid_symbol(entry["symbol"])
-# })
-
-# with open(symbols_output, "w", encoding="utf-8") as f:
-#     for symbol in symbols:
-#         f.write(symbol + "\n")
-
-# print(f"Extracted {len(symbols)} unique gene symbols (filtered) and saved to quickgo/gene_symbols.txt")

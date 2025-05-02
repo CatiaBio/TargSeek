@@ -9,29 +9,40 @@
 # Configurations are loaded from config/config.yaml.
 # ------------------------------------------------------
 
+
 # Load configuration
 configfile: "config/config.yaml"
 
 # Helper function to dynamically load selected protein names
 def get_selected_genes(group):
-    file_path = f"results/proteins_unique_in_{group}.txt"
+    file_path = f"results/{group}_proteins.txt"
     with open(file_path) as f:
         genes = [line.strip() for line in f if line.strip()]
     return genes
 
-# ---------------------
-# Final Target
-# ---------------------
 rule all:
     input:
         expand(
-            "results/positive_proteins_aligned/{gene}_aligned.fasta",
-            gene=get_selected_genes("positive")
-        ) +
-        expand(
-            "results/negative_proteins_aligned/{gene}_aligned.fasta",
-            gene=get_selected_genes("negative")
+            "results/{group}/fasta_merged/{gene}",
+            group=["gram_positive"],
+            gene=get_selected_genes("gram_positive")
         )
+
+
+# ---------------------
+# Final Target
+# ---------------------
+# rule all:
+#     input:
+#         expand(
+#             "results/positive_proteins_aligned/{gene}_aligned.fasta",
+#             gene=get_selected_genes("positive")
+#         ) +
+#         expand(
+#             "results/negative_proteins_aligned/{gene}_aligned.fasta",
+#             gene=get_selected_genes("negative")
+#         )
+
 
 # ---------------------
 # Rules
@@ -66,15 +77,16 @@ rule split_species_by_gram:
         """
 
 # Fetch GO annotations and gene symbols from QuickGO
-rule fetch_quickgo_annotations:
-    input:
-        config["quickgo"]["go_ids"],
-        config["quickgo"]["taxon_ids"]
-    output:
-        config["quickgo"]["annotations"],
-        config["quickgo"]["genes"]
-    script:
-        config["scripts"]["fetch_quickgo"]
+# There is something wrong with the QuickGO API, so we need to use a local file for now
+# rule fetch_quickgo_annotations:
+#     input:
+#         go_ids = config["quickgo"]["go_ids"],
+#         taxon_ids = config["quickgo"]["taxon_ids"]
+#     output:
+#         annotations = config["quickgo"]["annotations"],
+#         genes = config["quickgo"]["genes"]
+#     script:
+#         config["scripts"]["fetch_quickgo"]
 
 # Assess how many species have each gene annotated
 rule assess_gene_taxa_coverage:
@@ -115,11 +127,11 @@ rule select_proteins_to_analyse:
 # Download protein sequences from NCBI for selected genes and species
 rule download_proteins_to_analyse:
     input:
-        proteins="results/proteins_unique_in_{group}.txt",
+        proteins="results/{group}_proteins.txt",
         species=lambda wildcards: config["bacdive"]["gram_species_template"].format(group=wildcards.group),
         ncbi_info=config["login"]["ncbi_info"]
     output:
-        output_folder=directory("results/{group}_proteins_downloaded")
+        output_folder=directory("results/{group}")
     params:
         group="{group}"
     script:
@@ -128,9 +140,9 @@ rule download_proteins_to_analyse:
 # Select one representative protein per species for MSA
 rule select_proteins_for_msa:
     input:
-        input_folder="results/{group}_proteins_downloaded",
+        input_folder="results/{group}/{gene}"
     output:
-        output_folder=directory("results/{group}_proteins_merged"),
+        output_folder="results/{group}/fasta_merged/{gene}.fasta",
     params:
         group="{group}"
     script:
@@ -139,28 +151,56 @@ rule select_proteins_for_msa:
 # Perform multiple sequence alignment (MSA) using MAFFT with threading
 rule run_mafft:
     input:
-        fasta="results/{group}_proteins_merged/{gene}.fasta"
+        fasta="results/{group}/fasta_merged/{gene}.fasta"
     output:
-        msa="results/{group}_proteins_aligned/{gene}_aligned.fasta"
+        msa="results/{group}/fasta_msa/{gene}.fasta"
     threads: config["mafft"]["threads"]
     shell:
         """
-        mkdir -p results/{wildcards.group}_proteins_aligned
+        mkdir -p $(dirname {output.msa})
         mafft --thread {threads} --maxiterate 10000 --localpair {input.fasta} > {output.msa}
         """
 
-# Find conserved amino acid positions in the MSA
-rule find_conserved_amino_acids:
+# MSA quality check using AliStat
+rule check_alignment_quality:
     input:
-        expand(
-            "results/positive_proteins_aligned/{gene}_aligned.fasta",
-            gene=get_selected_genes("positive")
-        ) +
-        expand(
-            "results/negative_proteins_aligned/{gene}_aligned.fasta",
-            gene=get_selected_genes("negative")
-        )
-    script:
-        config["scripts"]["conserved_aminoacids"]
+        msa="results/{group}/fasta_msa/{gene}.fasta"
+    output:
+        quality="results/{group}/fasta_msa/alistat/{gene}_aligned.stat"
+    log:
+        "logs/{group}/fasta_msa_alistat/{gene}_alistat.log"
+    shell:
+        """
+        mkdir -p $(dirname {output.quality})
+        mkdir -p $(dirname {log})
+        alistat {input.msa} > {output.quality} 2> {log}
+        """
+
+# Trim bad regions with trimAl
+rule trim_alignment:
+    input:
+        msa="results/{group}/fasta_msa/{gene}.fasta"
+    output:
+        trimmed="results/{group}/fasta_msa_trimmed/{gene}.fasta"
+    shell:
+        """
+        mkdir -p $(dirname {output.trimmed})
+        trimal -in {input.msa} -out {output.trimmed} -automated1
+        """
+
+
+# Find conserved amino acid positions in the MSA
+# rule find_conserved_amino_acids:
+#     input:
+#         expand(
+#             "results/positive_proteins_trimmed/{gene}_trimmed.fasta",
+#             gene=get_selected_genes("positive")
+#         ) +
+#         expand(
+#             "results/negative_proteins_trimmed/{gene}_trimmed.fasta",
+#             gene=get_selected_genes("negative")
+#         )
+#     script:
+#         config["scripts"]["conserved_aminoacids"]
 
 
