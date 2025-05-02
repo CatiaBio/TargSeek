@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import os
 import json
 import time
@@ -9,11 +11,11 @@ import shutil
 # ----------------------
 species_file = snakemake.input.species
 credentials_file = snakemake.input.bacdive_info
-not_found_path = snakemake.output.not_found
-output_gram_path = snakemake.output.gram_classification
-output_json_path = snakemake.output.all_json
-output_errors_path = snakemake.output.errors
-output_downloaded_path = snakemake.output.downloaded
+output_json_path = snakemake.output[0]        # all_json
+not_found_path = snakemake.output[1]          # not_found
+output_errors_path = snakemake.output[2]      # errors
+output_downloaded_path = snakemake.output[3]  # downloaded
+output_gram_path = snakemake.output[4]        # gram_classification
 
 # ----------------------
 # BacDive Auth

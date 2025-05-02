@@ -2,7 +2,11 @@
 TaxonID	Description
 #9606    Homo Sapiens
 #9913    Bos Taurus
-2 Bacteria
+#2 Bacteria
+562	Escherichia coli
+1280    Staphylococcus aureus
+1396    Bacillus cereus
+287 Pseudomonas aeruginosa
 #22	Shewanella
 #194	Campylobacter
 #286	Pseudomonas
