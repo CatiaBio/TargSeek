@@ -1,0 +1,16 @@
+Bam protein complex
+TAM protein secretion complex
+cell division site
+cell pole
+cytoplasm
+cytosol
+efflux pump complex
+endomembrane system
+membrane
+nitrate reductase complex
+phosphopyruvate hydratase complex
+pore complex
+transmembrane transporter complex
+transporter complex
+type II protein secretion system complex
+type III protein secretion system complex
