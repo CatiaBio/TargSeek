@@ -74,6 +74,24 @@ rule all_msa_sequences:
           group=["positive", "negative"]
         )
 
+rule all_msa_alignments:
+    input:
+        expand(
+        "results/msa_alignments/{analysis}_{paramset}_gram_{group}",
+            analysis=config["species_batches"],
+          paramset=config["quickgo_paramsets"],
+          group=["positive", "negative"]
+        )
+
+rule all_msa_quality:
+    input:
+        expand(
+        "results/msa_quality/{analysis}_{paramset}_gram_{group}",
+            analysis=config["species_batches"],
+          paramset=config["quickgo_paramsets"],
+          group=["positive", "negative"]
+        )
+
 # ---------------------
 # Rules
 # ---------------------
@@ -200,7 +218,6 @@ rule filter_surface_accessible_proteins:
     script:
         "scripts/filter_surface_accessible_proteins.py"
 
-
 # Download protein sequences from NCBI for surface-accessible proteins
 rule download_proteins_to_analyse:
     input:
@@ -208,7 +225,8 @@ rule download_proteins_to_analyse:
         species="data/bacdive/{analysis}/gram_{group}.txt",
         ncbi_info=config["login"]["ncbi_info"]
     output:
-        output_folder=directory("results/proteins/{analysis}_{paramset}_gram_{group}")
+        output_folder=directory("results/proteins/{analysis}_{paramset}_gram_{group}"),
+        complete_flag="results/proteins/{analysis}_{paramset}_gram_{group}/.download_complete"
     params:
         group="{group}",
         analysis="{analysis}",
@@ -220,7 +238,8 @@ rule download_proteins_to_analyse:
 rule select_proteins_for_msa:
     input:
         protein_dir="results/proteins/{analysis}_{paramset}_gram_{group}",
-        protein_list="results/proteins_to_study/{analysis}_{paramset}_gram_{group}.tsv"
+        protein_list="results/proteins_to_study/{analysis}_{paramset}_gram_{group}.tsv",
+        download_complete="results/proteins/{analysis}_{paramset}_gram_{group}/.download_complete"
     output:
         directory("results/msa_sequences/{analysis}_{paramset}_gram_{group}")
     params:
@@ -230,18 +249,51 @@ rule select_proteins_for_msa:
     script:
         config["scripts"]["get_msa_sequences"]
 
-# # Perform multiple sequence alignment (MSA) using MAFFT with threading
-# rule run_mafft:
-#     input:
-#         fasta="results/{group}/fasta_merged/{gene}.fasta"
-#     output:
-#         msa="results/{group}/fasta_msa/{gene}.fasta"
-#     threads: config["mafft"]["threads"]
-#     shell:
-#         """
-#         mkdir -p $(dirname {output.msa})
-#         mafft --thread {threads} --maxiterate 10000 --localpair {input.fasta} > {output.msa}
-#         """
+# Perform multiple sequence alignment (MSA) using MAFFT with threading
+rule run_mafft:
+    input:
+        fasta="results/msa_sequences/{analysis}_{paramset}_gram_{group}/{gene}.fasta"
+    output:
+        msa="results/msa_alignments/{analysis}_{paramset}_gram_{group}/{gene}_aligned.fasta"
+    threads: config["mafft"]["threads"]
+    params:
+        analysis="{analysis}",
+        paramset="{paramset}",
+        group="{group}",
+        gene="{gene}"
+    shell:
+        """
+        mkdir -p $(dirname {output.msa})
+        mafft --thread {threads} --auto {input.fasta} > {output.msa}
+        """
+
+# Run MAFFT alignments for all genes in a group
+rule run_all_mafft_for_group:
+    input:
+        msa_dir="results/msa_sequences/{analysis}_{paramset}_gram_{group}",
+        protein_list="results/proteins_to_study/{analysis}_{paramset}_gram_{group}.tsv"
+    output:
+        directory("results/msa_alignments/{analysis}_{paramset}_gram_{group}")
+    params:
+        analysis="{analysis}",
+        paramset="{paramset}",
+        group="{group}",
+        threads=config["mafft"]["threads"]
+    script:
+        "scripts/run_mafft_alignments.py"
+
+# MSA quality assessment
+rule assess_alignment_quality:
+    input:
+        "results/msa_alignments/{analysis}_{paramset}_gram_{group}"
+    output:
+        directory("results/msa_quality/{analysis}_{paramset}_gram_{group}")
+    params:
+        analysis="{analysis}",
+        paramset="{paramset}",
+        group="{group}"
+    script:
+        "scripts/assess_alignment_quality.py"
 
 # # MSA quality check using AliStat
 # rule check_alignment_quality:
