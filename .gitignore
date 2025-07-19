@@ -1,15 +1,31 @@
-# Folders to ignore
+# Project-specific folders to ignore
 config/login/*
 !config/login/*.example.txt
 logs/
 data/
 results/
 .snakemake/
-/other/
+tmp/
+cache/
+
+# Archive and backup folders
+scripts/archive_unused/
+scripts_test/
+scripts/other/
 data_backup/
 jupyter_notebooks/
-.venv/
-tmp/
+archive/
+
+# Temporary and test files
+*original*
+*_test*
+Snakefile_test
+debug_test.py
+test_script.py
+*.log
+gene_info.gz
+analysis_*.tsv
+list_*.txt
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
