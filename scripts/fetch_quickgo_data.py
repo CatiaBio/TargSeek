@@ -4,10 +4,20 @@ import os
 import time
 
 # Use Snakemake-provided file paths
-goid_file = snakemake.input.go_ids
-taxonid_file = snakemake.input.taxon_ids
-annotations_output = snakemake.output.annotations
-symbols_output = snakemake.output.genes
+# goid_file = snakemake.input.go_ids
+# taxonid_file = snakemake.input.taxon_ids
+# annotations_output = snakemake.output.annotations
+# symbols_output = snakemake.output.genes
+
+# Local input files
+goid_file = "config/quickgo/go_ids.tsv"
+taxonid_file = "config/quickgo/taxon_ids.tsv"
+
+# Local output files
+output_dir = "data/quickgo_test2"
+os.makedirs(output_dir, exist_ok=True)
+annotations_output = os.path.join(output_dir, "annotations.tsv")
+symbols_output     = os.path.join(output_dir, "gene_symbols.txt")
 
 # Read GO IDs from TSV file, ignoring lines that start with #
 go_ids_list = []
@@ -21,7 +31,7 @@ with open(goid_file, 'r', encoding='utf-8') as f:
         go_ids_list.append(go_id)
 
 go_ids = ",".join(go_ids_list)
-#print(go_ids)
+print(go_ids)
 
 # Read Taxon IDs from file, skipping headers and comments
 taxon_ids_list = []
@@ -35,7 +45,7 @@ with open(taxonid_file, 'r', encoding='utf-8') as f:
         taxon_ids_list.append(taxon_id)
 
 taxon_ids = ",".join(taxon_ids_list)
-#print(taxon_ids)
+print(taxon_ids)
 
 # Ensure output directory exists
 output_dir = os.path.dirname(annotations_output)
@@ -50,7 +60,8 @@ params = {
     "aspect": "cellular_component",
     "goUsage": "descendants",
     "goUsageRelationships": "is_a,part_of,occurs_in",
-    "qualifier": "part_of,located_in",        
+    "qualifier": "part_of,located_in",   
+    #"assignedBy": "UniProt",     
     "includeFields": "taxonName",
     "selectedFields": "symbol",
     "limit": 200,

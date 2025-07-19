@@ -1,0 +1,21 @@
+bacterial-type flagellum
+bacterial-type flagellum basal body
+bacterial-type flagellum basal body, MS ring
+bacterial-type flagellum basal body, distal rod, L ring
+bacterial-type flagellum basal body, distal rod, P ring
+bacterial-type flagellum basal body, rod
+bacterial-type flagellum filament cap
+bacterial-type flagellum hook
+bacterial-type flagellum secretion apparatus
+cell outer membrane
+cell surface
+extracellular region
+extracellular space
+host outer membrane
+outer membrane
+outer membrane protein complex
+outer membrane-bounded periplasmic space
+periplasmic flagellum
+periplasmic side of cell outer membrane
+periplasmic space
+plasma membranebacterial-type flagellum

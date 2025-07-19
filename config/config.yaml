@@ -8,6 +8,11 @@
 # or update paths without modifying the Snakefile.
 # ------------------------------------------------------
 
+# config/config.yaml
+# ------------------------------------------------------
+# Configuration file for PureMilk Snakemake Pipeline
+# ------------------------------------------------------
+
 # Login information for BacDive and NCBI
 login:
   bacdive_info: "config/login/bacdive_info.txt"
@@ -18,12 +23,14 @@ bacdive:
   species: "config/microbiome/cow_milk/unique_species.txt"
   all_json: "data/bacdive/all_species.json"
   not_found: "data/bacdive/not_found.txt"
+  updated_not_found: "data/bacdive/updated_not_found.txt"
   errors: "data/bacdive/errors.txt"
   downloaded: "data/bacdive/downloaded.txt"
   gram_classification: "data/bacdive/gram_classification.tsv"
+  updated_gram_classification: "data/bacdive/updated_gram_classification.tsv"
   gram_positive: "data/bacdive/gram_positive.txt"
   gram_negative: "data/bacdive/gram_negative.txt"
-  gram_species_template: "data/bacdive/gram_{group}.txt"
+  gram_species_template: "data/bacdive/{analysis}/gram_positive.txt"
 
 # QuickGO files
 quickgo:
@@ -31,12 +38,24 @@ quickgo:
   taxon_ids: "config/quickgo/taxon_ids.tsv"
   annotations: "data/quickgo/annotations_all.json"
   genes: "data/quickgo/gene_symbols.txt"
+  filtered_genes: "data/quickgo/genes_filtered.txt"
+
+# Paths for gene coverage analysis
+gene_coverage:
+  coverage_template: "results/gene_coverage_gram_{group}.tsv"
+  checked_genes_template: "results/list_gene_coverage_gram_{group}.txt"
+  missing_genes_template: "results/list_missing_genes_coverage_gram_{group}.txt"
+  updated_coverage_template: "results/updated_gene_coverage_gram_{group}.tsv"
 
 # Scripts
 scripts:
   classify_gram: "scripts/bacdive_classification.py"
+  supplement_gram_classification: "scripts/supplement_bacdive_gram_classification.py"
   fetch_quickgo: "scripts/fetch_quickgo_data.py"
+  gene_filtering: "scripts/filter_quickgo_data.py"
   gene_coverage: "scripts/gene_taxa_coverage.py"
+  gene_coverage_append: "scripts/append_gene_coverage.py"
+  filter_coverage: "scripts/filter_coverage_count.py"
   select_proteins: "scripts/select_proteins.py"
   download_proteins: "scripts/download_proteins.py"
   get_msa_sequences: "scripts/get_msa_sequences.py"
@@ -44,14 +63,38 @@ scripts:
 
 # MAFFT settings
 mafft:
-  threads: 8  # number of threads to use for alignment
+  threads: 8
 
-# Gram thresholds for gene filtering
+# Gram thresholds for gene filtering (now using 25% coverage for all)
 gram_thresholds:
   positive: 25
-  negative: 50
+  negative: 25
 
 # Protein selection numbers
 protein_selection:
   positive: 3
   negative: 5
+
+# Defined groups
+groups:
+  - positive
+  - negative
+
+species_batches:
+  - analysis_1
+  #- analysis_2
+  #- analysis_3
+
+species_files:
+  analysis_1: "data/test/gram_positive_test.txt"  # Using test data temporarily
+  #analysis_2: "config/microbiome/analysis_2.txt"
+  #analysis_3: "config/microbiome/analysis_3.txt"
+
+quickgo_paramsets:
+  - params_1
+  #- params_2
+  #- params_3
+
+
+cache:
+  checked_gene_species: cache/checked_gene_species.tsv

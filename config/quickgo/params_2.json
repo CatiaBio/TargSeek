@@ -1,0 +1,14 @@
+{
+  "goId": "GO:0005576",
+  "taxonId": "2",
+  "taxonUsage": "descendants",
+  "geneProductType": "complex,protein",
+  "aspect": "cellular_component",
+  "goUsage": "descendants",
+  "goUsageRelationships": "is_a,part_of,occurs_in",
+  "qualifier": "part_of,located_in",
+  "includeFields": "taxonName",
+  "selectedFields": "symbol",
+  "limit": 200,
+  "page": 1
+}
