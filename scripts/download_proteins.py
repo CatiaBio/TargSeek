@@ -158,6 +158,7 @@ for gene in genes:
                     with open(fasta_out, "w") as f:
                         SeqIO.write(recs, f, "fasta")
                     logging.info(f"Successfully wrote: {fasta_out} ({len(recs)} sequences)")
+                    total_species_downloaded += 1
                 else:
                     logging.info(f"File already exists: {fasta_out}")
             else:
@@ -173,11 +174,18 @@ logging.info(f"Genes skipped (already complete): {total_genes_skipped}")
 logging.info(f"Species files skipped (already exist): {total_species_skipped}")
 logging.info(f"Success: {all_successful}")
 
-# # ---------------- WRITE COMPLETE FLAG ----------------
+# ---------------- WRITE COMPLETE FLAG ----------------
 
-# if all_successful:
-#     with open(snakemake.output.complete_flag, 'w') as f:
-#         f.write('Download complete\n')
-#     logging.info("Download complete flag written successfully.")
-# else:
-#     logging.warning("Some downloads failed; no complete flag written.")
+if all_successful:
+    with open(snakemake.output.complete_flag, 'w') as f:
+        f.write('Download complete\n')
+        f.write(f'Genes processed: {total_genes_processed}\n')
+        f.write(f'Genes skipped: {total_genes_skipped}\n')
+        f.write(f'Species files downloaded: {total_species_downloaded}\n')
+        f.write(f'Species files skipped: {total_species_skipped}\n')
+    logging.info("Download complete flag written successfully.")
+else:
+    logging.warning("Some downloads failed; no complete flag written.")
+    # Remove incomplete flag if it exists
+    if os.path.exists(snakemake.output.complete_flag):
+        os.remove(snakemake.output.complete_flag)

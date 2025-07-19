@@ -53,6 +53,12 @@ snakemake --dry-run
 
 # Generate workflow visualization
 snakemake --dag | dot -Tsvg > workflow.svg
+
+# Run with minimal output (suppress NumPy warnings)
+PYTHONWARNINGS="ignore" snakemake all_downloaded_proteins --cores 4 --quiet
+
+# Resume interrupted downloads (downloads use sentinel files for proper resumption)
+snakemake all_downloaded_proteins --cores 4  # Will automatically detect and resume
 ```
 
 ### Configuration
@@ -93,3 +99,18 @@ Core tools managed via conda (`env.yml`):
 The pipeline uses a template-based approach for handling Gram-positive vs Gram-negative processing:
 - `gram_species_template: "data/bacdive/gram_{group}.txt"` allows dynamic file resolution
 - Thresholds and selection criteria are group-specific via `gram_thresholds` and `protein_selection`
+
+## Technical Notes
+
+### Download Resumption
+The `download_proteins_to_analyse` rule uses a **sentinel file approach** (`.download_complete`) to ensure proper handling of interrupted downloads:
+
+- **Problem**: Snakemake's `directory()` output considers jobs complete if the directory exists, even if downloads were interrupted
+- **Solution**: Added `.download_complete` sentinel file that's only created when ALL downloads succeed
+- **Benefits**: 
+  - Interrupted downloads are automatically detected and resumed
+  - Existing files are checked to prevent re-downloading
+  - No manual cleanup required after cancellation
+  - Complete data integrity and smart resumption
+
+**Usage**: Simply re-run the same Snakemake command after interruption - it will automatically resume from where it left off.
