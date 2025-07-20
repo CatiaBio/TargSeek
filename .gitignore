@@ -7,6 +7,7 @@ results/
 .snakemake/
 tmp/
 cache/
+backup_before_clean/
 
 # Archive and backup folders
 scripts/archive_unused/
@@ -26,6 +27,26 @@ test_script.py
 gene_info.gz
 analysis_*.tsv
 list_*.txt
+"Snakefile copy"
+test_small_positive.smk
+scripts/download_proteins_*.py
+!scripts/download_proteins_combined.py
+scripts/analyze_conservation.py
+scripts/analyze_conservation_adaptive.py
+scripts/assess_alignment_quality_comparison.py
+scripts/assess_and_download_proteins.py
+scripts/create_gene_species_lists.py
+scripts/create_gene_species_lists_from_coverage.py
+scripts/create_proteins_to_study_from_coverage.py
+scripts/download_proteins_by_gene_lists.py
+scripts/download_proteins_flexible_matching.py
+scripts/download_proteins_ncbi_missing.py
+scripts/download_proteins_optimized.py
+scripts/download_proteins_simple_sequential.py
+scripts/download_proteins_uniprot.py
+scripts/download_proteins_uniprot_iterative.py
+scripts/generate_final_report.py
+scripts/trim_alignments.py
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
