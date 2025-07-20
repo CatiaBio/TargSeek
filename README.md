@@ -1,41 +1,52 @@
-# 🧬 PureMilk: Surface-Accessible Protein Discovery Pipeline
+# 🧬 PureMilk: Comprehensive Protein Discovery & Epitope Prediction Pipeline
 
-A **Snakemake-based pipeline** for discovering conserved, functionally relevant proteins within specific microbial groups, with a focus on **surface-accessible proteins** suitable for diagnostic applications, therapeutic targets, or phylogenomic studies.
+A **state-of-the-art Snakemake pipeline** for discovering conserved, functionally relevant proteins within microbial groups, with integrated **3D structure analysis**, **epitope prediction**, and **vaccine target identification**.
 
 [![Snakemake](https://img.shields.io/badge/snakemake-≥6.0-brightgreen.svg)](https://snakemake.github.io)
-[![Python](https://img.shields.io/badge/python-3.8+-blue.svg)](https://python.org)
+[![Python](https://img.shields.io/badge/python-3.10+-blue.svg)](https://python.org)
+[![IEDB](https://img.shields.io/badge/IEDB-API%20Integrated-orange.svg)](https://www.iedb.org/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 ---
 
 ## 🎯 Overview
 
-PureMilk processes taxonomic data and Gene Ontology (GO) terms to extract candidate proteins that are:
-- **Surface-accessible** (based on GO cellular component annotations)
-- **Conserved** across target bacterial species
-- **Functionally relevant** for downstream applications
+PureMilk is a comprehensive bioinformatics pipeline that processes taxonomic data and Gene Ontology (GO) terms to identify candidate proteins suitable for:
+- **Vaccine Development** (epitope prediction with conservation scoring)
+- **Diagnostic Applications** (surface-accessible biomarkers)
+- **Therapeutic Targets** (conserved functional proteins)
+- **Phylogenomic Studies** (evolutionary analysis)
 
-The pipeline integrates multiple databases (BacDive, QuickGO, UniProt, NCBI) to provide comprehensive protein characterization and sequence data.
+The pipeline integrates multiple databases (BacDive, QuickGO, UniProt, NCBI, PDB, IEDB) to provide end-to-end protein characterization from discovery to epitope prediction.
 
 ---
 
 ## ✨ Key Features
 
-### 🔬 **Complete Workflow**
-- ✅ **Taxonomic Classification**: Uses BacDive API to classify species as Gram-positive/negative
-- ✅ **GO Term Processing**: Fetches gene symbols from QuickGO based on provided GO terms
-- ✅ **Coverage Assessment**: Analyzes gene presence across target taxa using NCBI Protein database
-- ✅ **Surface Accessibility Filtering**: Identifies proteins with surface-accessible GO cellular components
-- ✅ **UniProt Integration**: Enriches protein data with subcellular location and functional annotations
-- ✅ **Smart Downloads**: Downloads protein sequences with intelligent file existence checking
-- ✅ **MSA Preparation**: Prepares sequences for multiple sequence alignment with advanced species matching
+### 🔬 **Complete Discovery Workflow**
+- ✅ **Taxonomic Classification**: BacDive API for Gram-positive/negative classification
+- ✅ **GO Term Processing**: QuickGO integration for functional gene discovery
+- ✅ **Coverage Assessment**: NCBI Protein database analysis with smart caching
+- ✅ **Surface Accessibility**: GO cellular component filtering for membrane proteins
+- ✅ **3D Structure Integration**: PDB structure download and MSA integration
+- ✅ **Multi-Source Downloads**: UniProt batch + individual + NCBI fallback system
+- ✅ **Quality-Driven MSA**: Advanced sequence selection with conservation analysis
 
-### 🎛️ **Advanced Capabilities**
-- **Configurable Parameters**: Multiple analysis configurations and parameter sets
-- **Caching System**: Efficient API response caching to reduce redundant calls
-- **Error Resilience**: Comprehensive error handling and retry mechanisms
-- **Progress Tracking**: Detailed logging and progress monitoring
-- **Resumable Workflows**: Smart file checking prevents unnecessary re-downloads
+### 🧬 **Advanced Analysis Capabilities**
+- 🔥 **IEDB Epitope Prediction**: MHC Class I/II and B-cell epitope prediction
+- 🔥 **Conservation Scoring**: Epitope ranking by evolutionary conservation
+- 🔥 **3D Structure Tracking**: Detailed reports on structure availability and usage
+- 🔥 **Download Performance**: Comprehensive tracking of actual vs expected sequences
+- 🔥 **Population Coverage**: HLA allele coverage analysis for vaccine design
+- 🔥 **Multi-Stage QC**: Alignment quality assessment and trimming optimization
+
+### 🎛️ **Production-Ready Features**
+- **Full Dataset Support**: 113 gram-positive + 184 gram-negative species
+- **Intelligent Batching**: Processes species in groups of 10 to avoid API limits
+- **Resumable Downloads**: Sentinel files prevent incomplete download issues
+- **Performance Monitoring**: Real-time pipeline performance tracking
+- **Comprehensive Reports**: HTML reports with download metrics and visualizations
+- **Error Resilience**: Multi-stage fallback systems for robust execution
 
 ---
 
@@ -43,25 +54,42 @@ The pipeline integrates multiple databases (BacDive, QuickGO, UniProt, NCBI) to 
 
 ```mermaid
 graph TD
-    A[Species List] --> B[BacDive Classification]
+    A[Species List<br/>113 G+ / 184 G-] --> B[BacDive Classification]
     C[GO Terms] --> D[QuickGO Gene Fetching]
-    B --> E[Gene Coverage Assessment]
+    B --> E[Gene Coverage Assessment<br/>50% Threshold]
     D --> E
-    E --> F[UniProt Location Enrichment]
-    F --> G[Surface Accessibility Filtering]
-    G --> H[Protein Sequence Download]
-    H --> I[MSA Sequence Preparation]
-    I --> J[Multiple Sequence Alignment]
+    E --> F[Surface Accessibility Filtering]
+    F --> G[3D Structure Download<br/>PDB Integration]
+    G --> H[Multi-Source Protein Download<br/>UniProt + NCBI]
+    H --> I[MSA Sequence Selection<br/>3D Structure Priority]
+    I --> J[Multiple Sequence Alignment<br/>MAFFT + trimAl]
+    J --> K[Conservation Analysis<br/>Position-Specific Scoring]
+    K --> L[IEDB Epitope Prediction<br/>MHC I/II + B-cell]
+    L --> M[Final Reports<br/>HTML + Performance Metrics]
+    
+    style G fill:#e1f5fe
+    style K fill:#f3e5f5
+    style L fill:#fff3e0
+    style M fill:#e8f5e8
 ```
 
-### 📁 **Output Structure**
+### 📁 **Complete Output Structure**
 ```
 results/
-├── coverage/                    # Gene coverage analysis
-├── uniprot_info/               # UniProt data with GO enrichment
-├── proteins_to_study/          # Filtered surface-accessible proteins
-├── proteins/                   # Downloaded protein sequences
-└── msa_sequences/             # MSA-ready sequences
+├── coverage/                          # Gene coverage analysis (50% threshold)
+├── uniprot_info/                     # UniProt enrichment with GO terms
+├── proteins_to_study/                # Filtered surface-accessible proteins
+├── proteins_to_download/             # Gene-specific species lists
+├── protein_fasta/                    # Downloaded sequences by gene/species
+├── 3d_structures/                    # PDB structures and integration data
+├── msa_sequences/                    # MSA-ready sequences with 3D priority
+├── msa_alignments/                   # MAFFT alignments
+├── msa_trimmed/                      # trimAl optimized alignments
+├── msa_quality/                      # Quality assessment comparisons
+├── conservation/                     # Conservation analysis results
+├── epitope_predictions/              # IEDB predictions with conservation
+├── download_summary/                 # Performance and success metrics
+└── reports/                          # Final HTML reports
 ```
 
 ---
@@ -70,186 +98,288 @@ results/
 
 ### 📦 **Installation**
 
-1. **Clone the repository**:
+1. **Clone and setup**:
    ```bash
    git clone https://github.com/your-username/PureMilk.git
    cd PureMilk
-   ```
-
-2. **Create conda environment**:
-   ```bash
    conda env create -f env.yml
    conda activate puremilk
    ```
 
-3. **Configure API credentials**:
+2. **Configure API credentials**:
    ```bash
-   # Copy example files and add your credentials
    cp config/login/bacdive_info.example.txt config/login/bacdive_info.txt
    cp config/login/ncbi_info.example.txt config/login/ncbi_info.txt
-   
-   # Edit files with your API credentials
-   nano config/login/bacdive_info.txt    # Add BacDive credentials
-   nano config/login/ncbi_info.txt       # Add NCBI email and API key
+   # Edit with your credentials
    ```
 
 ### ⚙️ **Configuration**
 
-Edit `config/config.yaml` to customize your analysis:
+The pipeline is pre-configured for production use with the full dataset:
 
 ```yaml
-# Species data
+# config/config.yaml highlights
 species_files:
-  analysis_1: "config/microbiome/cow_milk/unique_species.txt"
+  analysis_1: "data/bacdive/analysis_1/gram_positive.txt"  # 113 species
 
-# GO terms and parameters  
-quickgo_paramsets: ["params_1", "params_2"]
-
-# Coverage thresholds
 gram_thresholds:
-  positive: 25  # Minimum 25% species coverage
-  negative: 25
+  positive: 50  # 50% coverage requirement
+  negative: 50
 
-# Surface accessibility criteria
-surface_accessible_file: "config/quickgo/surface_accessible.txt"
+# Epitope prediction enabled by default
+# 3D structure integration enabled
+# Performance monitoring included
 ```
 
 ### 🏃 **Run the Pipeline**
 
 ```bash
-# Run complete pipeline
-snakemake all_msa_sequences --cores 8
+# Complete pipeline with epitope prediction
+snakemake all_epitope_predictions --cores 8
 
-# Run specific stages
-snakemake all_surface_accessible_proteins --cores 4  # Filter proteins
-snakemake all_downloaded_proteins --cores 4          # Download sequences
-snakemake all_msa_sequences --cores 4                # Prepare for MSA
+# Core protein discovery pipeline
+snakemake all_conservation --cores 8
 
-# Dry run to check workflow
-snakemake --dry-run
+# Generate comprehensive reports
+snakemake all_reports --cores 4
 
-# Run with minimal output
-snakemake all_msa_sequences --cores 4 --quiet
+# Download performance analysis
+snakemake all_download_summaries --cores 4
+
+# Monitor pipeline performance
+python scripts/monitor_pipeline.py --cores 8 all_reports
 ```
 
 ---
 
 ## 📊 **Pipeline Stages**
 
-### 1. **Taxonomic Classification**
-- Classifies input species as Gram-positive or Gram-negative using BacDive
-- Handles missing data with genus-based inference
-- **Output**: `data/bacdive/{analysis}/gram_{group}.txt`
+### 1. **Taxonomic Classification & Species Processing**
+- **Full Dataset**: 113 gram-positive + 184 gram-negative species
+- **BacDive Integration**: Automated Gram stain classification
+- **Missing Data Handling**: Genus-based inference for unclassified species
+- **Output**: Species lists by Gram classification
 
-### 2. **Gene Symbol Extraction**
-- Fetches genes associated with input GO terms via QuickGO API
-- Filters gene symbols based on naming conventions
-- **Output**: `data/quickgo/{paramset}/gene_symbols_filtered.txt`
+### 2. **Gene Discovery & Coverage Analysis**
+- **QuickGO Integration**: GO term-based gene discovery
+- **NCBI Coverage Assessment**: Cross-species gene presence analysis
+- **50% Coverage Threshold**: Selective filtering for well-represented genes
+- **Caching System**: Efficient API response management
+- **Output**: Coverage statistics and filtered gene lists
 
-### 3. **Coverage Assessment**
-- Analyzes gene presence across target species using NCBI Protein database
-- Calculates coverage percentages and species counts
-- **Output**: `results/coverage/{analysis}_{paramset}_gram_{group}_coverage_count.tsv`
+### 3. **Protein Characterization & Filtering**
+- **UniProt Enrichment**: Functional annotation and localization data
+- **Surface Accessibility**: GO cellular component-based filtering
+- **Quality Scoring**: Protein annotation confidence assessment
+- **Output**: Curated protein lists for downstream analysis
 
-### 4. **UniProt Enrichment**
-- Fetches protein information from UniProt (bacteria-specific, taxon ID 2)
-- Adds GO cellular component and subcellular location data
-- **Output**: `results/uniprot_info/.../coverage_count_location.tsv`
+### 4. **3D Structure Integration**
+- **PDB Structure Download**: Automated structure retrieval
+- **MSA Integration**: 3D structure priority in sequence selection
+- **Structure Tracking**: Comprehensive reports on structure availability
+- **Quality Assessment**: Structure-sequence correspondence validation
+- **Output**: 3D structure data and integration reports
 
-### 5. **Surface Accessibility Filtering**
-- Filters proteins based on GO cellular component annotations
-- Uses configurable surface accessibility criteria
-- **Output**: `results/proteins_to_study/{analysis}_{paramset}_gram_{group}.tsv`
+### 5. **Multi-Source Sequence Download**
+- **Intelligent Batching**: Groups of 10 species to avoid URL limits
+- **Multi-Stage Approach**: UniProt batch → UniProt individual → NCBI
+- **Download Tracking**: Actual vs expected sequence counts
+- **Resume Capability**: Sentinel files for reliable restart
+- **Output**: Complete sequence datasets with performance metrics
 
-### 6. **Protein Download**
-- Downloads protein sequences from NCBI for filtered genes
-- Smart file checking prevents re-downloads
-- **Output**: `results/proteins/{analysis}_{paramset}_gram_{group}/{gene}/`
+### 6. **Advanced MSA & Quality Control**
+- **3D Structure Priority**: Structures selected first for reference
+- **Quality Scoring**: Advanced sequence selection algorithms
+- **Length Filtering**: Outlier removal for better alignments
+- **MAFFT Integration**: Multi-threaded alignment generation
+- **trimAl Optimization**: Automated alignment trimming
+- **Output**: High-quality alignments with quality assessments
 
-### 7. **MSA Preparation**
-- Selects representative sequences per species for each gene
-- Advanced species name matching from FASTA headers
-- **Output**: `results/msa_sequences/{analysis}_{paramset}_gram_{group}/{gene}.fasta`
+### 7. **Conservation Analysis**
+- **Position-Specific Scoring**: Per-residue conservation calculation
+- **Adaptive Method Selection**: Raw vs trimmed alignment optimization
+- **Statistical Analysis**: Conservation significance testing
+- **Visualization**: Conservation plots and logo generation
+- **Output**: Conservation scores and analysis results
+
+### 8. **IEDB Epitope Prediction**
+- **MHC Class I/II**: NetMHCpan predictions for T-cell epitopes
+- **B-cell Epitopes**: Linear epitope prediction algorithms
+- **Conservation Integration**: Epitope scoring by conservation
+- **Population Coverage**: Common HLA allele analysis
+- **3D Structure Correlation**: Structure-informed epitope assessment
+- **Output**: Comprehensive epitope predictions with rankings
+
+### 9. **Performance Analysis & Reporting**
+- **Download Success Tracking**: Gene-by-gene performance metrics
+- **Coverage Recalculation**: Real vs theoretical coverage analysis
+- **HTML Reports**: Interactive visualizations and summaries
+- **Quality Metrics**: End-to-end pipeline performance assessment
+- **Output**: Final reports and performance dashboards
 
 ---
 
-## 📋 **Configuration Files**
+## 🔬 **Advanced Features**
 
-### **Species Lists**
-- `config/microbiome/{analysis}.txt` - Target species for analysis
+### **IEDB Epitope Prediction**
+```bash
+# Run epitope prediction for promising genes
+snakemake all_epitope_predictions --cores 4
 
-### **GO Terms**
+# Analyze specific groups
+snakemake results/epitope_predictions/analysis_1_params_1_gram_positive --cores 4
+```
+
+**Key Capabilities:**
+- MHC Class I epitopes (9-10 amino acids)
+- MHC Class II epitopes (variable length)
+- B-cell linear epitopes (6-20 amino acids)
+- Conservation-weighted scoring
+- Population HLA coverage analysis
+
+### **3D Structure Integration**
+```bash
+# Download and integrate 3D structures
+snakemake all_msa_sequences --cores 4  # Includes 3D structure processing
+```
+
+**Features:**
+- Automatic PDB structure download
+- Structure-guided MSA sequence selection
+- Detailed tracking reports
+- Structure-sequence correspondence validation
+
+### **Performance Monitoring**
+```bash
+# Monitor pipeline execution
+python scripts/monitor_pipeline.py --cores 8 all_reports
+
+# Generate download performance analysis
+snakemake all_download_summaries --cores 4
+```
+
+**Metrics Tracked:**
+- Download success rates per gene
+- Actual vs expected sequence counts
+- Real coverage calculations
+- Resource utilization
+- Execution time analysis
+
+### **Custom Configurations**
+```bash
+# Different coverage thresholds
+snakemake --config gram_thresholds='{"positive": 75, "negative": 75}'
+
+# Enable logo plot generation
+snakemake --config create_logos=True all_conservation
+
+# Adjust epitope prediction parameters
+# Edit scripts/predict_epitopes.py for custom HLA alleles
+```
+
+---
+
+## 📋 **Key Configuration Files**
+
+### **Main Configuration**
+- `config/config.yaml` - Central pipeline configuration
+- `env.yml` - Conda environment with all dependencies
+
+### **Input Data**
+- `config/microbiome/cow_milk/unique_species.txt` - Target species (297 total)
 - `config/quickgo/go_ids.tsv` - GO terms of interest
-- `config/quickgo/taxon_ids.tsv` - Taxonomic restrictions
 - `config/quickgo/surface_accessible.txt` - Surface accessibility criteria
 
-### **Parameters**
-- `config/quickgo/params_{n}.json` - Parameter sets for different analyses
+### **API Credentials**
+- `config/login/bacdive_info.txt` - BacDive API credentials
+- `config/login/ncbi_info.txt` - NCBI email and API key
+
+### **Parameter Sets**
+- `config/quickgo/params_1.json` - Primary analysis parameters
+- Additional parameter files for multi-condition analysis
 
 ---
 
-## 🔧 **Advanced Usage**
+## 🔧 **Dependencies**
 
-### **Multiple Analyses**
-Run different parameter combinations:
-```bash
-# Process multiple parameter sets
-snakemake --config quickgo_paramsets='["params_1","params_2","params_3"]'
-
-# Different species sets
-snakemake --config species_batches='["analysis_1","analysis_2"]'
+### **Core Environment** (via conda)
+```yaml
+- python=3.10
+- snakemake
+- biopython          # Sequence analysis
+- pandas             # Data manipulation  
+- matplotlib, seaborn # Visualization
+- requests           # API interactions
+- numpy              # Numerical analysis
+- trimal             # Alignment trimming
+- logomaker          # Logo plots (pip)
 ```
-
-### **Custom Surface Criteria**
-Edit `config/quickgo/surface_accessible.txt` to modify surface accessibility criteria:
-```
-cell outer membrane
-cell surface  
-extracellular region
-bacterial-type flagellum
-# Add your criteria...
-```
-
-### **Debugging**
-```bash
-# Verbose output
-snakemake all_msa_sequences --cores 4 -p
-
-# Force re-run specific rule
-snakemake results/proteins_to_study/analysis_1_params_1_gram_positive.tsv --forcerun
-
-# Generate workflow visualization
-snakemake --dag | dot -Tsvg > workflow.svg
-```
-
----
-
-## 📚 **Dependencies**
-
-### **Core Tools** (managed via conda)
-- **Snakemake** (≥6.0) - Workflow management
-- **Python** (≥3.8) - Scripting and data processing
-- **Biopython** - Sequence parsing and API interactions
-- **Pandas** - Data manipulation and analysis
-- **Requests** - API interactions
 
 ### **External Tools**
-- **MAFFT** - Multiple sequence alignment (optional)
-- **trimAl** - Alignment trimming (optional)
+- **MAFFT**: Multiple sequence alignment (system installation)
+- **AliStat**: Alignment quality assessment (manual compilation)
 
-### **APIs Used**
-- **BacDive** - Taxonomic classification
-- **QuickGO** - GO term annotations  
-- **UniProt** - Protein information
-- **NCBI Protein** - Sequence data
+### **API Integrations**
+- **BacDive**: Bacterial diversity database
+- **QuickGO**: Gene Ontology annotations
+- **UniProt**: Protein information database
+- **NCBI**: Sequence and taxonomic data
+- **PDB**: Protein structure database
+- **IEDB**: Immune epitope database
 
 ---
 
-## 📖 **Documentation**
+## 📈 **Performance & Scalability**
 
-- **[CLAUDE.md](CLAUDE.md)** - Detailed project instructions and architecture
-- **[FOLDER_ORGANIZATION.md](FOLDER_ORGANIZATION.md)** - Project structure and file organization
-- **Configuration examples** in `config/login/*.example.txt`
+### **Dataset Scale**
+- **Species**: 297 total (113 G+, 184 G-)
+- **Genes**: ~186 initial → ~12 high-coverage (50% threshold)
+- **Sequences**: Thousands of protein sequences per analysis
+- **Structures**: Hundreds of PDB structures integrated
+
+### **Computational Requirements**
+- **Recommended**: 8+ cores, 16+ GB RAM
+- **Storage**: ~10-50 GB depending on dataset size
+- **Runtime**: 2-8 hours for complete analysis (dataset dependent)
+- **Network**: Stable internet for API calls (rate-limited)
+
+### **Optimization Features**
+- Intelligent API caching reduces redundant calls
+- Parallel processing across genes and species
+- Resumable downloads with sentinel files
+- Batch processing to avoid API limits
+- Memory-efficient data streaming
+
+---
+
+## 📚 **Documentation**
+
+- **[CLAUDE.md](CLAUDE.md)** - Comprehensive technical documentation
+- **[FOLDER_ORGANIZATION.md](FOLDER_ORGANIZATION.md)** - Detailed project structure
+- **API Documentation**: Inline documentation in all scripts
+- **Configuration Examples**: Templates in `config/login/`
+
+---
+
+## 🎯 **Use Cases**
+
+### **Vaccine Development**
+1. Run complete pipeline: `snakemake all_epitope_predictions --cores 8`
+2. Review epitope predictions with conservation scores
+3. Focus on genes with high-conservation epitopes
+4. Analyze population HLA coverage for vaccine design
+
+### **Biomarker Discovery**
+1. Focus on surface proteins: `snakemake all_surface_accessible_proteins --cores 4`
+2. Analyze download success and coverage metrics
+3. Prioritize genes with consistent cross-species presence
+4. Validate with 3D structure data
+
+### **Comparative Genomics**
+1. Run with multiple parameter sets for different functional categories
+2. Compare conservation patterns between Gram-positive/negative
+3. Analyze evolutionary pressure on surface-accessible proteins
+4. Generate comparative reports
 
 ---
 
@@ -257,10 +387,11 @@ snakemake --dag | dot -Tsvg > workflow.svg
 
 1. Fork the repository
 2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Make your changes and test thoroughly
-4. Commit your changes (`git commit -m 'Add amazing feature'`)
-5. Push to the branch (`git push origin feature/amazing-feature`)
-6. Open a Pull Request
+3. Follow the existing code style and documentation standards
+4. Add tests for new functionality
+5. Update documentation as needed
+6. Commit with descriptive messages
+7. Open a Pull Request
 
 ---
 
@@ -270,10 +401,11 @@ If you use PureMilk in your research, please cite:
 
 ```bibtex
 @software{puremilk2024,
-  title={PureMilk: Surface-Accessible Protein Discovery Pipeline},
+  title={PureMilk: Comprehensive Protein Discovery and Epitope Prediction Pipeline},
   author={Your Name},
   year={2024},
-  url={https://github.com/your-username/PureMilk}
+  url={https://github.com/your-username/PureMilk},
+  note={Integrated IEDB epitope prediction and 3D structure analysis}
 }
 ```
 
@@ -285,8 +417,20 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ---
 
-## 🆘 **Support**
+## 🆘 **Support & Troubleshooting**
 
+### **Common Issues**
+- **API Rate Limits**: Pipeline includes automatic rate limiting and retry logic
+- **Download Failures**: Use `snakemake all_download_summaries` to analyze success rates
+- **Memory Issues**: Reduce `--cores` parameter or process smaller batches
+- **IEDB Timeouts**: Check internet connection; API calls have built-in retries
+
+### **Getting Help**
 - **Issues**: [GitHub Issues](https://github.com/your-username/PureMilk/issues)
-- **Documentation**: Check [CLAUDE.md](CLAUDE.md) for detailed instructions
-- **API Keys**: Ensure all required API credentials are properly configured
+- **Documentation**: Check [CLAUDE.md](CLAUDE.md) for detailed technical information
+- **Configuration**: Review example files in `config/login/`
+- **Performance**: Use monitoring scripts for optimization guidance
+
+---
+
+**🔬 Powered by Snakemake | 🧬 Integrated with IEDB | 🎯 Production-Ready**
