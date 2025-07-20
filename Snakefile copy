@@ -92,15 +92,6 @@ rule all_msa_alignments:
           group=["positive", "negative"]
         )
 
-rule all_msa_trimmed:
-    input:
-        expand(
-        "results/msa_trimmed/{analysis}_{paramset}_gram_{group}",
-            analysis=config["species_batches"],
-          paramset=config["quickgo_paramsets"],
-          group=["positive", "negative"]
-        )
-
 rule all_msa_quality:
     input:
         expand(
@@ -108,41 +99,6 @@ rule all_msa_quality:
             analysis=config["species_batches"],
           paramset=config["quickgo_paramsets"],
           group=["positive", "negative"]
-        )
-
-rule all_conservation:
-    input:
-        expand(
-        "results/conservation/{analysis}_{paramset}_gram_{group}",
-            analysis=config["species_batches"],
-          paramset=config["quickgo_paramsets"],
-          group=["positive", "negative"]
-        )
-
-rule all_download_summaries:
-    input:
-        expand(
-        "results/download_summary/{analysis}_{paramset}_gram_{group}",
-            analysis=config["species_batches"],
-          paramset=config["quickgo_paramsets"],
-          group=["positive", "negative"]
-        )
-
-rule all_epitope_predictions:
-    input:
-        expand(
-        "results/epitope_predictions/{analysis}_{paramset}_gram_{group}",
-            analysis=config["species_batches"],
-          paramset=config["quickgo_paramsets"],
-          group=["positive", "negative"]
-        )
-
-rule all_reports:
-    input:
-        expand(
-        "results/reports/{analysis}_{paramset}_final_report.html",
-            analysis=config["species_batches"],
-          paramset=config["quickgo_paramsets"]
         )
 
 # ---------------------
@@ -239,17 +195,6 @@ rule assess_gene_taxa_coverage_negative:
     script:
         "scripts/gene_taxa_coverage_cached.py" 
 
-# Create proteins_to_study file from coverage results
-rule create_proteins_to_study_from_coverage:
-    input:
-        coverage="results/coverage/{analysis}_{paramset}_gram_{group}_coverage.tsv"
-    output:
-        "results/proteins_to_study/{analysis}_{paramset}_gram_{group}.tsv"
-    params:
-        min_coverage=50.0  # Minimum coverage percentage
-    script:
-        "scripts/create_proteins_to_study_from_coverage.py"
-
 # Filter genes by minimum species coverage and create count summary
 rule filter_and_sort_coverage:
     input:
@@ -296,46 +241,28 @@ rule create_gene_species_lists:
     script:
         "scripts/create_gene_species_lists_from_coverage.py"
 
-# Download proteins with multi-stage approach: UniProt batch -> UniProt individual -> NCBI
+# Download protein sequences from NCBI for surface-accessible proteins
 rule download_proteins_to_analyse:
     input:
-        protein_lists="results/proteins_to_download/{analysis}_{paramset}_gram_{group}",
+        proteins="results/proteins_to_study/{analysis}_{paramset}_gram_{group}.tsv",
+        gene_species_lists="results/proteins_to_download/{analysis}_{paramset}_gram_{group}",
         ncbi_info=config["login"]["ncbi_info"]
     output:
-        download_dir=directory("results/protein_fasta/{analysis}_{paramset}_gram_{group}"),
-        sentinel=touch("results/protein_fasta/{analysis}_{paramset}_gram_{group}/.download_complete")
+        output_folder=directory("results/protein_fasta/{analysis}_{paramset}_gram_{group}"),
+        complete_flag="results/protein_fasta/{analysis}_{paramset}_gram_{group}/.download_complete"
     params:
+        group="{group}",
         analysis="{analysis}",
-        paramset="{paramset}",
-        group="{group}"
-    conda:
-        "env.yml"
+        paramset="{paramset}"
     script:
-        "scripts/download_proteins_combined.py"
-
-# Download 3D structures and integrate into protein FASTA directories
-rule download_3d_structures:
-    input:
-        protein_list="results/proteins_to_study/{analysis}_{paramset}_gram_{group}.tsv"
-    output:
-        structures_dir=directory("results/3d_structures/{analysis}_{paramset}_gram_{group}"),
-        summary="results/3d_structures/{analysis}_{paramset}_gram_{group}_summary.json"
-    params:
-        analysis="{analysis}",
-        paramset="{paramset}",
-        group="{group}"
-    conda:
-        "env.yml"
-    script:
-        "scripts/download_3d_structures.py"
+        "scripts/download_proteins_simple_sequential.py"
 
 # Select one representative protein per species for MSA
 rule select_proteins_for_msa:
     input:
         protein_dir="results/protein_fasta/{analysis}_{paramset}_gram_{group}",
         protein_list="results/proteins_to_study/{analysis}_{paramset}_gram_{group}.tsv",
-        structures_dir="results/3d_structures/{analysis}_{paramset}_gram_{group}",
-        structures_summary="results/3d_structures/{analysis}_{paramset}_gram_{group}_summary.json"
+        download_complete="results/protein_fasta/{analysis}_{paramset}_gram_{group}/.download_complete"
     output:
         directory("results/msa_sequences/{analysis}_{paramset}_gram_{group}")
     params:
@@ -344,6 +271,24 @@ rule select_proteins_for_msa:
         group="{group}"
     script:
         config["scripts"]["get_msa_sequences"]
+
+# Perform multiple sequence alignment (MSA) using MAFFT with threading
+rule run_mafft:
+    input:
+        fasta="results/msa_sequences/{analysis}_{paramset}_gram_{group}/{gene}.fasta"
+    output:
+        msa="results/msa_alignments/{analysis}_{paramset}_gram_{group}/{gene}_aligned.fasta"
+    threads: config["mafft"]["threads"]
+    params:
+        analysis="{analysis}",
+        paramset="{paramset}",
+        group="{group}",
+        gene="{gene}"
+    shell:
+        """
+        mkdir -p $(dirname {output.msa})
+        mafft --thread {threads} --auto {input.fasta} > {output.msa}
+        """
 
 # Run MAFFT alignments for all genes in a group
 rule run_all_mafft_for_group:
@@ -360,24 +305,10 @@ rule run_all_mafft_for_group:
     script:
         "scripts/run_mafft_alignments.py"
 
-# Trim poorly aligned regions with trimAl
-rule trim_alignments:
-    input:
-        "results/msa_alignments/{analysis}_{paramset}_gram_{group}"
-    output:
-        directory("results/msa_trimmed/{analysis}_{paramset}_gram_{group}")
-    params:
-        analysis="{analysis}",
-        paramset="{paramset}",
-        group="{group}"
-    script:
-        "scripts/trim_alignments.py"
-
-# MSA quality assessment (compare before/after trimming)
+# MSA quality assessment
 rule assess_alignment_quality:
     input:
-        raw_alignments="results/msa_alignments/{analysis}_{paramset}_gram_{group}",
-        trimmed_alignments="results/msa_trimmed/{analysis}_{paramset}_gram_{group}"
+        "results/msa_alignments/{analysis}_{paramset}_gram_{group}"
     output:
         directory("results/msa_quality/{analysis}_{paramset}_gram_{group}")
     params:
@@ -385,70 +316,48 @@ rule assess_alignment_quality:
         paramset="{paramset}",
         group="{group}"
     script:
-        "scripts/assess_alignment_quality_comparison.py"
+        "scripts/assess_alignment_quality.py"
 
-# Analyze amino acid conservation using best alignments (raw vs trimmed based on quality)
-rule analyze_conservation:
-    input:
-        raw_alignments="results/msa_alignments/{analysis}_{paramset}_gram_{group}",
-        trimmed_alignments="results/msa_trimmed/{analysis}_{paramset}_gram_{group}",
-        quality_assessment="results/msa_quality/{analysis}_{paramset}_gram_{group}"
-    output:
-        directory("results/conservation/{analysis}_{paramset}_gram_{group}")
-    params:
-        analysis="{analysis}",
-        paramset="{paramset}",
-        group="{group}",
-        create_logos=False  # Set to True to enable logo plots
-    script:
-        "scripts/analyze_conservation_adaptive.py"
+# # MSA quality check using AliStat
+# rule check_alignment_quality:
+#     input:
+#         msa="results/{group}/fasta_msa/{gene}.fasta"
+#     output:
+#         quality="results/{group}/fasta_msa/alistat/{gene}_aligned.stat"
+#     log:
+#         "logs/{group}/fasta_msa_alistat/{gene}_alistat.log"
+#     shell:
+#         """
+#         mkdir -p $(dirname {output.quality})
+#         mkdir -p $(dirname {log})
+#         alistat {input.msa} > {output.quality} 2> {log}
+#         """
 
-# Predict epitopes using IEDB API for conserved sequences with 3D structure data
-rule predict_epitopes:
-    input:
-        msa_sequences="results/msa_sequences/{analysis}_{paramset}_gram_{group}",
-        conservation="results/conservation/{analysis}_{paramset}_gram_{group}",
-        structures_3d="results/3d_structures/{analysis}_{paramset}_gram_{group}",
-        proteins_to_study="results/proteins_to_study/{analysis}_{paramset}_gram_{group}.tsv"
-    output:
-        directory("results/epitope_predictions/{analysis}_{paramset}_gram_{group}")
-    params:
-        analysis="{analysis}",
-        paramset="{paramset}",
-        group="{group}"
-    conda:
-        "env.yml"
-    script:
-        "scripts/predict_epitopes.py"
+# # Trim bad regions with trimAl
+# rule trim_alignment:
+#     input:
+#         msa="results/{group}/fasta_msa/{gene}.fasta"
+#     output:
+#         trimmed="results/{group}/fasta_msa_trimmed/{gene}.fasta"
+#     shell:
+#         """
+#         mkdir -p $(dirname {output.trimmed})
+#         trimal -in {input.msa} -out {output.trimmed} -automated1
+#         """
 
-# Generate download summary with actual vs expected species counts
-rule generate_download_summary:
-    input:
-        coverage="results/coverage/{analysis}_{paramset}_gram_{group}_coverage_count.tsv",
-        protein_fasta="results/protein_fasta/{analysis}_{paramset}_gram_{group}",
-        proteins_to_study="results/proteins_to_study/{analysis}_{paramset}_gram_{group}.tsv"
-    output:
-        directory("results/download_summary/{analysis}_{paramset}_gram_{group}")
-    params:
-        analysis="{analysis}",
-        paramset="{paramset}",
-        group="{group}"
-    script:
-        "scripts/generate_download_summary.py"
 
-# Generate comprehensive final report
-rule generate_final_report:
-    input:
-        quality_positive="results/msa_quality/{analysis}_{paramset}_gram_positive",
-        quality_negative="results/msa_quality/{analysis}_{paramset}_gram_negative",
-        conservation_positive="results/conservation/{analysis}_{paramset}_gram_positive",
-        conservation_negative="results/conservation/{analysis}_{paramset}_gram_negative",
-        download_summary_positive="results/download_summary/{analysis}_{paramset}_gram_positive",
-        download_summary_negative="results/download_summary/{analysis}_{paramset}_gram_negative"
-    output:
-        "results/reports/{analysis}_{paramset}_final_report.html"
-    params:
-        analysis="{analysis}",
-        paramset="{paramset}"
-    script:
-        "scripts/generate_final_report.py"
+# # Find conserved amino acid positions in the MSA
+# # rule find_conserved_amino_acids:
+# #     input:
+# #         expand(
+# #             "results/positive_proteins_trimmed/{gene}_trimmed.fasta",
+# #             gene=get_selected_genes("positive")
+# #         ) +
+# #         expand(
+# #             "results/negative_proteins_trimmed/{gene}_trimmed.fasta",
+# #             gene=get_selected_genes("negative")
+# #         )
+# #     script:
+# #         config["scripts"]["conserved_aminoacids"]
+
+

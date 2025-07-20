@@ -29,7 +29,7 @@ def main():
         print("Snakemake object not available, using test values")
         input_file = "results/coverage/analysis_1_params_1_gram_positive_coverage.tsv"
         output_file = "results/coverage/analysis_1_params_1_gram_positive_coverage_count.tsv"
-        threshold = 25  # Test with gram_positive threshold
+        threshold = 50  # Test with 50% threshold
     
     # Load coverage data
     print("Loading coverage data...")
@@ -67,8 +67,8 @@ def main():
             coverage_percentage = species_with_gene['coverage_percentage'].iloc[0]
             species_string = species_with_gene['species_names_with_gene'].iloc[0]
             
-            # Filter by coverage percentage (0.25 = 25%)
-            if coverage_percentage >= 25.0:
+            # Filter by coverage percentage using the threshold parameter
+            if coverage_percentage >= threshold:
                 gene_summary[gene] = {
                     'count': species_count,
                     'coverage_percentage': coverage_percentage,

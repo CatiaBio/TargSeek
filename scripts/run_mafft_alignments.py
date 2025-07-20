@@ -33,11 +33,12 @@ def run_mafft_alignment(input_fasta, output_fasta, threads=8):
         # Create output directory if needed
         output_fasta.parent.mkdir(parents=True, exist_ok=True)
         
-        # Run MAFFT command
+        # Run MAFFT command - fast but better than auto
         cmd = [
             "mafft",
             "--thread", str(threads),
-            "--auto",
+            "--retree", "2",  # Fast tree estimation, better than --auto
+            "--maxiterate", "0",  # No refinement for speed
             str(input_fasta)
         ]
         
