@@ -1,6 +1,14 @@
 # Project-specific folders to ignore
 config/login/*
 !config/login/*.example.txt
+# Species data files (keep only test files)
+config/species/*
+!config/species/test_*
+
+# QuickGO data files (keep only test params)
+config/quickgo/*
+!config/quickgo/test_params*
+!config/quickgo/README.txt
 logs/
 data/
 results/
