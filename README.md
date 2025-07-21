@@ -245,76 +245,22 @@ For detailed configuration, troubleshooting, and advanced usage, see [CLAUDE.md]
 
 ---
 
-## 📚 References & Tools
+## 📚 References
 
-TargSeek integrates multiple bioinformatics tools, databases, and APIs. If you use this pipeline, please also cite the relevant tools and resources:
+TargSeek integrates multiple bioinformatics tools and databases. If you use this pipeline, please cite the relevant resources:
 
-### **🧬 Bioinformatics Tools**
-
-**Multiple Sequence Alignment & Processing:**
-- Katoh, K., & Standley, D. M. (2013). MAFFT multiple sequence alignment software version 7: improvements in performance and usability. *Molecular Biology and Evolution*, 30(4), 772-780.
-- Capella-Gutiérrez, S., Silla-Martínez, J. M., & Gabaldón, T. (2009). trimAl: a tool for automated alignment trimming in large-scale phylogenetic analyses. *Bioinformatics*, 25(15), 1972-1973.
-
-**Epitope Prediction:**
-- Clifford, J. N., et al. (2022). BepiPred-3.0: Improved B-cell epitope prediction using protein language models. *Protein Science*, 31(12), e4497.
+### **🧬 Core Tools**
+- **MAFFT**: Katoh, K., & Standley, D. M. (2013). MAFFT multiple sequence alignment software version 7. *Molecular Biology and Evolution*, 30(4), 772-780.
+- **trimAl**: Capella-Gutiérrez, S., et al. (2009). trimAl: automated alignment trimming in large-scale phylogenetic analyses. *Bioinformatics*, 25(15), 1972-1973.
+- **Snakemake**: Köster, J., & Rahmann, S. (2012). Snakemake—a scalable bioinformatics workflow engine. *Bioinformatics*, 28(19), 2520-2522.
 
 ### **🌐 Databases & APIs**
-
-**Protein & Genomic Data:**
-- UniProt Consortium. (2023). UniProt: the Universal Protein Knowledgebase in 2023. *Nucleic Acids Research*, 51(D1), D523-D531.
-- Sayers, E. W., et al. (2024). Database resources of the National Center for Biotechnology Information in 2024. *Nucleic Acids Research*, 52(D1), D33-D43.
-- Berman, H. M., et al. (2000). The Protein Data Bank. *Nucleic Acids Research*, 28(1), 235-242.
-
-**Biological Annotations:**
-- Reimer, L. C., et al. (2019). BacDive in 2019: bacterial phenotypic data for High-throughput biodiversity analysis. *Nucleic Acids Research*, 47(D1), D631-D636.
-- Binns, D., et al. (2009). QuickGO: a web-based tool for Gene Ontology searching. *Bioinformatics*, 25(22), 3045-3046.
-- Vita, R., et al. (2019). The immune epitope database (IEDB): 2018 update. *Nucleic Acids Research*, 47(D1), D339-D343.
-
-**Gene Ontology:**
-- The Gene Ontology Consortium. (2023). The Gene Ontology knowledgebase in 2023. *Genetics*, 224(1), iyad031.
-
-### **🐍 Python Libraries & Frameworks**
-
-**Core Scientific Computing:**
-- Harris, C. R., et al. (2020). Array programming with NumPy. *Nature*, 585(7825), 357-362.
-- McKinney, W. (2010). Data structures for statistical computing in Python. *Proceedings of the 9th Python in Science Conference*, 56-61.
-- Hunter, J. D. (2007). Matplotlib: A 2D graphics environment. *Computing in Science & Engineering*, 9(3), 90-95.
-
-**Bioinformatics & Sequence Analysis:**
-- Cock, P. J., et al. (2009). Biopython: freely available Python tools for computational molecular biology and bioinformatics. *Bioinformatics*, 25(11), 1422-1423.
-- Tareen, A., & Kinney, J. B. (2020). Logomaker: beautiful sequence logos in Python. *Bioinformatics*, 36(7), 2272-2274.
-
-**Workflow Management:**
-- Köster, J., & Rahmann, S. (2012). Snakemake—a scalable bioinformatics workflow engine. *Bioinformatics*, 28(19), 2520-2522.
-
-### **🤖 Machine Learning & Protein Language Models**
-
-**Protein Language Models:**
-- Lin, Z., et al. (2023). Evolutionary-scale prediction of atomic-level protein structure with a language model. *Science*, 379(6637), 1123-1130.
-
-**Deep Learning Framework:**
-- Paszke, A., et al. (2019). PyTorch: An imperative style, high-performance deep learning library. *Advances in Neural Information Processing Systems*, 32.
-
-### **📊 Web Resources**
-
-- **BacDive**: https://bacdive.dsmz.de/
-- **QuickGO**: https://www.ebi.ac.uk/QuickGO/
-- **UniProt**: https://www.uniprot.org/
-- **NCBI**: https://www.ncbi.nlm.nih.gov/
-- **RCSB PDB**: https://www.rcsb.org/
-- **IEDB**: https://www.iedb.org/
-- **BepiPred 3.0**: https://services.healthtech.dtu.dk/services/BepiPred-3.0/
-
-### **⚙️ System Requirements**
-
-**Conda Environment:**
-- Python 3.10+
-- See `env.yml` for complete dependency list
-
-**External Tools:**
-- AliStat (manual installation required): https://github.com/thomaskf/AliStat
-- BepiPred 3.0 (optional): Requires separate environment setup
+- **UniProt**: UniProt Consortium. (2023). UniProt: the Universal Protein Knowledgebase in 2023. *Nucleic Acids Research*, 51(D1), D523-D531.
+- **NCBI**: Sayers, E. W., et al. (2024). Database resources of the National Center for Biotechnology Information in 2024. *Nucleic Acids Research*, 52(D1), D33-D43.
+- **RCSB PDB**: Berman, H. M., et al. (2000). The Protein Data Bank. *Nucleic Acids Research*, 28(1), 235-242.
+- **BacDive**: Reimer, L. C., et al. (2019). BacDive in 2019: bacterial phenotypic data for biodiversity analysis. *Nucleic Acids Research*, 47(D1), D631-D636.
+- **QuickGO**: Binns, D., et al. (2009). QuickGO: a web-based tool for Gene Ontology searching. *Bioinformatics*, 25(22), 3045-3046.
 
 ---
 
-**🔬 This pipeline stands on the shoulders of giants - thank you to all tool developers and database maintainers who make modern computational biology possible.**
+**🔬 Thank you to the bioinformatics community for developing these essential tools and databases.**
