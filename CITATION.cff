@@ -1,0 +1,21 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+authors:
+  - family-names: "Baptista"
+    given-names: "Cátia"
+    orcid: "https://orcid.org/0000-0000-0000-0000"  # Add your ORCID if you have one
+title: "TargSeek: Protein Discovery and Epitope Prediction Pipeline"
+version: 1.0.0
+date-released: 2024-07-21
+url: "https://github.com/your-username/TargSeek"
+repository-code: "https://github.com/your-username/TargSeek"
+abstract: "A Snakemake pipeline for discovering conserved, functionally relevant proteins within microbial groups, with integrated 3D structure analysis and epitope prediction. The pipeline processes taxonomic data and Gene Ontology terms to identify candidate proteins for vaccine development, diagnostic applications, and therapeutic targets."
+keywords:
+  - "bioinformatics"
+  - "protein discovery"
+  - "epitope prediction"
+  - "snakemake"
+  - "vaccine development"
+  - "conservation analysis"
+  - "microbial proteins"
+license: MIT

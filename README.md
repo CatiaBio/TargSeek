@@ -1,4 +1,4 @@
-# 🧬 PureMilk: Protein Discovery & Epitope Prediction Pipeline
+# 🎯 TargSeek: Protein Discovery & Epitope Prediction Pipeline
 
 A **Snakemake pipeline** for discovering conserved, functionally relevant proteins within microbial groups, with integrated **3D structure analysis** and **epitope prediction**.
 
@@ -10,7 +10,7 @@ A **Snakemake pipeline** for discovering conserved, functionally relevant protei
 
 ## 🎯 Overview
 
-PureMilk identifies candidate proteins suitable for **vaccine development**, **diagnostic applications**, and **therapeutic targets** by processing taxonomic data and Gene Ontology terms to find conserved, surface-accessible proteins.
+TargSeek identifies candidate proteins suitable for **vaccine development**, **diagnostic applications**, and **therapeutic targets** by processing taxonomic data and Gene Ontology terms to find conserved, surface-accessible proteins.
 
 **Key Capabilities:**
 - Taxonomic classification and gene coverage assessment
@@ -68,9 +68,9 @@ results/{analysis}_{paramset}/
 ```bash
 # Clone and setup environment
 git clone <repository-url>
-cd PureMilk
+cd TargSeek
 conda env create -f env.yml
-conda activate puremilk
+conda activate targseek
 ```
 
 ### ⚙️ Configuration
@@ -178,7 +178,7 @@ snakemake --dry-run  # Check workflow
 ## 📁 Project Organization
 
 ```
-PureMilk/
+TargSeek/
 ├── Snakefile                   # Main workflow
 ├── env.yml                     # Conda environment
 ├── config/                     # Configuration files
@@ -211,6 +211,23 @@ PureMilk/
 3. Generate comparative reports
 
 ---
+
+## 📝 Citation
+
+If you use TargSeek in your research, please cite:
+
+```bibtex
+@software{baptista2024targseek,
+  title={TargSeek: Protein Discovery and Epitope Prediction Pipeline},
+  author={Cátia Baptista},
+  year={2024},
+  url={https://github.com/your-username/TargSeek},
+  note={Snakemake pipeline for conserved protein discovery with integrated 3D structure analysis and epitope prediction}
+}
+```
+
+**Alternative citation format:**
+> Baptista, C. (2024). TargSeek: Protein Discovery and Epitope Prediction Pipeline. GitHub. https://github.com/your-username/TargSeek
 
 ## 📝 License
 
