@@ -1,0 +1,2 @@
+# This file ensures the cache directory structure is preserved in git
+# The cache directory contains important cached data that speeds up pipeline runs

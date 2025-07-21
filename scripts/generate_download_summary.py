@@ -100,7 +100,7 @@ def create_download_summary_table(analysis, paramset, group,
     
     for _, row in coverage_df.iterrows():
         gene = row['gene']
-        expected_count = row['species_with_gene']
+        expected_count = row['count']
         expected_coverage = row['coverage_percentage']
         
         # Count actual downloaded sequences
@@ -167,22 +167,22 @@ def create_download_summary_table(analysis, paramset, group,
         'analysis': analysis,
         'paramset': paramset,
         'group': group,
-        'total_genes_analyzed': len(coverage_df),
-        'genes_selected_for_analysis': len(selected_summary_df),
-        'total_species_in_group': total_species,
+        'total_genes_analyzed': int(len(coverage_df)),
+        'genes_selected_for_analysis': int(len(selected_summary_df)),
+        'total_species_in_group': int(total_species),
         'overall_stats': {
-            'mean_expected_coverage': summary_df['expected_coverage_percent'].mean(),
-            'mean_actual_coverage': summary_df['actual_coverage_percent'].mean(),
-            'mean_download_success_rate': summary_df['download_success_rate'].mean(),
-            'total_expected_downloads': summary_df['expected_species_count'].sum(),
-            'total_actual_downloads': summary_df['actual_species_count'].sum(),
+            'mean_expected_coverage': float(summary_df['expected_coverage_percent'].mean()),
+            'mean_actual_coverage': float(summary_df['actual_coverage_percent'].mean()),
+            'mean_download_success_rate': float(summary_df['download_success_rate'].mean()),
+            'total_expected_downloads': int(summary_df['expected_species_count'].sum()),
+            'total_actual_downloads': int(summary_df['actual_species_count'].sum()),
         },
         'selected_genes_stats': {
-            'mean_expected_coverage': selected_summary_df['expected_coverage_percent'].mean() if not selected_summary_df.empty else 0,
-            'mean_actual_coverage': selected_summary_df['actual_coverage_percent'].mean() if not selected_summary_df.empty else 0,
-            'mean_download_success_rate': selected_summary_df['download_success_rate'].mean() if not selected_summary_df.empty else 0,
-            'total_expected_downloads': selected_summary_df['expected_species_count'].sum() if not selected_summary_df.empty else 0,
-            'total_actual_downloads': selected_summary_df['actual_species_count'].sum() if not selected_summary_df.empty else 0,
+            'mean_expected_coverage': float(selected_summary_df['expected_coverage_percent'].mean()) if not selected_summary_df.empty else 0.0,
+            'mean_actual_coverage': float(selected_summary_df['actual_coverage_percent'].mean()) if not selected_summary_df.empty else 0.0,
+            'mean_download_success_rate': float(selected_summary_df['download_success_rate'].mean()) if not selected_summary_df.empty else 0.0,
+            'total_expected_downloads': int(selected_summary_df['expected_species_count'].sum()) if not selected_summary_df.empty else 0,
+            'total_actual_downloads': int(selected_summary_df['actual_species_count'].sum()) if not selected_summary_df.empty else 0,
         }
     }
     

@@ -59,6 +59,24 @@ PYTHONWARNINGS="ignore" snakemake all_downloaded_proteins --cores 4 --quiet
 
 # Resume interrupted downloads (downloads use sentinel files for proper resumption)
 snakemake all_downloaded_proteins --cores 4  # Will automatically detect and resume
+
+# Run BepiPred 3.0 epitope predictions (requires Ubuntu setup)
+snakemake all_epitope_predictions_bepipred --cores 4
+
+# Run epitope predictions for specific group
+snakemake results/epitope_predictions_bepipred/analysis_1_params_1_gram_positive --cores 4
+```
+
+### BepiPred 3.0 Setup (Ubuntu/Linux)
+```bash
+# 1. Run the setup script (on Ubuntu)
+./setup_bepipred.sh
+
+# 2. Test the installation
+python test_bepipred.py
+
+# 3. Run epitope predictions
+snakemake all_epitope_predictions_bepipred --cores 4
 ```
 
 ### Configuration
@@ -74,6 +92,43 @@ snakemake all_downloaded_proteins --cores 4  # Will automatically detect and res
 - `scripts/download_proteins.py`: Protein sequence download from NCBI
 - `scripts/get_msa_sequences.py`: Representative sequence selection for MSA
 
+## Cache Management
+
+The pipeline uses persistent caching to avoid re-downloading data:
+
+- **`cache/gene_species/`**: Gene-taxa coverage search results (NCBI API calls)
+- **`cache/protein_sequences/`**: Protein sequence downloads (UniProt API calls) 
+- **`cache/protein_structures/`**: 3D structure searches (UniProt/PDB API calls)
+
+### Protecting Cache Data
+
+**⚠️ IMPORTANT: The cache contains valuable data that can take hours to rebuild!**
+
+```bash
+# Backup cache before major changes
+python utils/cache/backup_cache.py backup
+
+# Restore cache if accidentally deleted  
+python utils/cache/backup_cache.py restore cache_backup_20250721_174500
+```
+
+The cache directories are protected in git:
+- Directory structure is preserved (`.gitkeep` files)
+- Cache contents are gitignored but not deleted
+- Reinstalling/cloning preserves cache structure
+
+### Cache Initialization
+
+To populate cache with existing files:
+
+```bash
+# Initialize protein sequence cache
+python utils/cache/initialize_protein_sequence_cache.py
+
+# Initialize 3D structure cache  
+python utils/cache/initialize_3d_structure_cache.py
+```
+
 ## Dependencies
 
 Core tools managed via conda (`env.yml`):
@@ -85,6 +140,53 @@ Core tools managed via conda (`env.yml`):
 - **matplotlib, logomaker**: Visualization
 
 **Note**: AliStat (alignment quality assessment) requires manual installation from GitHub and compilation.
+
+## Project Organization
+
+### Directory Structure
+
+```
+PureMilk/
+├── Snakefile                    # Main workflow definition
+├── env.yml                      # Conda environment specification
+├── CLAUDE.md                    # Project guidance (this file)
+├── README.md                    # Project overview
+├── config/                      # Configuration files
+│   ├── config.yaml             # Main pipeline configuration
+│   ├── login/                  # API credentials
+│   ├── microbiome/            # Species lists by analysis
+│   └── quickgo/               # GO terms and parameters
+├── scripts/                     # Active pipeline scripts
+│   ├── [18 core pipeline scripts]
+│   └── archive_unused/        # Deprecated scripts (preserved)
+├── scripts_test/               # Testing and development scripts
+├── utils/                      # Utility scripts
+│   ├── cache/                 # Cache management utilities
+│   ├── setup/                 # Installation and setup scripts
+│   └── migration/             # Data migration utilities
+├── docs/                       # Documentation files
+├── archive/                    # Archived temporary files
+├── cache/                      # Persistent API call caches
+├── data/                       # Raw and intermediate data
+├── results/                    # Pipeline analysis outputs
+└── tools/                      # External tools (BepiPred, etc.)
+```
+
+### Key File Locations
+
+**Pipeline Files:**
+- Main workflow: `Snakefile`
+- Environment: `env.yml` 
+- Configuration: `config/config.yaml`
+
+**Utility Scripts:**
+- Cache management: `utils/cache/`
+- BepiPred setup: `utils/setup/`
+- Data migration: `utils/migration/`
+
+**Documentation:**
+- Project guidance: `CLAUDE.md` 
+- Additional docs: `docs/`
 
 ## Data Structure
 
