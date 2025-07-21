@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-PureMilk is a **Snakemake-based protein discovery pipeline** that identifies conserved, functionally relevant proteins within specific microbial groups. The pipeline processes taxonomic data and Gene Ontology (GO) terms to extract candidate proteins for downstream analysis such as diagnostic marker discovery, target validation, or phylogenomic studies.
+TargSeek is a **Snakemake-based protein discovery pipeline** that identifies conserved, functionally relevant proteins within specific microbial groups. The pipeline processes taxonomic data and Gene Ontology (GO) terms to extract candidate proteins for downstream analysis such as diagnostic marker discovery, target validation, or phylogenomic studies.
 
 ## Architecture
 
@@ -34,7 +34,7 @@ The pipeline follows a **linear workflow** with these key stages:
 ```bash
 # Create conda environment
 conda env create -f env.yml
-conda activate puremilk
+conda activate targseek
 ```
 
 ### Pipeline Execution
@@ -141,12 +141,28 @@ Core tools managed via conda (`env.yml`):
 
 **Note**: AliStat (alignment quality assessment) requires manual installation from GitHub and compilation.
 
+## Citation
+
+When using TargSeek in your research, please cite:
+
+> Baptista, C. (2024). TargSeek: Protein Discovery and Epitope Prediction Pipeline. GitHub. https://github.com/your-username/TargSeek
+
+BibTeX format:
+```bibtex
+@software{baptista2024targseek,
+  title={TargSeek: Protein Discovery and Epitope Prediction Pipeline},
+  author={Cátia Baptista},
+  year={2024},
+  url={https://github.com/your-username/TargSeek}
+}
+```
+
 ## Project Organization
 
 ### Directory Structure
 
 ```
-PureMilk/
+TargSeek/
 ├── Snakefile                    # Main workflow definition
 ├── env.yml                      # Conda environment specification
 ├── CLAUDE.md                    # Project guidance (this file)
