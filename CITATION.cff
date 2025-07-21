@@ -7,8 +7,8 @@ authors:
 title: "TargSeek: Protein Discovery and Epitope Prediction Pipeline"
 version: 1.0.0
 date-released: 2024-07-21
-url: "https://github.com/your-username/TargSeek"
-repository-code: "https://github.com/your-username/TargSeek"
+url: "https://github.com/CatiaBio/TargSeek"
+repository-code: "https://github.com/CatiaBio/TargSeek"
 abstract: "A Snakemake pipeline for discovering conserved, functionally relevant proteins within microbial groups, with integrated 3D structure analysis and epitope prediction. The pipeline processes taxonomic data and Gene Ontology terms to identify candidate proteins for vaccine development, diagnostic applications, and therapeutic targets."
 keywords:
   - "bioinformatics"

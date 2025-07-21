@@ -67,7 +67,7 @@ results/{analysis}_{paramset}/
 
 ```bash
 # Clone and setup environment
-git clone <repository-url>
+git clone https://github.com/CatiaBio/TargSeek.git
 cd TargSeek
 conda env create -f env.yml
 conda activate targseek
@@ -221,13 +221,13 @@ If you use TargSeek in your research, please cite:
   title={TargSeek: Protein Discovery and Epitope Prediction Pipeline},
   author={Cátia Baptista},
   year={2024},
-  url={https://github.com/your-username/TargSeek},
+  url={https://github.com/CatiaBio/TargSeek},
   note={Snakemake pipeline for conserved protein discovery with integrated 3D structure analysis and epitope prediction}
 }
 ```
 
 **Alternative citation format:**
-> Baptista, C. (2024). TargSeek: Protein Discovery and Epitope Prediction Pipeline. GitHub. https://github.com/your-username/TargSeek
+> Baptista, C. (2024). TargSeek: Protein Discovery and Epitope Prediction Pipeline. GitHub. https://github.com/CatiaBio/TargSeek
 
 ## 📝 License
 
