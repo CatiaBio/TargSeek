@@ -1,99 +1,126 @@
-# QuickGO Protein Annotation Data
+# 🔬 QuickGO Configuration for TargSeek Pipeline
 
-This folder contains protein annotation data downloaded from [QuickGO](https://www.ebi.ac.uk/QuickGO/annotations). Specific Gene Ontology (GO) terms were selected to identify and retrieve proteins located within defined bacterial cell compartments, including:
+This folder contains **test configuration files** for the QuickGO API integration within the TargSeek protein discovery pipeline. The pipeline uses Gene Ontology (GO) terms to identify surface-accessible proteins suitable for vaccine development and diagnostic applications.
 
-- Cell outer membrane
-- Peptidoglycan-based cell wall
-- Gram-negative-bacterium-type cell wall
-- External encapsulating structures
-- Structural components associated with the bacterial cell wall
+## 📁 Files in This Directory
 
-## Purpose
+### 🧪 **Test Configuration** (Tracked in Git)
+- `test_params.json` - Sample parameter set for pipeline testing with 5 well-studied bacteria
+- `README.txt` - This documentation file
 
-The dataset is intended to facilitate bioinformatics analyses of bacterial proteins localized in specific cellular structures, potentially identifying suitable targets for antibody development or other biomedical applications.
+### 🔧 **Production Configuration** (User-Provided, Gitignored)
+Users must provide their own production configuration files:
+- `go_ids.tsv` - Gene Ontology terms of interest
+- `taxon_ids.tsv` - Taxonomic restrictions (NCBI taxonomy IDs)
+- `surface_accessible.txt` - Surface accessibility criteria
+- `params_1.json`, `params_2.json` - Parameter sets for different analyses
 
-## Data Source
+## 🎯 Pipeline Integration
 
-Data was retrieved from the European Bioinformatics Institute (EBI) QuickGO resource:
+The TargSeek pipeline uses QuickGO to:
+1. **Retrieve gene symbols** based on specified GO terms and taxonomic constraints
+2. **Filter proteins** for surface accessibility and cellular localization
+3. **Assess gene coverage** across target bacterial species
+4. **Select candidate proteins** for downstream epitope prediction
 
-- [https://www.ebi.ac.uk/QuickGO/annotations](https://www.ebi.ac.uk/QuickGO/annotations)
+## 🧬 Target GO Terms for Surface Proteins
 
-## Data Selection Criteria
+The pipeline focuses on proteins with cellular localizations relevant for **vaccine targets** and **diagnostic markers**:
 
-Proteins were selected based on Gene Ontology (GO) terms relevant to bacterial cellular compartments and structures, using the following GO relationships: "is_a", "part_of", and "occurs_in". The selected GO terms include:
+### **Cell Surface & Extracellular**
+- `GO:0005576` - Extracellular region
+- `GO:0005615` - Extracellular space  
+- `GO:0019861` - Outer membrane
+- `GO:0030312` - External encapsulating structure
+- `GO:0030313` - Cell envelope
+- `GO:0016020` - Membrane (generic)
 
-🧫 Cell Surface & Extracellular
-GO ID	Name	Description
-GO:0005576	Extracellular region	Any space outside the cell, including secreted proteins and fluid-exposed molecules.
-GO:0005615	Extracellular space	The space external to the cell membrane, where secreted proteins may be detected.
-GO:0005618	Cell wall	Rigid structure outside the plasma membrane; varies between Gram-positive and Gram-negative bacteria.
-GO:0019861	Outer membrane	The outermost membrane in Gram-negative bacteria, enriched in LPS and porins.
-GO:0030312	External encapsulating structure	Surface structures such as capsules or sheaths that enclose the bacterial cell.
-GO:0030313	Cell envelope	The multilayered structure enclosing the cell, including membranes and the wall.
-GO:0030288	Outer membrane-bounded periplasmic space	Space between the inner and outer membranes in Gram-negative bacteria.
-GO:0016020	Membrane	Generic term for any lipid bilayer surrounding a compartment, including plasma, inner, and outer membranes.
+### **Cell Wall Components**
+- `GO:0005618` - Cell wall
+- `GO:0009274` - Peptidoglycan-based cell wall
+- `GO:0009273` - Gram-positive cell wall
+- `GO:0009275` - Gram-negative cell wall
 
-🧬 Motility (Flagella)
-GO ID	Name	Description
-GO:0009278	Bacterial-type flagellum	The full motility structure (motor, hook, filament).
-GO:0009270	Flagellum motor	The rotary engine embedded in the cell envelope driving flagellar rotation.
-GO:0009271	Flagellum filament	The long, whip-like filament that extends into the extracellular space.
-GO:0009272	Flagellum hook	Connects the motor and filament; provides flexibility and torque transfer.
-GO:0009277	Flagellum basal body	The anchoring structure embedded in the membrane layers.
-GO:0099008	Flagellum-dependent cell motility	Movement of cells using rotation of flagella.
+### **Motility & Adhesion**
+- `GO:0009278` - Bacterial-type flagellum
+- `GO:0009288` - Fimbriae
+- `GO:0009289` - Pilus
+- `GO:0007155` - Cell adhesion
 
-🦠 Adhesion & Appendages
-GO ID	Name	Description
-GO:0007155	Cell adhesion	Proteins that mediate attachment to host cells or surfaces.
-GO:0050840	Extracellular matrix binding	Proteins that bind host ECM components like collagen or fibronectin.
-GO:0009288	Fimbriae	Short, hair-like structures aiding in bacterial adhesion.
-GO:0009289	Pilus	Long filamentous structures used for adhesion or conjugation.
+### **Transport & Virulence**
+- `GO:0015288` - Porin activity
+- `GO:0090729` - Toxin activity
 
-🧱 Cell Wall & Membrane Types
-GO ID	Name	Description
-GO:0009273	Gram-positive cell wall	Thick peptidoglycan layer with teichoic acids; lacks outer membrane.
-GO:0009274	Peptidoglycan-based cell wall	Common to all bacteria; provides rigidity and shape.
-GO:0009275	Gram-negative cell wall	Thin peptidoglycan layer between inner and outer membranes.
-GO:0009276	Gram-negative-bacterium-type cell wall	Specific term for Gram-negative wall structure, similar to above.
-GO:0009279	Cell outer membrane	Specific outer membrane found in Gram-negative bacteria.
+## 📊 File Format Requirements
 
-🧬 Transport & Permeability
-GO ID	Name	Description
-GO:0015288	Porin activity	Channel proteins forming pores in the outer membrane.
-GO:0046930	Pore complex	Multi-protein assemblies that form selective pores across membranes.
+### **go_ids.tsv**
+```tsv
+go_id    go_name
+GO:0005576    extracellular region
+GO:0019861    flagellum
+...
+```
 
-💥 Toxins & Biosynthesis
-GO ID	Name	Description
-GO:0090729	Toxin activity	Proteins that damage or disrupt host functions.
-GO:0009425	Lipopolysaccharide biosynthetic process	Assembly of LPS — a major antigen in Gram-negative bacteria.
-GO:0010339	Cell wall polysaccharide biosynthesis	Creation of complex sugars for the cell wall and capsule.
-GO:0097313	Cell wall organization	Processes that build, maintain, or remodel the bacterial cell wall.
+### **taxon_ids.tsv**
+```tsv
+taxon_id    taxon_name
+2    Bacteria
+1224    Proteobacteria
+...
+```
 
-## Data Format
+### **params_N.json**
+```json
+{
+  "selectedIds": ["GO:0005576", "GO:0019861"],
+  "taxonId": "2",
+  "taxonUsage": "descendants",
+  "geneProductType": "protein"
+}
+```
 
-Annotations from QuickGO are provided in a tab-delimited (TSV) or CSV format with the following key columns:
+## 🚀 Getting Started
 
-- GENE PRODUCT DB  
-- GENE PRODUCT ID  
-- SYMBOL  
-- QUALIFIER  
-- GO TERM  
-- GO NAME  
-- ECO ID  
-- GO EVIDENCE CODE  
-- REFERENCE  
-- WITH/FROM  
-- TAXON ID  
-- ASSIGNED BY  
-- ANNOTATION EXTENSION  
-- GO ASPECT
+### **For Testing:**
+1. Use the provided `test_params.json` with the test species list
+2. Run: `snakemake fetch_quickgo_data --cores 4`
 
-## Usage
+### **For Production:**
+1. Create your GO term selection in `go_ids.tsv`
+2. Define taxonomic scope in `taxon_ids.tsv`  
+3. Configure parameters in `params_1.json`
+4. Update `config/config.yaml` to reference your parameter files
 
-This dataset is intended exclusively for research purposes. Please cite QuickGO in any publications or analyses that utilize this data:
+## 🔗 Data Source & API
 
-> UniProt Consortium. QuickGO: a web-based tool for Gene Ontology searching. [https://www.ebi.ac.uk/QuickGO](https://www.ebi.ac.uk/QuickGO)
+**QuickGO REST API**: https://www.ebi.ac.uk/QuickGO/api/  
+**Interactive Interface**: https://www.ebi.ac.uk/QuickGO/annotations
 
-## Date of Retrieval
-2025-04-10
+### **API Rate Limits:**
+- The pipeline includes built-in delays to respect EBI rate limits
+- Large queries are automatically batched
+- Failed requests are retried with exponential backoff
 
+## 📖 Citation
+
+If you use the TargSeek pipeline with QuickGO data, please cite:
+
+> **TargSeek**: Baptista, C. (2024). TargSeek: Protein Discovery and Epitope Prediction Pipeline. GitHub. https://github.com/CatiaBio/PureMilk
+
+> **QuickGO**: Binns D, et al. QuickGO: a web-based tool for Gene Ontology searching. Bioinformatics. 2009;25(22):3045-6.
+
+## 🛠️ Troubleshooting
+
+### **Common Issues:**
+- **Empty gene lists**: Check GO term relevance for your target organisms
+- **API timeouts**: Reduce batch sizes or add delays
+- **Missing annotations**: Verify taxonomic IDs are correct
+
+### **Parameter Optimization:**
+- Start with broad GO terms, then refine based on results
+- Use `taxonUsage: "descendants"` for taxonomic groups
+- Filter by evidence codes if needed (e.g., experimental only)
+
+---
+
+**📁 This directory structure supports flexible, reproducible protein discovery workflows with comprehensive GO-based filtering.**
