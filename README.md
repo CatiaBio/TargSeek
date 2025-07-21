@@ -252,6 +252,7 @@ TargSeek integrates multiple bioinformatics tools and databases. If you use this
 ### **🧬 Core Tools**
 - **MAFFT**: Katoh, K., & Standley, D. M. (2013). MAFFT multiple sequence alignment software version 7. *Molecular Biology and Evolution*, 30(4), 772-780.
 - **trimAl**: Capella-Gutiérrez, S., et al. (2009). trimAl: automated alignment trimming in large-scale phylogenetic analyses. *Bioinformatics*, 25(15), 1972-1973.
+- **BepiPred 3.0**: Clifford, J. N., et al. (2022). BepiPred-3.0: Improved B-cell epitope prediction using protein language models. *Protein Science*, 31(12), e4497.
 - **Snakemake**: Köster, J., & Rahmann, S. (2012). Snakemake—a scalable bioinformatics workflow engine. *Bioinformatics*, 28(19), 2520-2522.
 
 ### **🌐 Databases & APIs**
@@ -261,6 +262,3 @@ TargSeek integrates multiple bioinformatics tools and databases. If you use this
 - **BacDive**: Reimer, L. C., et al. (2019). BacDive in 2019: bacterial phenotypic data for biodiversity analysis. *Nucleic Acids Research*, 47(D1), D631-D636.
 - **QuickGO**: Binns, D., et al. (2009). QuickGO: a web-based tool for Gene Ontology searching. *Bioinformatics*, 25(22), 3045-3046.
 
----
-
-**🔬 Thank you to the bioinformatics community for developing these essential tools and databases.**
