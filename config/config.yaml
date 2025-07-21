@@ -33,7 +33,7 @@ bepipred:
 
 # BacDive data files
 bacdive:
-  species: "config/microbiome/cow_milk/unique_species.txt"
+  species: "config/species/cow_milk/unique_species.txt"
   all_json: "data/bacdive/all_species.json"
   not_found: "data/bacdive/not_found.txt"
   updated_not_found: "data/bacdive/updated_not_found.txt"
@@ -100,9 +100,9 @@ species_batches:
   #- analysis_3
 
 species_files:
-  analysis_1: "config/microbiome/analysis_1.txt"
-  #analysis_2: "config/microbiome/analysis_2.txt"
-  #analysis_3: "config/microbiome/analysis_3.txt"
+  analysis_1: "config/species/analysis_1.txt"
+  #analysis_2: "config/species/analysis_2.txt"
+  #analysis_3: "config/species/analysis_3.txt"
 
 quickgo_paramsets:
   - params_1

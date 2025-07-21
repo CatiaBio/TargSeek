@@ -206,7 +206,7 @@ TargSeek/
 
 ## Data Structure
 
-- Input species lists: `config/microbiome/cow_milk/unique_species.txt`
+- Input species lists: `config/species/cow_milk/unique_species.txt`
 - GO terms: `config/quickgo/go_ids.tsv`
 - Taxonomic IDs: `config/quickgo/taxon_ids.tsv`
 - Results organized by Gram classification: `results/gram_positive/` and `results/gram_negative/`

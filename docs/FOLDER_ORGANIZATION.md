@@ -1,13 +1,13 @@
-# 📁 PureMilk Folder Organization
+# 📁 TargSeek Folder Organization
 
-This document provides a comprehensive overview of the PureMilk project structure, file organization, and data flow patterns.
+This document provides a comprehensive overview of the TargSeek project structure, file organization, and data flow patterns.
 
 ---
 
 ## 🏗️ Project Root Structure
 
 ```
-PureMilk/
+TargSeek/
 ├── 📄 README.md                    # Main project documentation
 ├── 📄 CLAUDE.md                    # Technical documentation for Claude Code
 ├── 📄 FOLDER_ORGANIZATION.md       # This file - project structure guide
@@ -42,20 +42,16 @@ config/
 ### **Input Data Configuration**
 ```
 config/
-├── 📁 microbiome/                  # Species lists for analysis
-│   └── 📁 cow_milk/
-│       └── 📄 unique_species.txt    # Target species list (297 species)
-└── 📁 quickgo/                     # GO term and parameter configurations
-    ├── 📄 go_ids.tsv                # Gene Ontology terms of interest
-    ├── 📄 taxon_ids.tsv             # Taxonomic restrictions
-    ├── 📄 surface_accessible.txt    # Surface accessibility criteria
-    ├── 📄 params_1.json             # Primary parameter set
-    └── 📄 params_2.json             # Alternative parameter set
+├── 📁 species/                     # Species lists for analysis (actual data gitignored)
+│   └── 📄 test_analysis.txt        # Test species list (5 species - for testing)
+└── 📁 quickgo/                     # GO term and parameter configurations (actual data gitignored)
+    ├── 📄 test_params.json         # Test parameter set (for testing)
+    └── 📌 README.txt                # Documentation about QuickGO setup
 ```
 
 **Key Configuration Parameters:**
 - **Coverage Thresholds**: 50% for both gram-positive and gram-negative
-- **Species Counts**: 113 gram-positive, 184 gram-negative
+- **Test Species**: 5 well-studied bacteria for pipeline testing
 - **API Rate Limits**: Built-in delays and retry mechanisms
 - **Batch Sizes**: 10 species per UniProt batch query
 
