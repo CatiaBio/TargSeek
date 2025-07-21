@@ -18,6 +18,19 @@ login:
   bacdive_info: "config/login/bacdive_info.txt"
   ncbi_info: "config/login/ncbi_info.txt"
 
+# BepiPred 3.0 configuration
+bepipred:
+  # Path to BepiPred 3.0 installation (clone from https://github.com/UberClifford/BepiPred3.0-Predictor)
+  path: "tools/BepiPred3.0"
+  # Prediction method: 'vt_pred' (recommended) or 'mjv_pred'
+  method: "vt_pred"
+  # Epitope score threshold (0.0-1.0, higher = more confident predictions)
+  threshold: 0.5
+  # Minimum epitope length (amino acids)
+  min_epitope_length: 6
+  # Top percentage of epitope residues to include (0.0-1.0, 0.2=20%, 0.5=50%)
+  top_percentage: 0.5
+
 # BacDive data files
 bacdive:
   species: "config/microbiome/cow_milk/unique_species.txt"
@@ -39,6 +52,7 @@ quickgo:
   annotations: "data/quickgo/annotations_all.json"
   genes: "data/quickgo/gene_symbols.txt"
   filtered_genes: "data/quickgo/params_1/gene_symbols_filtered.txt"
+  surface_accessible: "config/quickgo/surface_accessible.txt"
 
 # Paths for gene coverage analysis
 gene_coverage:
@@ -86,7 +100,7 @@ species_batches:
   #- analysis_3
 
 species_files:
-  analysis_1: "data/bacdive/analysis_1/gram_positive.txt"
+  analysis_1: "config/microbiome/analysis_1.txt"
   #analysis_2: "config/microbiome/analysis_2.txt"
   #analysis_3: "config/microbiome/analysis_3.txt"
 

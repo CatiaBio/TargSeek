@@ -6,16 +6,32 @@ data/
 results/
 .snakemake/
 tmp/
-cache/
+
+# Cache folder protection: Keep structure but ignore contents
+cache/*.json
+cache/*/*.json
+cache/*/*.txt
+cache/*/*/*.json
+cache/*/*/*.txt
+!cache/.gitkeep
+!cache/*/.gitkeep
 backup_before_clean/
 
-# Archive and backup folders
+# Large tools and external dependencies
+tools/
+
+# Archive and backup folders  
 scripts/archive_unused/
 scripts_test/
 scripts/other/
 data_backup/
 jupyter_notebooks/
-archive/
+archive/logs/
+archive/temp/
+archive/temp_files/
+
+# Keep utils/ tracked since these are important utilities
+# (nothing to ignore in utils/)
 
 # Temporary and test files
 *original*
