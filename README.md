@@ -17,7 +17,7 @@ TargSeek identifies candidate proteins suitable for **vaccine development**, **d
 - Surface accessibility filtering for membrane proteins
 - 3D structure integration from PDB
 - Multiple sequence alignment with conservation analysis  
-- IEDB epitope prediction with conservation scoring
+- BepiPred 3.0 B-cell epitope prediction with conservation scoring
 
 ---
 
@@ -146,7 +146,6 @@ snakemake --dry-run  # Check workflow
 
 ### 5. **Conservation & Epitope Prediction**
 - Position-specific conservation analysis
-- IEDB epitope prediction (MHC I/II + B-cell)
 - BepiPred 3.0 B-cell epitope prediction
 - Conservation-weighted epitope scoring
 - **Output**: Ranked epitope candidates
