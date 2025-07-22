@@ -106,7 +106,8 @@ rule all_downloaded_proteins:
 rule all_msa_sequences:
     input:
         expand(
-        "results/{analysis}_{paramset}/msa_sequences/gram_{group}",
+        ["results/{analysis}_{paramset}/no_3d/msa_sequences/gram_{group}",
+         "results/{analysis}_{paramset}/with_3d/msa_sequences/gram_{group}"],
             analysis=config["species_batches"],
           paramset=config["quickgo_paramsets"],
           group=["positive", "negative"]
@@ -115,8 +116,8 @@ rule all_msa_sequences:
 rule all_msa_alignments:
     input:
         expand(
-        ["results/{analysis}_{paramset}/msa_alignments/gram_{group}",
-         "results/{analysis}_{paramset}/msa_alignments_with_3d_fasta/gram_{group}"],
+        ["results/{analysis}_{paramset}/no_3d/msa_alignments/gram_{group}",
+         "results/{analysis}_{paramset}/with_3d/msa_alignments/gram_{group}"],
             analysis=config["species_batches"],
           paramset=config["quickgo_paramsets"],
           group=["positive", "negative"]
@@ -125,7 +126,8 @@ rule all_msa_alignments:
 rule all_msa_trimmed:
     input:
         expand(
-        "results/{analysis}_{paramset}/msa_trimmed/gram_{group}",
+        ["results/{analysis}_{paramset}/no_3d/msa_trimmed/gram_{group}",
+         "results/{analysis}_{paramset}/with_3d/msa_trimmed/gram_{group}"],
             analysis=config["species_batches"],
           paramset=config["quickgo_paramsets"],
           group=["positive", "negative"]
@@ -134,7 +136,8 @@ rule all_msa_trimmed:
 rule all_msa_quality:
     input:
         expand(
-        "results/{analysis}_{paramset}/msa_quality/gram_{group}",
+        ["results/{analysis}_{paramset}/no_3d/msa_quality/gram_{group}",
+         "results/{analysis}_{paramset}/with_3d/msa_quality/gram_{group}"],
             analysis=config["species_batches"],
           paramset=config["quickgo_paramsets"],
           group=["positive", "negative"]
@@ -143,7 +146,8 @@ rule all_msa_quality:
 rule all_conservation:
     input:
         expand(
-        "results/{analysis}_{paramset}/conservation/gram_{group}",
+        ["results/{analysis}_{paramset}/no_3d/conservation/gram_{group}",
+         "results/{analysis}_{paramset}/with_3d/conservation/gram_{group}"],
             analysis=config["species_batches"],
           paramset=config["quickgo_paramsets"],
           group=["positive", "negative"]
@@ -163,9 +167,10 @@ rule all_download_summaries:
 rule all_reports:
     input:
         expand(
-        "results/{analysis}_{paramset}/reports/final_report.html",
+        "results/{analysis}_{paramset}/reports/final_report_{use_3d_dir}.html",
             analysis=config["species_batches"],
-          paramset=config["quickgo_paramsets"]
+          paramset=config["quickgo_paramsets"],
+          use_3d_dir=["no_3d", "with_3d"]
         )
 
 # ---------------------
@@ -373,26 +378,11 @@ rule download_3d_structures:
     script:
         "scripts/download_3d_structures.py"
     
-# # Select representative protein sequences for multiple sequence alignment
-# # Chooses one protein per species per gene, prioritizing 3D structure availability
-# # Uses shared protein data directories and analysis-specific gene lists
-# rule select_proteins_for_msa:
-#     input:
-#         gene_lists="data/{analysis}_{paramset}/genes_species/gram_{group}",
-#         protein_download_sentinel="data/proteins_fasta/.{analysis}_{paramset}_{group}_download_complete",
-#         structures_download_sentinel="data/proteins_3d_structure/.{analysis}_{paramset}_{group}_structures_complete"
-#     output:
-#         directory("results/{analysis}_{paramset}/msa_sequences/gram_{group}")
-#     params:
-#         analysis="{analysis}",
-#         paramset="{paramset}", 
-#         group="{group}"
-#     group: "gram_group_{analysis}_{paramset}"
-#     resources:
-#         filesystem=1  # Only one filesystem-intensive operation at a time
-#     script:
-#         "scripts/select_msa_proteins.py"
 
+# Select representative protein sequences for multiple sequence alignment
+# Chooses one protein per species per gene
+
+## Step 1
 rule create_msa_sequence_references:
     input:
         gene_lists="data/{analysis}_{paramset}/genes_species/gram_{group}",
@@ -407,12 +397,15 @@ rule create_msa_sequence_references:
     script:
         "scripts/create_sequence_references.py"
 
+## Step 2
 rule create_msa_fasta_files:
     input:
         reference_dir="results/{analysis}_{paramset}/msa_sequence_refs/gram_{group}"
     output:
-        msa_no_3d=directory("results/{analysis}_{paramset}/msa_sequences/gram_{group}"),
-        msa_with_3d=directory("results/{analysis}_{paramset}/msa_sequences_with_3d_fasta/gram_{group}")
+        msa_no_3d=directory("results/{analysis}_{paramset}/no_3d/msa_sequences/gram_{group}"),
+        msa_with_3d=directory("results/{analysis}_{paramset}/with_3d/msa_sequences/gram_{group}"),
+        selected_3d_paths="results/{analysis}_{paramset}/selected_3d_paths_gram_{group}.txt",
+        selected_3d_tsv="results/{analysis}_{paramset}/selected_3d_fasta_gram_{group}.tsv"
     params:
         analysis="{analysis}",
         paramset="{paramset}",
@@ -425,11 +418,11 @@ rule create_msa_fasta_files:
 # Employs multi-threading for efficient processing of large protein datasets
 rule run_all_mafft_for_group:
     input:
-        msa_no_3d=directory("results/{analysis}_{paramset}/msa_sequences/gram_{group}"),
-        msa_with_3d=directory("results/{analysis}_{paramset}/msa_sequences_with_3d_fasta/gram_{group}")
+        msa_no_3d=directory("results/{analysis}_{paramset}/no_3d/msa_sequences/gram_{group}"),
+        msa_with_3d=directory("results/{analysis}_{paramset}/with_3d/msa_sequences/gram_{group}")
     output:
-        no_3d=directory("results/{analysis}_{paramset}/msa_alignments/gram_{group}"),
-        with_3d=directory("results/{analysis}_{paramset}/msa_alignments_with_3d_fasta/gram_{group}")
+        no_3d=directory("results/{analysis}_{paramset}/no_3d/msa_alignments/gram_{group}"),
+        with_3d=directory("results/{analysis}_{paramset}/with_3d/msa_alignments/gram_{group}")
     params:
         analysis="{analysis}",
         paramset="{paramset}",
@@ -444,9 +437,11 @@ rule run_all_mafft_for_group:
 # Applies statistical algorithms to retain only reliably aligned sequence regions
 rule trim_alignments:
     input:
-        get_alignment_dir
+        no_3d=directory("results/{analysis}_{paramset}/no_3d/msa_alignments/gram_{group}"),
+        with_3d=directory("results/{analysis}_{paramset}/with_3d/msa_alignments/gram_{group}")
     output:
-        directory("results/{analysis}_{paramset}/msa_trimmed/gram_{group}")
+        trim_no_3d=directory("results/{analysis}_{paramset}/no_3d/msa_trimmed/gram_{group}"),
+        trim_with_3d=directory("results/{analysis}_{paramset}/with_3d/msa_trimmed/gram_{group}")
     params:
         analysis="{analysis}",
         paramset="{paramset}",
@@ -460,10 +455,13 @@ rule trim_alignments:
 # Provides quality metrics to guide selection of optimal alignments for downstream analysis
 rule assess_alignment_quality:
     input:
-        raw_alignments=get_alignment_dir,
-        trimmed_alignments="results/{analysis}_{paramset}/msa_trimmed/gram_{group}"
+        no_3d=directory("results/{analysis}_{paramset}/no_3d/msa_alignments/gram_{group}"),
+        with_3d=directory("results/{analysis}_{paramset}/with_3d/msa_alignments/gram_{group}"),
+        trim_no_3d=directory("results/{analysis}_{paramset}/no_3d/msa_trimmed/gram_{group}"),
+        trim_with_3d=directory("results/{analysis}_{paramset}/with_3d/msa_trimmed/gram_{group}")
     output:
-        directory("results/{analysis}_{paramset}/msa_quality/gram_{group}")
+        no_3d=directory("results/{analysis}_{paramset}/no_3d/msa_quality/gram_{group}"),
+        with_3d=directory("results/{analysis}_{paramset}/with_3d/msa_quality/gram_{group}")
     params:
         analysis="{analysis}",
         paramset="{paramset}",
@@ -477,39 +475,41 @@ rule assess_alignment_quality:
 # Adaptively selects best alignment (raw or trimmed) based on quality assessment results
 rule analyze_conservation:
     input:
-        raw_alignments=get_alignment_dir,
-        trimmed_alignments="results/{analysis}_{paramset}/msa_trimmed/gram_{group}",
-        quality_assessment="results/{analysis}_{paramset}/msa_quality/gram_{group}"
+        no_3d=directory("results/{analysis}_{paramset}/no_3d/msa_alignments/gram_{group}"),
+        with_3d=directory("results/{analysis}_{paramset}/with_3d/msa_alignments/gram_{group}"),
+        trim_no_3d=directory("results/{analysis}_{paramset}/no_3d/msa_trimmed/gram_{group}"),
+        trim_with_3d=directory("results/{analysis}_{paramset}/with_3d/msa_trimmed/gram_{group}"),
+        quality_assessment_no_3d=directory("results/{analysis}_{paramset}/no_3d/msa_quality/gram_{group}"),
+        quality_assessment_with_3d=directory("results/{analysis}_{paramset}/with_3d/msa_quality/gram_{group}")
     output:
-        directory("results/{analysis}_{paramset}/conservation/gram_{group}")
+        no_3d=directory("results/{analysis}_{paramset}/no_3d/conservation/gram_{group}"),
+        with_3d=directory("results/{analysis}_{paramset}/with_3d/conservation/gram_{group}")
     params:
         analysis="{analysis}",
         paramset="{paramset}",
         group="{group}",
         use_3d=config.get("mafft", {}).get("use_3d_alignments", "no_3d"),
-        create_logos=False  # Set to True to enable logo plots
+        create_logos=False
     script:
         "scripts/analyze_conservation_adaptive.py"
+
 
 # Predict B-cell epitopes using BepiPred 3.0 machine learning algorithm
 # Employs state-of-the-art deep learning models for linear B-cell epitope identification
 # Focuses on surface-accessible regions with high immunogenic potential
+
+# Predict B-cell epitopes using BepiPred 3.0 on selected 3D structure sequences
 rule predict_epitopes_bepipred:
     input:
-        msa_sequences="results/{analysis}_{paramset}/msa_sequences/gram_{group}",
-        conservation="results/{analysis}_{paramset}/conservation/gram_{group}",
-        structures_3d="data/proteins_3d_structure",
-        proteins_to_study="results/{analysis}_{paramset}/proteins_to_study/gram_{group}.tsv",
-        structures_tsv="results/{analysis}_{paramset}/msa_alignments_with_3d_fasta/gram_{group}/_3d_structures_info.tsv" if config.get("mafft", {}).get("use_3d_alignments", "no_3d") == "with_3d" else []
+        selected_3d_paths="results/{analysis}_{paramset}/selected_3d_paths_gram_{group}.txt"
     output:
         directory("results/{analysis}_{paramset}/epitope_predictions_bepipred/gram_{group}")
     params:
         analysis="{analysis}",
         paramset="{paramset}",
-        group="{group}",
-        use_3d=config.get("mafft", {}).get("use_3d_alignments", "no_3d")
+        group="{group}"
     script:
-        "scripts/predict_epitopes_bepipred.py"
+        "scripts/predict_epitopes_bepipred_3d_only.py"
 
 # Create comprehensive protein download summary and statistics
 # Compares actual protein recovery rates against expected coverage from database searches
@@ -533,16 +533,17 @@ rule generate_download_summary:
 # Produces HTML report with visualizations and summary statistics for both Gram groups
 rule generate_final_report:
     input:
-        quality_positive="results/{analysis}_{paramset}/msa_quality/gram_positive",
-        quality_negative="results/{analysis}_{paramset}/msa_quality/gram_negative",
-        conservation_positive="results/{analysis}_{paramset}/conservation/gram_positive",
-        conservation_negative="results/{analysis}_{paramset}/conservation/gram_negative",
+        quality_positive="results/{analysis}_{paramset}/{use_3d_dir}/msa_quality/gram_positive",
+        quality_negative="results/{analysis}_{paramset}/{use_3d_dir}/msa_quality/gram_negative",
+        conservation_positive="results/{analysis}_{paramset}/{use_3d_dir}/conservation/gram_positive",
+        conservation_negative="results/{analysis}_{paramset}/{use_3d_dir}/conservation/gram_negative",
         download_summary_positive="results/{analysis}_{paramset}/download_summary/gram_positive",
         download_summary_negative="results/{analysis}_{paramset}/download_summary/gram_negative"
     output:
-        "results/{analysis}_{paramset}/reports/final_report.html"
+        "results/{analysis}_{paramset}/reports/final_report_{use_3d_dir}.html"
     params:
         analysis="{analysis}",
-        paramset="{paramset}"
+        paramset="{paramset}",
+        use_3d_dir="{use_3d_dir}"
     script:
         "scripts/generate_final_report.py"
