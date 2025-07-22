@@ -18,6 +18,15 @@ wildcard_constraints:
     analysis="analysis_[0-9]+",
     paramset="params_[0-9]+"
 
+# Helper function to get alignment directory based on config
+def get_alignment_dir(wildcards):
+    """Get the appropriate alignment directory based on config setting"""
+    use_3d = config.get("mafft", {}).get("use_3d_alignments", "no_3d")
+    if use_3d == "with_3d":
+        return f"results/{wildcards.analysis}_{wildcards.paramset}/msa_alignments_with_3d_fasta/gram_{wildcards.group}"
+    else:
+        return f"results/{wildcards.analysis}_{wildcards.paramset}/msa_alignments/gram_{wildcards.group}"
+
 rule all_coverage_unified:
     input:
         expand(
@@ -30,6 +39,18 @@ rule all_epitope_predictions_bepipred:
     input:
         expand(
         "results/{analysis}_{paramset}/epitope_predictions_bepipred/gram_{group}",
+            analysis=config["species_batches"],
+          paramset=config["quickgo_paramsets"],
+          group=["positive", "negative"]
+        )
+
+# Download all bacterial 3D structures for all analyses and groups
+# Convenience rule to download 3D structures for both gram-positive and gram-negative
+# Structures are stored in shared data/proteins_3d_structure/ directory for reuse
+rule all_3d_structures:
+    input:
+        expand(
+        "data/proteins_3d_structure/.{analysis}_{paramset}_{group}_structures_complete",
             analysis=config["species_batches"],
           paramset=config["quickgo_paramsets"],
           group=["positive", "negative"]
@@ -94,7 +115,8 @@ rule all_msa_sequences:
 rule all_msa_alignments:
     input:
         expand(
-        "results/{analysis}_{paramset}/msa_alignments/gram_{group}",
+        ["results/{analysis}_{paramset}/msa_alignments/gram_{group}",
+         "results/{analysis}_{paramset}/msa_alignments_with_3d_fasta/gram_{group}"],
             analysis=config["species_batches"],
           paramset=config["quickgo_paramsets"],
           group=["positive", "negative"]
@@ -136,14 +158,7 @@ rule all_download_summaries:
           group=["positive", "negative"]
         )
 
-rule all_epitope_predictions:
-    input:
-        expand(
-        "results/{analysis}_{paramset}/epitope_predictions/gram_{group}",
-            analysis=config["species_batches"],
-          paramset=config["quickgo_paramsets"],
-          group=["positive", "negative"]
-        )
+# REMOVED: all_epitope_predictions rule - use all_epitope_predictions_bepipred instead
 
 rule all_reports:
     input:
@@ -157,7 +172,9 @@ rule all_reports:
 # Rules
 # ---------------------
 
-# Classify species as Gram-positive or Gram-negative using BacDive API
+# Classify bacterial species by Gram staining properties
+# Queries BacDive API for comprehensive Gram stain classification data
+# Handles species identification and taxonomic validation with error tracking
 rule classify_taxa_by_gram:
     input:
         species=lambda wildcards: config["species_files"][wildcards.analysis],
@@ -170,9 +187,11 @@ rule classify_taxa_by_gram:
         gram_classification="data/bacdive/{analysis}/gram.tsv",
         all_identified="data/bacdive/{analysis}/all_identified.txt"
     script:
-        "scripts_test/classify_gram.py"
+        "scripts/classify_gram.py"
 
-# Supplement BacDive Gram classification using genus-based inference
+# Enhance Gram classification using genus-based inference
+# Supplements BacDive results by inferring Gram status from well-characterized genus patterns
+# Reduces unclassified species by leveraging taxonomic relationships
 rule supplement_bacdive_gram_classification:
     input:
         bacdive_classification = "data/bacdive/{analysis}/gram.tsv",
@@ -182,10 +201,12 @@ rule supplement_bacdive_gram_classification:
         updated_classification = "data/bacdive/{analysis}/updated_gram.tsv",
         updated_not_found = "data/bacdive/{analysis}/updated_not_found.txt"
     script:
-        "scripts_test/supplement_gram_classification.py"
+        "scripts/supplement_gram_classification.py"
 
 
-# Split species list into Gram-positive and Gram-negative text files 
+# Separate species by Gram classification for parallel processing
+# Creates Gram-specific species lists from unified classification data
+# Enables independent analysis of Gram-positive and Gram-negative bacterial groups
 rule split_species_by_gram:
     input:
         gram_classification = "data/bacdive/{analysis}/updated_gram.tsv"
@@ -198,7 +219,9 @@ rule split_species_by_gram:
         awk -F'\t' 'NR > 1 && $2 == "negative" {{ print $1 }}' {input.gram_classification} > {output.gram_negative}
         """
      
-# Fetch GO annotations and gene symbols from QuickGO
+# Retrieve Gene Ontology annotations and symbols from QuickGO database
+# Downloads comprehensive GO term assignments and associated gene nomenclature
+# Filters by specified taxonomic groups and GO categories for targeted protein discovery
 rule fetch_quickgo_annotations:
     input:
         params_file = "config/quickgo/{paramset}.json"
@@ -206,10 +229,12 @@ rule fetch_quickgo_annotations:
         annotations = "data/quickgo/{paramset}/annotations.json",
         genes = "data/quickgo/{paramset}/gene_symbols.txt"
     script:
-        "scripts_test/fetch_quickgo_data.py"
+        "scripts/fetch_quickgo_data.py"
 
 
-# Fetch gene aliases/synonyms from NCBI before filtering
+# Collect gene aliases and synonyms from NCBI Gene database
+# Builds comprehensive alias mapping to improve protein search success rates
+# Essential for handling gene nomenclature variations across different databases
 rule fetch_gene_aliases:
     input:
         genes = "data/quickgo/{paramset}/gene_symbols.txt"
@@ -218,7 +243,9 @@ rule fetch_gene_aliases:
     script:
         "scripts/fetch_gene_aliases.py"
 
-# Validate GO term assignments for proteins with alias support (moved from later in pipeline)
+# Validate Gene Ontology term assignments using multiple gene identifiers
+# Cross-references GO annotations with gene aliases to ensure assignment accuracy
+# Generates validation reports for quality control of GO-based protein selection
 rule validate_go_assignments:
     input:
         aliases = "data/quickgo/{paramset}/gene_aliases.txt"
@@ -227,7 +254,9 @@ rule validate_go_assignments:
     script:
         "scripts/validate_protein_go_assignments.py"
 
-# Filter genes by surface accessibility using GO validation
+# Select surface-accessible proteins using GO term validation
+# Filters candidates by cellular localization GO terms (membrane, extracellular, etc.)
+# Prioritizes proteins likely to be accessible for diagnostic or therapeutic targeting
 rule filter_surface_accessible_genes:
     input:
         go_validation = "data/quickgo/{paramset}/protein_go_validation_report.tsv",
@@ -235,9 +264,11 @@ rule filter_surface_accessible_genes:
     output:
         surface_genes = "data/quickgo/{paramset}/surface_accessible_proteins.txt"
     script:
-        "scripts_test/filter_surface_accessible.py"
+        "scripts/filter_surface_accessible.py"
 
-# Filter genes by taxa coverage using surface accessible genes
+# Apply taxonomic coverage filters to surface-accessible proteins
+# Removes genes with insufficient representation across target bacterial species
+# Ensures selected proteins have broad applicability within the study group
 rule filter_quickgo_genes:
     input:
         genes = "data/quickgo/{paramset}/surface_accessible_proteins.txt",
@@ -246,11 +277,11 @@ rule filter_quickgo_genes:
     output:
         proteins_to_test = "data/quickgo/{paramset}/proteins_to_be_tested.txt"
     script:
-        "scripts_test/filter_quickgo_data_simplified.py"
+        "scripts/filter_quickgo_data_simplified.py"
 
-# Note: Cache initialization is now handled within assess_gene_taxa_coverage rule
-
-# Assess coverage for all species (both Gram-positive and Gram-negative) in unified analysis
+# Assess gene coverage across all bacterial species in unified analysis
+# Systematically queries NCBI Protein database to determine gene presence/absence
+# Uses intelligent caching and alias fallback to maximize coverage detection accuracy
 rule assess_gene_taxa_coverage_unified:
     input:
         all_species="data/bacdive/{analysis}/all_identified.txt",
@@ -270,13 +301,9 @@ rule assess_gene_taxa_coverage_unified:
     script:
         "scripts/gene_taxa_coverage_unified.py" 
 
-# Note: proteins_to_study file is now created by select_proteins_to_study rule
-# using coverage data and the pre-filtered proteins_to_be_tested.txt list
-
-# Note: filter_and_sort_coverage rule is now handled by assess_gene_taxa_coverage_unified
-# which directly creates the unified coverage_count.tsv file with filtering and sorting
-
-# Select proteins to study from unified coverage data 
+# Select proteins to study based on coverage thresholds
+# Filters candidate proteins by Gram-specific coverage requirements (50% for both groups)
+# Prioritizes proteins with highest taxonomic coverage within each Gram classification
 rule select_proteins_to_study:
     input:
         coverage="results/{analysis}_{paramset}/coverage/coverage_count.tsv",
@@ -288,13 +315,15 @@ rule select_proteins_to_study:
         paramset="{paramset}",
         group="{group}",
         max_proteins=lambda wildcards: config["protein_selection"][wildcards.group]
+    group: "gram_group_{analysis}_{paramset}"
     conda:
         "env.yml"
     script:
         "scripts/select_proteins_to_study.py"
 
-# Create gene-specific species lists from unified coverage data (species that actually have each gene)
-# Now saves to analysis-specific data directory: data/{analysis}_{paramset}/genes_species/{group}/
+# Create gene-specific species lists for protein downloads
+# Extracts species that actually contain each selected gene from coverage data
+# Organizes species lists by gene in analysis-specific directories for downstream processing
 rule create_gene_species_lists:
     input:
         coverage="results/{analysis}_{paramset}/coverage/coverage_count.tsv",
@@ -305,11 +334,13 @@ rule create_gene_species_lists:
         analysis="{analysis}",
         paramset="{paramset}",
         group="{group}"
+    group: "gram_group_{analysis}_{paramset}"
     script:
         "scripts/create_gene_species_lists_from_coverage.py"
 
-# Download proteins with multi-stage approach: UniProt batch -> UniProt individual -> NCBI
-# Now downloads to shared data/proteins_fasta/ directory with caching and alias fallback
+# Download protein sequences with intelligent search strategy
+# Multi-stage approach: UniProt primary search → gene alias fallback → NCBI bulk validation
+# Employs persistent caching and smart completion detection to avoid redundant downloads
 rule download_proteins_to_analyse:
     input:
         protein_lists="data/{analysis}_{paramset}/genes_species/gram_{group}",
@@ -321,47 +352,84 @@ rule download_proteins_to_analyse:
         analysis="{analysis}",
         paramset="{paramset}",
         group="{group}"
+    group: "gram_group_{analysis}_{paramset}"
     script:
-        "scripts/download_proteins_cached_shared.py"
+        "scripts/download_proteins.py"
 
-# Download 3D structures and integrate into shared protein directories
-# Now downloads to shared data/proteins_3d_structure/ directory with caching
+# Download bacterial 3D structures and sequences from PDB
+# Searches UniProt for bacterial proteins with available 3D structures, prioritizing by resolution
+# Downloads top 3 structures per gene with concurrent processing and intelligent completion checking
 rule download_3d_structures:
     input:
-        protein_list="results/proteins_to_study/{analysis}_{paramset}_gram_{group}.tsv"
+        protein_list="results/{analysis}_{paramset}/proteins_to_study/gram_{group}.tsv"
     output:
-        sentinel=touch("data/proteins_3d_structure/.{analysis}_{paramset}_{group}_structures_complete")
+        sentinel="data/proteins_3d_structure/.{analysis}_{paramset}_{group}_structures_complete"
+    params:
+        analysis="{analysis}",
+        paramset="{paramset}",
+        group="{group}",
+        max_structures=config.get("3d_structures", {}).get("max_structures", 3)
+    group: "gram_group_{analysis}_{paramset}"
+    script:
+        "scripts/download_3d_structures.py"
+    
+# # Select representative protein sequences for multiple sequence alignment
+# # Chooses one protein per species per gene, prioritizing 3D structure availability
+# # Uses shared protein data directories and analysis-specific gene lists
+# rule select_proteins_for_msa:
+#     input:
+#         gene_lists="data/{analysis}_{paramset}/genes_species/gram_{group}",
+#         protein_download_sentinel="data/proteins_fasta/.{analysis}_{paramset}_{group}_download_complete",
+#         structures_download_sentinel="data/proteins_3d_structure/.{analysis}_{paramset}_{group}_structures_complete"
+#     output:
+#         directory("results/{analysis}_{paramset}/msa_sequences/gram_{group}")
+#     params:
+#         analysis="{analysis}",
+#         paramset="{paramset}", 
+#         group="{group}"
+#     group: "gram_group_{analysis}_{paramset}"
+#     resources:
+#         filesystem=1  # Only one filesystem-intensive operation at a time
+#     script:
+#         "scripts/select_msa_proteins.py"
+
+rule create_msa_sequence_references:
+    input:
+        gene_lists="data/{analysis}_{paramset}/genes_species/gram_{group}",
+        protein_download_sentinel="data/proteins_fasta/.{analysis}_{paramset}_{group}_download_complete",
+        structures_download_sentinel="data/proteins_3d_structure/.{analysis}_{paramset}_{group}_structures_complete"
+    output:
+        directory("results/{analysis}_{paramset}/msa_sequence_refs/gram_{group}")
     params:
         analysis="{analysis}",
         paramset="{paramset}",
         group="{group}"
     script:
-        "scripts/download_3d_structures_cached_shared.py"
+        "scripts/create_sequence_references.py"
 
-# Select one representative protein per species for MSA
-# Now uses shared protein data directories and analysis-specific gene lists
-rule select_proteins_for_msa:
+rule create_msa_fasta_files:
     input:
-        gene_lists="data/{analysis}_{paramset}/genes_species/gram_{group}",
-        protein_list="results/{analysis}_{paramset}/proteins_to_study/gram_{group}.tsv",
-        protein_download_sentinel="data/proteins_fasta/.{analysis}_{paramset}_{group}_download_complete",
-        structures_download_sentinel="data/proteins_3d_structure/.{analysis}_{paramset}_{group}_structures_complete"
+        reference_dir="results/{analysis}_{paramset}/msa_sequence_refs/gram_{group}"
     output:
-        directory("results/{analysis}_{paramset}/msa_sequences/gram_{group}")
+        msa_no_3d=directory("results/{analysis}_{paramset}/msa_sequences/gram_{group}"),
+        msa_with_3d=directory("results/{analysis}_{paramset}/msa_sequences_with_3d_fasta/gram_{group}")
     params:
         analysis="{analysis}",
-        paramset="{paramset}", 
+        paramset="{paramset}",
         group="{group}"
     script:
-        "scripts/select_proteins_for_msa_shared.py"
+        "scripts/create_msa_fasta.py"
 
-# Run MAFFT alignments for all genes in a group
+# Perform multiple sequence alignments using MAFFT algorithm
+# Generates high-quality amino acid sequence alignments for each gene within Gram groups
+# Employs multi-threading for efficient processing of large protein datasets
 rule run_all_mafft_for_group:
     input:
-        msa_dir="results/{analysis}_{paramset}/msa_sequences/gram_{group}",
-        protein_list="results/{analysis}_{paramset}/proteins_to_study/gram_{group}.tsv"
+        msa_no_3d=directory("results/{analysis}_{paramset}/msa_sequences/gram_{group}"),
+        msa_with_3d=directory("results/{analysis}_{paramset}/msa_sequences_with_3d_fasta/gram_{group}")
     output:
-        directory("results/{analysis}_{paramset}/msa_alignments/gram_{group}")
+        no_3d=directory("results/{analysis}_{paramset}/msa_alignments/gram_{group}"),
+        with_3d=directory("results/{analysis}_{paramset}/msa_alignments_with_3d_fasta/gram_{group}")
     params:
         analysis="{analysis}",
         paramset="{paramset}",
@@ -370,89 +438,89 @@ rule run_all_mafft_for_group:
     script:
         "scripts/run_mafft_alignments.py"
 
-# Trim poorly aligned regions with trimAl
+
+# Remove poorly aligned regions using trimAl automated trimming
+# Eliminates gaps and ambiguously aligned positions to improve alignment quality
+# Applies statistical algorithms to retain only reliably aligned sequence regions
 rule trim_alignments:
     input:
-        "results/{analysis}_{paramset}/msa_alignments/gram_{group}"
+        get_alignment_dir
     output:
         directory("results/{analysis}_{paramset}/msa_trimmed/gram_{group}")
     params:
         analysis="{analysis}",
         paramset="{paramset}",
-        group="{group}"
+        group="{group}",
+        use_3d=config.get("mafft", {}).get("use_3d_alignments", "no_3d")
     script:
         "scripts/trim_alignments.py"
 
-# MSA quality assessment (compare before/after trimming)
+# Evaluate multiple sequence alignment quality before and after trimming
+# Compares alignment statistics (gaps, conservation, length) between raw and trimmed versions
+# Provides quality metrics to guide selection of optimal alignments for downstream analysis
 rule assess_alignment_quality:
     input:
-        raw_alignments="results/{analysis}_{paramset}/msa_alignments/gram_{group}",
+        raw_alignments=get_alignment_dir,
         trimmed_alignments="results/{analysis}_{paramset}/msa_trimmed/gram_{group}"
     output:
         directory("results/{analysis}_{paramset}/msa_quality/gram_{group}")
     params:
         analysis="{analysis}",
         paramset="{paramset}",
-        group="{group}"
+        group="{group}",
+        use_3d=config.get("mafft", {}).get("use_3d_alignments", "no_3d")
     script:
         "scripts/assess_alignment_quality_comparison.py"
 
-# Analyze amino acid conservation using best alignments (raw vs trimmed based on quality)
+# Calculate amino acid conservation patterns from optimal alignments
+# Identifies highly conserved residues and regions across aligned protein sequences
+# Adaptively selects best alignment (raw or trimmed) based on quality assessment results
 rule analyze_conservation:
     input:
-        raw_alignments="results/msa_alignments/{analysis}_{paramset}_gram_{group}",
-        trimmed_alignments="results/msa_trimmed/{analysis}_{paramset}_gram_{group}",
-        quality_assessment="results/msa_quality/{analysis}_{paramset}_gram_{group}"
+        raw_alignments=get_alignment_dir,
+        trimmed_alignments="results/{analysis}_{paramset}/msa_trimmed/gram_{group}",
+        quality_assessment="results/{analysis}_{paramset}/msa_quality/gram_{group}"
     output:
-        directory("results/conservation/{analysis}_{paramset}_gram_{group}")
+        directory("results/{analysis}_{paramset}/conservation/gram_{group}")
     params:
         analysis="{analysis}",
         paramset="{paramset}",
         group="{group}",
+        use_3d=config.get("mafft", {}).get("use_3d_alignments", "no_3d"),
         create_logos=False  # Set to True to enable logo plots
     script:
         "scripts/analyze_conservation_adaptive.py"
 
-# Predict epitopes using IEDB API for conserved sequences with 3D structure data
-rule predict_epitopes:
-    input:
-        msa_sequences="results/msa_sequences/{analysis}_{paramset}_gram_{group}",
-        conservation="results/conservation/{analysis}_{paramset}_gram_{group}",
-        structures_3d="results/3d_structures/{analysis}_{paramset}_gram_{group}",
-        proteins_to_study="results/proteins_to_study/{analysis}_{paramset}_gram_{group}.tsv"
-    output:
-        directory("results/epitope_predictions/{analysis}_{paramset}_gram_{group}")
-    params:
-        analysis="{analysis}",
-        paramset="{paramset}",
-        group="{group}"
-    script:
-        "scripts/predict_epitopes.py"
-
-# Predict epitopes using BepiPred 3.0 for B-cell epitope prediction
+# Predict B-cell epitopes using BepiPred 3.0 machine learning algorithm
+# Employs state-of-the-art deep learning models for linear B-cell epitope identification
+# Focuses on surface-accessible regions with high immunogenic potential
 rule predict_epitopes_bepipred:
     input:
-        msa_sequences="results/msa_sequences/{analysis}_{paramset}_gram_{group}",
-        conservation="results/conservation/{analysis}_{paramset}_gram_{group}",
-        structures_3d="results/3d_structures/{analysis}_{paramset}_gram_{group}",
-        proteins_to_study="results/proteins_to_study/{analysis}_{paramset}_gram_{group}.tsv"
+        msa_sequences="results/{analysis}_{paramset}/msa_sequences/gram_{group}",
+        conservation="results/{analysis}_{paramset}/conservation/gram_{group}",
+        structures_3d="data/proteins_3d_structure",
+        proteins_to_study="results/{analysis}_{paramset}/proteins_to_study/gram_{group}.tsv",
+        structures_tsv="results/{analysis}_{paramset}/msa_alignments_with_3d_fasta/gram_{group}/_3d_structures_info.tsv" if config.get("mafft", {}).get("use_3d_alignments", "no_3d") == "with_3d" else []
     output:
-        directory("results/epitope_predictions_bepipred/{analysis}_{paramset}_gram_{group}")
+        directory("results/{analysis}_{paramset}/epitope_predictions_bepipred/gram_{group}")
     params:
         analysis="{analysis}",
         paramset="{paramset}",
-        group="{group}"
+        group="{group}",
+        use_3d=config.get("mafft", {}).get("use_3d_alignments", "no_3d")
     script:
         "scripts/predict_epitopes_bepipred.py"
 
-# Generate download summary with actual vs expected species counts
+# Create comprehensive protein download summary and statistics
+# Compares actual protein recovery rates against expected coverage from database searches
+# Identifies download gaps and success patterns across genes and species
 rule generate_download_summary:
     input:
-        coverage="results/uniprot_info/{analysis}_{paramset}_gram_{group}_uniprot_info/{analysis}_{paramset}_gram_{group}_coverage_count_location.tsv",
-        protein_fasta="results/protein_fasta/{analysis}_{paramset}_gram_{group}",
-        proteins_to_study="results/proteins_to_study/{analysis}_{paramset}_gram_{group}.tsv"
+        coverage="results/{analysis}_{paramset}/coverage/coverage_count.tsv",
+        protein_fasta="data/proteins_fasta",
+        proteins_to_study="results/{analysis}_{paramset}/proteins_to_study/gram_{group}.tsv"
     output:
-        directory("results/download_summary/{analysis}_{paramset}_gram_{group}")
+        directory("results/{analysis}_{paramset}/download_summary/gram_{group}")
     params:
         analysis="{analysis}",
         paramset="{paramset}",
@@ -460,17 +528,19 @@ rule generate_download_summary:
     script:
         "scripts/generate_download_summary.py"
 
-# Generate comprehensive final report
+# Compile integrated analysis report combining all pipeline results
+# Synthesizes alignment quality, conservation patterns, and epitope predictions
+# Produces HTML report with visualizations and summary statistics for both Gram groups
 rule generate_final_report:
     input:
-        quality_positive="results/msa_quality/{analysis}_{paramset}_gram_positive",
-        quality_negative="results/msa_quality/{analysis}_{paramset}_gram_negative",
-        conservation_positive="results/conservation/{analysis}_{paramset}_gram_positive",
-        conservation_negative="results/conservation/{analysis}_{paramset}_gram_negative",
-        download_summary_positive="results/download_summary/{analysis}_{paramset}_gram_positive",
-        download_summary_negative="results/download_summary/{analysis}_{paramset}_gram_negative"
+        quality_positive="results/{analysis}_{paramset}/msa_quality/gram_positive",
+        quality_negative="results/{analysis}_{paramset}/msa_quality/gram_negative",
+        conservation_positive="results/{analysis}_{paramset}/conservation/gram_positive",
+        conservation_negative="results/{analysis}_{paramset}/conservation/gram_negative",
+        download_summary_positive="results/{analysis}_{paramset}/download_summary/gram_positive",
+        download_summary_negative="results/{analysis}_{paramset}/download_summary/gram_negative"
     output:
-        "results/reports/{analysis}_{paramset}_final_report.html"
+        "results/{analysis}_{paramset}/reports/final_report.html"
     params:
         analysis="{analysis}",
         paramset="{paramset}"
