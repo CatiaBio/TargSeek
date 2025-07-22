@@ -15,9 +15,87 @@ import logging
 import json
 from Bio import Entrez
 import xml.etree.ElementTree as ET
+from datetime import datetime
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+# Cache configuration
+CACHE_DIR = Path("cache/gene_aliases")
+CACHE_FILE = CACHE_DIR / "gene_aliases_cache.json"
+
+class GeneAliasCache:
+    """Manages caching of gene alias lookups"""
+    
+    def __init__(self, max_age_days=180):
+        """Initialize cache with 6-month expiration by default"""
+        self.cache = {}
+        self.cache_updates = 0
+        self.max_age_days = max_age_days
+        self.load_cache()
+    
+    def load_cache(self):
+        """Load existing gene alias cache"""
+        if CACHE_FILE.exists():
+            try:
+                with open(CACHE_FILE, 'r') as f:
+                    self.cache = json.load(f)
+                logging.info(f"✓ Loaded gene alias cache with {len(self.cache)} entries")
+            except Exception as e:
+                logging.warning(f"Could not load gene alias cache: {e}")
+                self.cache = {}
+        else:
+            logging.info("No existing gene alias cache found, starting fresh")
+            self.cache = {}
+    
+    def save_cache(self):
+        """Save gene alias cache"""
+        try:
+            CACHE_DIR.mkdir(parents=True, exist_ok=True)
+            with open(CACHE_FILE, 'w') as f:
+                json.dump(self.cache, f, indent=2)
+            logging.info(f"✓ Saved gene alias cache with {len(self.cache)} entries")
+        except Exception as e:
+            logging.warning(f"Could not save gene alias cache: {e}")
+    
+    def is_cache_valid(self, cache_entry):
+        """Check if cache entry is still valid"""
+        if "timestamp" not in cache_entry:
+            return False
+        
+        try:
+            cache_time = datetime.fromisoformat(cache_entry["timestamp"])
+            age_days = (datetime.now() - cache_time).days
+            return age_days <= self.max_age_days
+        except (ValueError, TypeError):
+            return False
+    
+    def get_cache_key(self, gene_symbol, source="ncbi"):
+        """Generate cache key for gene alias lookup"""
+        return f"{gene_symbol}||{source}"
+    
+    def get_cached_aliases(self, gene_symbol, source="ncbi"):
+        """Get cached aliases if available and valid"""
+        cache_key = self.get_cache_key(gene_symbol, source)
+        cache_entry = self.cache.get(cache_key)
+        
+        if cache_entry and self.is_cache_valid(cache_entry):
+            return cache_entry.get("aliases", [])
+        return None
+    
+    def cache_aliases(self, gene_symbol, aliases, source="ncbi"):
+        """Cache gene aliases"""
+        cache_key = self.get_cache_key(gene_symbol, source)
+        self.cache[cache_key] = {
+            "aliases": aliases,
+            "timestamp": datetime.now().isoformat(),
+            "source": source
+        }
+        self.cache_updates += 1
+        
+        # Save cache every 20 updates
+        if self.cache_updates % 20 == 0:
+            self.save_cache()
 
 def setup_ncbi_credentials():
     """Set up NCBI credentials from config file"""
@@ -61,17 +139,25 @@ def setup_ncbi_credentials():
         logging.warning(f"Could not read NCBI credentials: {e}")
         Entrez.email = "user@example.com"
 
-def fetch_gene_aliases_ncbi(gene_symbol, taxon_id="511145"):  # E. coli as default
+def fetch_gene_aliases_ncbi(gene_symbol, taxon_id="511145", cache=None):  # E. coli as default
     """
     Fetch gene aliases from NCBI Gene database using E-utilities with API key
     
     Args:
         gene_symbol (str): Gene symbol to search for
         taxon_id (str): NCBI taxonomy ID (default: E. coli)
+        cache (GeneAliasCache): Cache instance to use
     
     Returns:
         list: List of gene aliases/synonyms
     """
+    # Check cache first
+    if cache:
+        cached_aliases = cache.get_cached_aliases(gene_symbol, "ncbi")
+        if cached_aliases is not None:
+            logging.debug(f"Using cached NCBI aliases for {gene_symbol}: {cached_aliases}")
+            return cached_aliases
+    
     aliases = set()
     
     try:
@@ -150,22 +236,39 @@ def fetch_gene_aliases_ncbi(gene_symbol, taxon_id="511145"):  # E. coli as defau
             if alias and len(alias) >= 2 and len(alias) <= 10 and alias.replace("_", "").replace("-", "").isalnum():
                 filtered_aliases.append(alias)
         
-        return sorted(filtered_aliases)
+        result = sorted(filtered_aliases)
+        
+        # Cache the result
+        if cache:
+            cache.cache_aliases(gene_symbol, result, "ncbi")
+        
+        return result
         
     except Exception as e:
         logging.warning(f"Error fetching aliases for {gene_symbol}: {e}")
+        # Cache empty result to avoid repeated failed lookups
+        if cache:
+            cache.cache_aliases(gene_symbol, [], "ncbi")
         return []
 
-def fetch_gene_aliases_uniprot(gene_symbol):
+def fetch_gene_aliases_uniprot(gene_symbol, cache=None):
     """
     Alternative method: Fetch gene aliases from UniProt
     
     Args:
         gene_symbol (str): Gene symbol to search for
+        cache (GeneAliasCache): Cache instance to use
     
     Returns:
         list: List of gene aliases/synonyms
     """
+    # Check cache first
+    if cache:
+        cached_aliases = cache.get_cached_aliases(gene_symbol, "uniprot")
+        if cached_aliases is not None:
+            logging.debug(f"Using cached UniProt aliases for {gene_symbol}: {cached_aliases}")
+            return cached_aliases
+    
     aliases = set()
     
     try:
@@ -202,10 +305,19 @@ def fetch_gene_aliases_uniprot(gene_symbol):
                         if syn_name and syn_name != gene_symbol:
                             aliases.add(syn_name)
         
-        return sorted(list(aliases))
+        result = sorted(list(aliases))
+        
+        # Cache the result
+        if cache:
+            cache.cache_aliases(gene_symbol, result, "uniprot")
+        
+        return result
         
     except Exception as e:
         logging.warning(f"Error fetching UniProt aliases for {gene_symbol}: {e}")
+        # Cache empty result to avoid repeated failed lookups
+        if cache:
+            cache.cache_aliases(gene_symbol, [], "uniprot")
         return []
 
 def main():
@@ -226,6 +338,9 @@ def main():
     
     # Set up NCBI credentials
     setup_ncbi_credentials()
+    
+    # Initialize cache
+    cache = GeneAliasCache(max_age_days=180)  # 6-month cache expiration
     
     # Read and filter genes
     try:
@@ -266,60 +381,104 @@ def main():
     all_aliases = {}
     gene_to_primary = {}  # Map any name (gene or alias) to primary gene name
     processed = 0
+    cache_hits = 0
+    new_lookups = 0
+    
+    # Check if we're mostly using cache
+    total_cache_size = len(cache.cache)
+    logging.info(f"Using cache with {total_cache_size} entries")
     
     for gene in genes:
-        logging.info(f"Processing gene {gene} ({processed + 1}/{len(genes)})")
+        # Check cache directly to avoid function call overhead
+        ncbi_aliases = cache.get_cached_aliases(gene, "ncbi")
+        uniprot_aliases = cache.get_cached_aliases(gene, "uniprot")
         
-        # Try NCBI first, then UniProt as fallback
-        aliases_ncbi = fetch_gene_aliases_ncbi(gene)
-        aliases_uniprot = fetch_gene_aliases_uniprot(gene)
+        if ncbi_aliases is not None or uniprot_aliases is not None:
+            # Use cached results
+            cache_hits += 1
+            is_cached = True
+            aliases_ncbi = ncbi_aliases if ncbi_aliases is not None else []
+            aliases_uniprot = uniprot_aliases if uniprot_aliases is not None else []
+        else:
+            # Need to fetch
+            new_lookups += 1
+            is_cached = False
+            logging.info(f"Processing gene {gene} ({processed + 1}/{len(genes)}) - NEW LOOKUP")
+            
+            # Only call fetch functions for new lookups
+            aliases_ncbi = fetch_gene_aliases_ncbi(gene, cache=cache)
+            aliases_uniprot = fetch_gene_aliases_uniprot(gene, cache=cache)
         
         # Combine and deduplicate
         new_aliases = list(set(aliases_ncbi + aliases_uniprot))
         
-        # Check if this gene or any of its aliases are already known
-        primary_gene = gene
-        existing_aliases = set()
-        
-        # Look for existing entries
-        for potential_alias in [gene] + new_aliases:
-            if potential_alias in gene_to_primary:
-                # Found existing mapping
-                existing_primary = gene_to_primary[potential_alias]
-                if existing_primary in all_aliases:
-                    existing_aliases.update(all_aliases[existing_primary])
-                    # Use the first encountered gene as primary
-                    if primary_gene == gene:  # Only change if we haven't found a better primary yet
-                        primary_gene = existing_primary
-        
-        # Consolidate all aliases under the primary gene name
-        consolidated_aliases = list(set(new_aliases) | existing_aliases)
-        
-        # Remove the primary gene name from its own aliases
-        if primary_gene in consolidated_aliases:
-            consolidated_aliases.remove(primary_gene)
-        
-        # Update mappings
-        for alias in [primary_gene] + consolidated_aliases:
-            gene_to_primary[alias] = primary_gene
-        
-        # Store consolidated result
-        if consolidated_aliases:
-            all_aliases[primary_gene] = sorted(consolidated_aliases)
-            logging.info(f"  Consolidated aliases for {primary_gene}: {', '.join(consolidated_aliases)}")
-            
-            # Log if we merged with existing data
-            if existing_aliases:
-                logging.info(f"  -> Merged with existing aliases from previous gene(s)")
+        # For now, just store the raw aliases without consolidation
+        # We'll do consolidation in a single pass at the end
+        if new_aliases:
+            all_aliases[gene] = sorted(new_aliases)
+            # Only log details for new lookups
+            if not is_cached:
+                logging.info(f"  Aliases for {gene}: {', '.join(new_aliases)}")
         else:
-            # Ensure the gene exists in the mapping even without aliases
-            all_aliases[primary_gene] = []
-            logging.info(f"  No aliases found for {gene}")
+            all_aliases[gene] = []
+            if not is_cached:
+                logging.info(f"  No aliases found for {gene}")
         
         processed += 1
         
-        # Rate limiting
-        time.sleep(0.5)
+        # No rate limiting needed - API calls have their own rate limiting
+        
+        # Progress update every 100 genes when using cache
+        if is_cached and processed % 100 == 0:
+            logging.info(f"Progress: {processed}/{len(genes)} genes processed ({cache_hits} from cache, {new_lookups} new lookups)")
+    
+    # Add summary before consolidation
+    logging.info(f"\n=== Consolidating aliases ===")
+    logging.info(f"Starting consolidation for {len(all_aliases)} genes...")
+    
+    # Now do consolidation in a single efficient pass
+    gene_to_primary = {}
+    consolidated_aliases = {}
+    
+    # First pass: build gene_to_primary mapping
+    for gene, aliases in all_aliases.items():
+        # Add the gene itself to the mapping
+        if gene not in gene_to_primary:
+            gene_to_primary[gene] = gene
+        
+        # Add aliases
+        for alias in aliases:
+            if alias not in gene_to_primary:
+                gene_to_primary[alias] = gene
+            elif gene_to_primary[alias] != gene:
+                # This alias belongs to multiple genes - keep the first one
+                logging.debug(f"Alias conflict: {alias} claimed by both {gene_to_primary[alias]} and {gene}")
+    
+    # Second pass: consolidate aliases under primary genes
+    for gene in all_aliases:
+        primary = gene_to_primary.get(gene, gene)
+        aliases = all_aliases[gene]
+        
+        if primary not in consolidated_aliases:
+            consolidated_aliases[primary] = set()
+        
+        # Add all aliases
+        consolidated_aliases[primary].update(aliases)
+        
+        # Also add the gene itself if it's different from primary
+        if gene != primary:
+            consolidated_aliases[primary].add(gene)
+    
+    # Clean up: convert sets to sorted lists and remove self-references
+    for primary in consolidated_aliases:
+        alias_set = consolidated_aliases[primary]
+        alias_set.discard(primary)  # Remove self-reference
+        consolidated_aliases[primary] = sorted(list(alias_set))
+    
+    # Replace all_aliases with consolidated version
+    all_aliases = consolidated_aliases
+    
+    logging.info(f"Consolidation complete: {len(all_aliases)} primary genes")
     
     # Final cleanup: only include genes that are NOT aliases of other genes
     # Create reverse mapping: alias -> primary gene
@@ -394,10 +553,23 @@ def main():
     with open(json_file, 'w') as f:
         json.dump(final_aliases, f, indent=2)
     
-    logging.info(f"Results saved to:")
+    # Save final cache
+    cache.save_cache()
+    
+    # Add final summary of cache usage
+    logging.info(f"\n=== Gene Alias Processing Complete ===")
+    logging.info(f"Cache performance:")
+    logging.info(f"  Cache hits: {cache_hits}")
+    logging.info(f"  New lookups: {new_lookups}")
+    if processed > 0:
+        cache_hit_rate = (cache_hits / processed) * 100
+        logging.info(f"  Cache hit rate: {cache_hit_rate:.1f}%")
+    
+    logging.info(f"\nResults saved to:")
     logging.info(f"  Aliases: {output_path}")
     logging.info(f"  JSON: {json_file}")
     logging.info(f"  Excluded: {excluded_file}")
+    logging.info(f"  Cache: {CACHE_FILE}")
     
     genes_with_aliases = len([g for g in final_aliases.values() if g])
     logging.info(f"\nProcessing summary:")
@@ -408,19 +580,21 @@ def main():
     logging.info(f"  Final genes in output: {len(final_aliases)}")
     logging.info(f"  Found aliases for: {genes_with_aliases} genes")
     
-    # Print summary of interesting aliases
-    interesting_aliases = {gene: aliases for gene, aliases in final_aliases.items() if aliases}
-    if interesting_aliases:
-        logging.info("\nGenes with aliases found:")
-        for gene, aliases in interesting_aliases.items():
-            logging.info(f"  {gene} -> {', '.join(aliases)}")
-        
-        # Log consolidation summary
-        logging.info(f"\nConsolidation summary:")
-        logging.info(f"  Total unique gene families: {len(set(gene_to_primary.values()))}")
-        logging.info(f"  Total gene names processed: {len(gene_to_primary)}")
-        if len(gene_to_primary) > len(set(gene_to_primary.values())):
-            logging.info(f"  -> Successfully consolidated {len(gene_to_primary) - len(set(gene_to_primary.values()))} duplicate entries")
+    # Only print detailed alias list if there were new lookups
+    if new_lookups > 0:
+        # Print summary of interesting aliases
+        interesting_aliases = {gene: aliases for gene, aliases in final_aliases.items() if aliases}
+        if interesting_aliases:
+            logging.info("\nNew genes with aliases found:")
+            new_genes_with_aliases = 0
+            for gene, aliases in interesting_aliases.items():
+                # Only show if it was a new lookup
+                if cache.get_cached_aliases(gene, "ncbi") is None or cache.get_cached_aliases(gene, "uniprot") is None:
+                    logging.info(f"  {gene} -> {', '.join(aliases)}")
+                    new_genes_with_aliases += 1
+                    if new_genes_with_aliases >= 10:
+                        logging.info("  ... (showing first 10 new genes with aliases)")
+                        break
 
 if __name__ == "__main__":
     main()

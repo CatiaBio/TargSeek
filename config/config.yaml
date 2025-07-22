@@ -31,6 +31,15 @@ bepipred:
   # Top percentage of epitope residues to include (0.0-1.0, 0.2=20%, 0.5=50%)
   top_percentage: 0.5
 
+# 3D structure download configuration
+3d_structures:
+  # Maximum number of structures to download per gene (top 3 by resolution)
+  max_structures: 3
+  # Only download bacterial structures (taxonomy ID 2)
+  bacterial_only: true
+  # Shared directory for structures (PDB.gz files and FASTA sequences)
+  shared_dir: "data/proteins_3d_structure"
+
 # BacDive data files
 bacdive:
   species: "config/species/cow_milk/unique_species.txt"
@@ -78,6 +87,10 @@ scripts:
 # MAFFT settings
 mafft:
   threads: 8
+  # Choose which alignment type to use for downstream analysis:
+  # "no_3d" - Use alignments without 3D structures
+  # "with_3d" - Use alignments with 3D structures included
+  use_3d_alignments: "no_3d"
 
 # Gram thresholds for gene filtering (now using 50% coverage for all)
 gram_thresholds:
@@ -112,3 +125,5 @@ quickgo_paramsets:
 
 cache:
   checked_gene_species: cache/checked_gene_species.tsv
+  protein_sequences: cache/protein_sequences/protein_fasta_cache.json
+  protein_3d_structures: cache/protein_structures/protein_3d_structure_cache.json

@@ -212,13 +212,53 @@ def load_conservation_data(conservation_dir, gene):
         logging.warning(f"Error loading conservation data for {gene}: {e}")
         return None
 
-def load_3d_structure_info(structures_dir, gene):
-    """Load 3D structure information"""
+def load_3d_structure_info(structures_dir, gene, structures_tsv_data=None):
+    """Load 3D structure information, optionally filtered by TSV data"""
     gene_structures_dir = Path(structures_dir) / gene
     
     if not gene_structures_dir.exists():
         return None
     
+    # If we have TSV data, only use structures mentioned there
+    if structures_tsv_data is not None:
+        gene_structures = structures_tsv_data[structures_tsv_data['gene'] == gene]
+        if gene_structures.empty:
+            return None
+        
+        # Load only the specific PDB sequences mentioned in TSV
+        structure_info = {
+            'structures': [],
+            'has_3d': True,
+            'source': '3D_TSV'
+        }
+        
+        for _, row in gene_structures.iterrows():
+            pdb_id = row['pdb_id']
+            species = row['species']
+            
+            # Look for the corresponding FASTA file
+            fasta_files = list(gene_structures_dir.glob(f"{pdb_id}*.fasta"))
+            
+            for fasta_file in fasta_files:
+                try:
+                    # Read sequence from FASTA
+                    with open(fasta_file, 'r') as f:
+                        sequences = list(SeqIO.parse(f, "fasta"))
+                        if sequences:
+                            seq_record = sequences[0]
+                            structure_info['structures'].append({
+                                'pdb_id': pdb_id,
+                                'species': species,
+                                'sequence': str(seq_record.seq),
+                                'description': seq_record.description,
+                                'file': str(fasta_file)
+                            })
+                except Exception as e:
+                    logging.warning(f"Error reading 3D structure file {fasta_file}: {e}")
+        
+        return structure_info if structure_info['structures'] else None
+    
+    # Original behavior when no TSV data
     # Look for structure summary or PDB files
     summary_file = gene_structures_dir / "structure_summary.json"
     if summary_file.exists():
@@ -456,7 +496,7 @@ def main():
         msa_sequences_dir = "results/msa_sequences/analysis_1_params_1_gram_positive"
         conservation_dir = "results/conservation/analysis_1_params_1_gram_positive"
         structures_dir = "results/3d_structures/analysis_1_params_1_gram_positive"
-        proteins_to_study_file = "results/proteins_to_study/analysis_1_params_1_gram_positive.tsv"
+        proteins_to_study_file = "results/analysis_1_params_1/proteins_to_study/gram_positive.tsv"
         output_dir = "results/epitope_predictions/test"
     
     # Create output directory
