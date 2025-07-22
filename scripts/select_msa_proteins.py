@@ -57,16 +57,6 @@ def load_gene_species_lists(gene_lists_dir):
     
     return gene_species_mapping
 
-def get_target_genes(protein_list_file):
-    """Get list of target genes from protein study file"""
-    try:
-        proteins_df = pd.read_csv(protein_list_file, sep='\t')
-        target_genes = proteins_df['gene'].unique().tolist()
-        logging.info(f"Target genes from protein list: {target_genes}")
-        return target_genes
-    except Exception as e:
-        logging.error(f"Error reading protein list: {e}")
-        return []
 
 def find_available_sequences(gene_name, target_species):
     """
@@ -92,6 +82,7 @@ def find_available_sequences(gene_name, target_species):
     
     logging.info(f"Found {len(available_sequences)}/{len(target_species)} FASTA sequences for {gene_name}")
     return available_sequences
+
 
 def find_available_structures(gene_name, target_species):
     """
@@ -153,14 +144,14 @@ def select_representative_sequence(gene_name, available_sequences, available_str
     
     return selected_sequences
 
-def copy_sequences_for_msa(gene_name, selected_sequences, output_dir):
+def create_msa_references(gene_name, selected_sequences, output_dir):
     """
-    Copy selected sequences to MSA directory with proper naming
+    Create reference files pointing to sequences in data directory (no copying)
     
     Args:
         gene_name: Name of the gene
         selected_sequences: Dict from select_representative_sequence
-        output_dir: Output directory for MSA sequences
+        output_dir: Output directory for MSA references
         
     Returns:
         dict: Summary statistics
@@ -170,74 +161,109 @@ def copy_sequences_for_msa(gene_name, selected_sequences, output_dir):
     gene_msa_dir = output_dir / gene_name
     gene_msa_dir.mkdir(parents=True, exist_ok=True)
     
-    sequences_copied = 0
+    sequences_referenced = 0
     sequences_with_structures = 0
+    sequence_references = []
     
-    # Copy each selected sequence
+    # Create references for each selected sequence
     for species, seq_info in selected_sequences.items():
         fasta_file = seq_info['fasta_file']
         has_structure = seq_info['has_structure']
         
-        # Read the original FASTA file
+        # Verify the file exists and is not empty
         try:
-            with open(fasta_file, 'r') as f:
-                sequences = list(SeqIO.parse(f, "fasta"))
-            
-            if not sequences:
-                logging.warning(f"  Empty FASTA file for {species}: {fasta_file}")
+            if not fasta_file.exists() or fasta_file.stat().st_size == 0:
+                logging.warning(f"  Missing or empty FASTA file for {species}: {fasta_file}")
                 continue
             
-            # Take the first sequence (should only be one per file)
-            seq_record = sequences[0]
-            
-            # Create new filename for MSA
+            # Create reference entry
             safe_species = species.replace(' ', '_').replace('/', '_')
-            msa_filename = f"{safe_species}.fasta"
-            msa_file = gene_msa_dir / msa_filename
-            
-            # Modify sequence header to include structure info
-            original_id = seq_record.id
             structure_tag = "[3D]" if has_structure else "[SEQ]"
-            new_description = f"{seq_record.description} {structure_tag}"
             
-            # Create new sequence record
-            msa_record = SeqRecord(
-                seq_record.seq,
-                id=original_id,
-                description=new_description
-            )
+            reference_entry = {
+                "species": species,
+                "safe_species": safe_species,
+                "fasta_path": str(fasta_file),  # Store as string for JSON serialization
+                "has_structure": has_structure,
+                "structure_tag": structure_tag,
+                "structure_path": str(seq_info['structure_file']) if seq_info.get('structure_file') else None
+            }
             
-            # Write to MSA directory
-            with open(msa_file, 'w') as f:
-                SeqIO.write(msa_record, f, "fasta")
-            
-            sequences_copied += 1
+            sequence_references.append(reference_entry)
+            sequences_referenced += 1
             if has_structure:
                 sequences_with_structures += 1
                 
         except Exception as e:
-            logging.error(f"  Error copying sequence for {species}: {e}")
+            logging.error(f"  Error processing sequence for {species}: {e}")
             continue
     
-    # Create gene summary file
-    summary_file = gene_msa_dir / f"{gene_name}_msa_summary.json"
-    summary = {
+    # Create gene reference file with all sequence paths
+    reference_file = gene_msa_dir / f"{gene_name}_sequences.json"
+    reference_data = {
         "gene": gene_name,
-        "total_sequences": sequences_copied,
+        "total_sequences": sequences_referenced,
         "sequences_with_structures": sequences_with_structures,
-        "sequences_seq_only": sequences_copied - sequences_with_structures,
-        "structure_percentage": (sequences_with_structures / sequences_copied * 100) if sequences_copied > 0 else 0,
+        "sequences_seq_only": sequences_referenced - sequences_with_structures,
+        "structure_percentage": (sequences_with_structures / sequences_referenced * 100) if sequences_referenced > 0 else 0,
+        "sequences": sequence_references,
         "created_at": datetime.now().isoformat()
     }
     
-    with open(summary_file, 'w') as f:
-        json.dump(summary, f, indent=2)
+    with open(reference_file, 'w') as f:
+        json.dump(reference_data, f, indent=2)
     
-    logging.info(f"  MSA sequences: {sequences_copied} total, {sequences_with_structures} with 3D structures ({summary['structure_percentage']:.1f}%)")
+    # Also create a simple file list for compatibility with existing tools
+    filelist_file = gene_msa_dir / f"{gene_name}_filelist.txt"
+    with open(filelist_file, 'w') as f:
+        for ref in sequence_references:
+            f.write(f"{ref['fasta_path']}\n")
     
-    return summary
+    # Create 3D structure filelist if any 3D structures are available
+    create_3d_structure_filelist(gene_name, gene_msa_dir, sequence_references)
+    
+    logging.info(f"  MSA references: {sequences_referenced} total, {sequences_with_structures} with 3D structures ({reference_data['structure_percentage']:.1f}%)")
+    
+    return reference_data
 
-def select_proteins_for_msa_shared(gene_lists_dir, protein_list_file, output_dir, analysis, paramset, group):
+def create_3d_structure_filelist(gene_name, gene_msa_dir, sequence_references):
+    """
+    Create a filelist for 3D structures from the data/proteins_3d_structure directory
+    
+    Args:
+        gene_name: Name of the gene
+        gene_msa_dir: Path to gene MSA directory
+        sequence_references: List of sequence reference dictionaries
+    """
+    
+    # Check if 3D structures directory exists
+    structures_dir = Path("data/proteins_3d_structure") / gene_name
+    
+    if not structures_dir.exists():
+        logging.debug(f"No 3D structures directory found for {gene_name}")
+        return
+    
+    # Find FASTA files in the 3D structures directory
+    structure_fasta_files = list(structures_dir.glob("*.fasta"))
+    
+    if not structure_fasta_files:
+        logging.debug(f"No 3D structure FASTA files found for {gene_name}")
+        return
+    
+    # Create 3D filelist with paths to 3D structure FASTA files
+    filelist_3d_path = gene_msa_dir / f"{gene_name}_3d_filelist.txt"
+    
+    try:
+        with open(filelist_3d_path, 'w') as f:
+            for fasta_file in sorted(structure_fasta_files):
+                f.write(f"{fasta_file}\n")
+        
+        logging.info(f"  Created 3D structure filelist: {len(structure_fasta_files)} files")
+        
+    except Exception as e:
+        logging.error(f"Error creating 3D filelist for {gene_name}: {e}")
+
+def select_proteins_for_msa_shared(gene_lists_dir, output_dir, analysis, paramset, group):
     """
     Main function to select proteins for MSA from shared data directories
     """
@@ -250,18 +276,11 @@ def select_proteins_for_msa_shared(gene_lists_dir, protein_list_file, output_dir
     # Load gene-species mappings for this analysis
     gene_species_mapping = load_gene_species_lists(gene_lists_dir)
     
-    # Get target genes from protein list
-    target_genes = get_target_genes(protein_list_file)
-    
-    # Filter to only target genes
-    filtered_mapping = {gene: species_list for gene, species_list in gene_species_mapping.items() 
-                       if gene in target_genes}
-    
-    if not filtered_mapping:
-        logging.error("No overlapping genes found between gene lists and target proteins")
+    if not gene_species_mapping:
+        logging.error("No gene lists found in directory")
         return
     
-    logging.info(f"Processing {len(filtered_mapping)} genes for MSA sequence selection")
+    logging.info(f"Processing {len(gene_species_mapping)} genes for MSA sequence selection")
     
     # Create output directory
     output_path = Path(output_dir)
@@ -272,25 +291,27 @@ def select_proteins_for_msa_shared(gene_lists_dir, protein_list_file, output_dir
     total_sequences = 0
     total_sequences_with_structures = 0
     
-    for gene_idx, (gene_name, target_species) in enumerate(filtered_mapping.items(), 1):
-        logging.info(f"\n=== Processing Gene {gene_idx}/{len(filtered_mapping)}: {gene_name} ===")
+    for gene_idx, (gene_name, target_species) in enumerate(gene_species_mapping.items(), 1):
+        logging.info(f"\n=== Processing Gene {gene_idx}/{len(gene_species_mapping)}: {gene_name} ===")
         logging.info(f"Target species: {len(target_species)}")
         
-        # Find available sequences and structures
+        # Find available sequences from proteins_fasta directory
         available_sequences = find_available_sequences(gene_name, target_species)
-        available_structures = find_available_structures(gene_name, target_species)
         
         if not available_sequences:
             logging.warning(f"No FASTA sequences available for gene {gene_name}, skipping")
             continue
+        
+        # Find available structures
+        available_structures = find_available_structures(gene_name, target_species)
         
         # Select representative sequences
         selected_sequences = select_representative_sequence(
             gene_name, available_sequences, available_structures, target_species
         )
         
-        # Copy sequences to MSA directory
-        gene_summary = copy_sequences_for_msa(gene_name, selected_sequences, output_path)
+        # Create references to sequences (no copying)
+        gene_summary = create_msa_references(gene_name, selected_sequences, output_path)
         all_summaries.append(gene_summary)
         
         total_sequences += gene_summary['total_sequences']
@@ -330,7 +351,6 @@ def main():
     try:
         # Get inputs from Snakemake
         gene_lists_dir = snakemake.input.gene_lists
-        protein_list_file = snakemake.input.protein_list
         output_dir = snakemake.output[0]
         
         # Get parameters
@@ -341,7 +361,7 @@ def main():
         logging.info(f"Processing analysis={analysis}, paramset={paramset}, group={group}")
         
         # Select proteins for MSA from shared directories
-        select_proteins_for_msa_shared(gene_lists_dir, protein_list_file, output_dir, analysis, paramset, group)
+        select_proteins_for_msa_shared(gene_lists_dir, output_dir, analysis, paramset, group)
         
         logging.info("MSA sequence selection completed successfully")
         

@@ -19,7 +19,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 
 # Cache configuration
 CACHE_DIR = Path("cache/protein_structures")
-CACHE_FILE = CACHE_DIR / "protein_structures_cache.json"
+CACHE_FILE = CACHE_DIR / "protein_3d_structure_cache.json"
 
 def initialize_3d_structure_cache():
     """
@@ -59,84 +59,58 @@ def initialize_3d_structure_cache():
         gene_name = gene_dir.name
         logging.info(f"Processing gene directory: {gene_name}")
         
-        # Count PDB files in this gene directory
-        pdb_files = list(gene_dir.glob("*.pdb"))
+        # Count PDB files in this gene directory (both .pdb and .pdb.gz)
+        pdb_files = list(gene_dir.glob("*.pdb")) + list(gene_dir.glob("*.pdb.gz"))
         if not pdb_files:
             logging.info(f"  No PDB files found in {gene_name}")
             continue
             
         logging.info(f"  Found {len(pdb_files)} PDB files in {gene_name}")
         
-        # Process each PDB file
+        # Check if there are any PDB files for this gene
+        pdb_ids_found = []
         for pdb_file in pdb_files:
             if pdb_file.stat().st_size == 0:
                 logging.warning(f"  Skipping empty file: {pdb_file.name}")
                 continue
                 
-            # Extract species name from filename (convert back from safe filename)
-            species_name = pdb_file.stem.replace('_', ' ')
-            
-            # Generate cache key
-            cache_key = f"{gene_name}||{species_name}||pdb_search"
-            
-            # Check if already in cache
-            if cache_key in cache:
-                logging.debug(f"  Already cached: {gene_name} - {species_name}")
+            # Extract PDB ID from filename (remove .pdb or .pdb.gz extension)
+            filename = pdb_file.name
+            if filename.endswith('.pdb.gz'):
+                pdb_id = filename[:-7].upper()  # Remove .pdb.gz
+            elif filename.endswith('.pdb'):
+                pdb_id = filename[:-4].upper()  # Remove .pdb
+            else:
                 continue
+                
+            pdb_ids_found.append(pdb_id)
             
-            # Try to extract PDB ID from file content
-            pdb_id = None
-            uniprot_acc = "unknown"
-            try:
-                with open(pdb_file, 'r') as f:
-                    first_line = f.readline().strip()
-                    if first_line.startswith('HEADER'):
-                        # PDB files have the ID in the header line
-                        parts = first_line.split()
-                        if len(parts) >= 4:
-                            pdb_id = parts[-1].lower()
-                        logging.debug(f"    Extracted PDB ID from header: {pdb_id}")
-                    else:
-                        # Try to find PDB ID in first few lines
-                        f.seek(0)
-                        for line_num, line in enumerate(f):
-                            if line_num > 10:  # Don't search too far
-                                break
-                            if 'PDB' in line.upper():
-                                # Try to extract 4-character PDB ID pattern
-                                import re
-                                pdb_match = re.search(r'\b[A-Za-z0-9]{4}\b', line)
-                                if pdb_match:
-                                    pdb_id = pdb_match.group().lower()
-                                    logging.debug(f"    Found potential PDB ID: {pdb_id}")
-                                    break
-            except Exception as e:
-                logging.debug(f"    Could not read file {pdb_file}: {e}")
-            
-            # If no PDB ID found, create a placeholder
-            if not pdb_id:
-                pdb_id = f"existing_{pdb_file.stem}"
-                logging.debug(f"    Using placeholder PDB ID: {pdb_id}")
-            
-            # Create cache entry
-            cache_entry = {
-                "found": True,
-                "pdb_ids": [pdb_id],
-                "uniprot_acc": uniprot_acc,
-                "found_via_gene": gene_name,
-                "cached_from_existing": True,
-                "file_path": str(pdb_file),
-                "file_size": pdb_file.stat().st_size,
-                "cached_at": datetime.now().isoformat(),
-                "gene": gene_name,
-                "species": species_name,
-                "initialization_run": True
-            }
-            
-            # Add to cache
-            cache[cache_key] = cache_entry
-            cached_count += 1
-            logging.info(f"  ✓ Cached: {gene_name} - {species_name} ({pdb_file.name}, {cache_entry['file_size']} bytes)")
+            # Create PDB download cache entry
+            pdb_cache_key = f"pdb||{pdb_id}||structure"
+            if pdb_cache_key not in cache:
+                cache[pdb_cache_key] = {
+                    "success": True,
+                    "file_path": str(pdb_file),
+                    "sequences_count": 1,  # Estimate
+                    "download_date": datetime.now().isoformat(),
+                    "cached_from_existing": True
+                }
+                cached_count += 1
+                logging.info(f"  ✓ Cached PDB: {pdb_id} ({pdb_file.name})")
+        
+        # Create gene search cache entry
+        if pdb_ids_found:
+            gene_cache_key = f"{gene_name}||uniprot||bacterial"
+            if gene_cache_key not in cache:
+                cache[gene_cache_key] = {
+                    "pdb_ids": pdb_ids_found,
+                    "found": True,
+                    "search_date": datetime.now().isoformat(),
+                    "database": "uniprot",
+                    "cached_from_existing": True
+                }
+                cached_count += 1
+                logging.info(f"  ✓ Cached gene search: {gene_name} with {len(pdb_ids_found)} structures")
     
     # Save updated cache
     if cached_count > 0 or updated_count > 0:

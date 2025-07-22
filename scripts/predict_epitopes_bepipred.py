@@ -403,12 +403,38 @@ class BepiPredPredictor:
         
         return epitopes
 
-def get_representative_sequence(gene, msa_sequences_dir, structures_dir):
-    """Get representative sequence for a gene, prioritizing 3D structure sequences"""
+def get_representative_sequence(gene, msa_sequences_dir, structures_dir, structures_tsv_data=None):
+    """Get representative sequence for a gene, using TSV data when provided"""
     
-    # Try to get sequence from MSA file
+    # If TSV data is provided, use only the specific 3D sequence mentioned for this gene
+    if structures_tsv_data is not None:
+        gene_structures = structures_tsv_data[structures_tsv_data['gene'] == gene]
+        if not gene_structures.empty:
+            # Get the PDB ID and species from TSV
+            pdb_id = gene_structures.iloc[0]['pdb_id']
+            species = gene_structures.iloc[0]['species']
+            
+            # Try to find the corresponding FASTA file in 3D structures directory
+            gene_structure_dir = Path(structures_dir) / gene
+            if gene_structure_dir.exists():
+                # Look for FASTA files with this PDB ID
+                fasta_files = list(gene_structure_dir.glob(f"{pdb_id}*.fasta"))
+                
+                for fasta_file in fasta_files:
+                    try:
+                        sequences = list(SeqIO.parse(fasta_file, "fasta"))
+                        if sequences:
+                            seq_record = sequences[0]
+                            sequence = str(seq_record.seq).replace('-', '')  # Remove gaps
+                            logging.info(f"Using 3D structure sequence from TSV: {pdb_id} ({species}) - {len(sequence)} aa")
+                            return sequence, f"{pdb_id}_{seq_record.id}"
+                    except Exception as e:
+                        logging.warning(f"Error reading 3D structure file {fasta_file}: {e}")
+            
+            logging.warning(f"Could not find 3D structure sequence for {gene} with PDB ID {pdb_id}")
+    
+    # Fallback to original behavior: Try to get sequence from MSA file
     msa_file = Path(msa_sequences_dir) / f"{gene}.fasta"
-    structure_info_file = Path(structures_dir) / gene / "structure_info.json"
     
     sequences = []
     
@@ -475,13 +501,13 @@ def load_conservation_data(gene, conservation_dir):
         logging.error(f"Error loading conservation data for {gene}: {e}")
         return None
 
-def predict_epitopes_for_gene(gene, msa_sequences_dir, conservation_dir, structures_dir, output_dir, bepipred_path="tools/BepiPred3.0", bepipred_config=None):
+def predict_epitopes_for_gene(gene, msa_sequences_dir, conservation_dir, structures_dir, output_dir, bepipred_path="tools/BepiPred3.0", bepipred_config=None, structures_tsv_data=None):
     """Predict epitopes for a single gene using BepiPred 3.0 - saves only original BepiPred files"""
     
     logging.info(f"Predicting epitopes for gene: {gene}")
     
-    # Get representative sequence
-    sequence, sequence_id = get_representative_sequence(gene, msa_sequences_dir, structures_dir)
+    # Get representative sequence (pass TSV data if available)
+    sequence, sequence_id = get_representative_sequence(gene, msa_sequences_dir, structures_dir, structures_tsv_data)
     if not sequence:
         logging.error(f"No sequence found for gene {gene}")
         return None
@@ -614,12 +640,25 @@ def main():
         analysis = snakemake.params.analysis
         paramset = snakemake.params.paramset
         group = snakemake.params.group
+        use_3d = snakemake.params.use_3d
         
         # Get BepiPred config
         bepipred_config = snakemake.config.get('bepipred', {})
         bepipred_path = bepipred_config.get('path', 'tools/BepiPred3.0')
         
         logging.info(f"BepiPred 3.0 Epitope Prediction for {analysis}_{paramset}_gram_{group}")
+        logging.info(f"Use 3D alignments: {use_3d}")
+        
+        # Load 3D structures TSV if using 3D alignments
+        structures_tsv_data = None
+        if use_3d == "with_3d" and hasattr(snakemake.input, 'structures_tsv'):
+            structures_tsv_file = snakemake.input.structures_tsv
+            if structures_tsv_file and Path(structures_tsv_file).exists():
+                try:
+                    structures_tsv_data = pd.read_csv(structures_tsv_file, sep='\t')
+                    logging.info(f"Loaded 3D structures TSV with {len(structures_tsv_data)} entries")
+                except Exception as e:
+                    logging.warning(f"Could not load 3D structures TSV: {e}")
         
     except NameError:
         # Test mode - allow command line execution
@@ -635,6 +674,7 @@ def main():
         output_dir = sys.argv[5]
         bepipred_path = "tools/BepiPred3.0"
         bepipred_config = {'method': 'vt_pred', 'top_percentage': 0.5}  # Default for command line
+        structures_tsv_data = None  # No TSV data in command line mode
         
         logging.info("Running in command line mode")
     
@@ -657,7 +697,7 @@ def main():
     for gene in genes_to_analyze:
         try:
             summary = predict_epitopes_for_gene(
-                gene, msa_sequences_dir, conservation_dir, structures_dir, output_dir, bepipred_path, bepipred_config
+                gene, msa_sequences_dir, conservation_dir, structures_dir, output_dir, bepipred_path, bepipred_config, structures_tsv_data
             )
             if summary:
                 gene_summaries.append(summary)

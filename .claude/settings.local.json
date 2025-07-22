@@ -3,7 +3,8 @@
     "allow": [
       "WebFetch(domain:www.ebi.ac.uk)",
       "WebFetch(domain:www.uniprot.org)",
-      "WebFetch(domain:rest.uniprot.org)"
+      "WebFetch(domain:rest.uniprot.org)",
+      "Bash(mv:*)"
     ],
     "deny": []
   }

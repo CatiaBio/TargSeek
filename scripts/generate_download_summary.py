@@ -269,7 +269,7 @@ def main():
         
         coverage_file = f"results/coverage/{analysis}_{paramset}_gram_{group}_coverage_count.tsv"
         protein_fasta_dir = f"results/protein_fasta/{analysis}_{paramset}_gram_{group}"
-        proteins_to_study_file = f"results/proteins_to_study/{analysis}_{paramset}_gram_{group}.tsv"
+        proteins_to_study_file = f"results/{analysis}_{paramset}/proteins_to_study/gram_{group}.tsv"
         output_dir = Path(f"results/download_summary")
     
     # Create output directory
