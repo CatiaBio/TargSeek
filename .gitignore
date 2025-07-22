@@ -29,6 +29,9 @@ cache/*/*/*.txt
 # Large tools and external dependencies
 tools/
 
+# Custom pipeline files (user-specific configurations)
+custom/
+
 # Archive and backup folders
 archive/logs/
 archive/temp/
