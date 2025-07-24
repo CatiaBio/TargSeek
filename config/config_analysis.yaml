@@ -1,0 +1,220 @@
+# config/config_analysis.yaml
+# ------------------------------------------------------
+# Configuration file for TargSeek Analysis Pipeline
+#
+# Defines all paths, thresholds, and settings for protein sequence
+# analysis, multiple sequence alignment, conservation analysis,
+# and epitope prediction.
+# 
+# Only this file needs to be edited to adjust analysis parameters,
+# thresholds, or update paths without modifying the Snakefile_analysis.
+# ------------------------------------------------------
+
+# =============================================================================
+# PIPELINE CONFIGURATION
+# =============================================================================
+
+# Analysis batches - should match those used in download pipeline
+species_batches:
+  - analysis1
+  #- analysis2
+  #- analysis3
+
+# QuickGO parameter sets - should match those used in download pipeline
+quickgo_paramsets:
+  - params1
+  #- params2
+  #- params3
+
+# Defined Gram stain groups - should match download config
+groups:
+  - positive
+  - negative
+
+# =============================================================================
+# ANALYSIS PARAMETERS
+# =============================================================================
+
+# MAFFT alignment settings
+mafft:
+  threads: 8
+  # Choose which alignment type to use for downstream analysis:
+  # "no_3d" - Use alignments without 3D structures
+  # "with_3d" - Use alignments with 3D structures included
+  use_3d_alignments: "no_3d"
+  # Additional MAFFT parameters
+  algorithm: "auto"  # auto, linsi, ginsi, einsi, fftns, fftnsi
+  max_iterations: 1000
+  
+# trimAl settings for alignment trimming
+trimal:
+  # Trimming method: "automated1", "gappyout", "strict", or "custom"
+  method: "automated1"
+  # Custom gap threshold (0.0-1.0, only used if method is "custom")
+  gap_threshold: 0.5
+  # Minimum sequence similarity threshold
+  similarity_threshold: 0.001
+
+# Conservation analysis settings
+conservation:
+  # Minimum conservation score (0.0-1.0)
+  min_conservation_score: 0.7
+  # Window size for conservation analysis
+  window_size: 5
+  # Minimum number of sequences required for analysis
+  min_sequences: 3
+  # Create sequence logos
+  create_logos: false
+
+# BepiPred 3.0 epitope prediction configuration
+bepipred:
+  # Path to BepiPred 3.0 installation
+  path: "tools/BepiPred3.0"
+  # Prediction method: 'vt_pred' (recommended) or 'mjv_pred'
+  method: "vt_pred"
+  # Epitope score threshold (0.0-1.0, higher = more confident predictions)
+  threshold: 0.5
+  # Minimum epitope length (amino acids)
+  min_epitope_length: 6
+  # Top percentage of epitope residues to include (0.0-1.0)
+  top_percentage: 0.5
+
+# Quality control thresholds
+quality_control:
+  # Minimum alignment length after trimming
+  min_alignment_length: 50
+  # Minimum number of species per alignment
+  min_species_per_alignment: 3
+  # Maximum gap percentage allowed in final alignment
+  max_gap_percentage: 0.8
+
+# Output settings
+output:
+  # Generate detailed logs for each step
+  detailed_logs: true
+  # Generate intermediate files for debugging
+  keep_intermediate_files: false
+  # Generate visualization plots
+  generate_plots: true
+
+# =============================================================================
+# FILE SYSTEM PATHS
+# =============================================================================
+
+# Path templates - organized by analysis workflow stage
+paths:
+  
+  # -------------------------------------------------------------------------  
+  # INPUT DATA (from download pipeline)
+  # -------------------------------------------------------------------------
+  input:
+    # Gene selection results from download pipeline
+    gene_lists: "results/{analysis}_{paramset}/gene_selection/genes_species/gram_{group}"
+    protein_sequences: "data/protein_sequences"
+    protein_download_sentinel: "data/protein_sequences/.{analysis}_{paramset}_{group}_download_complete"
+    structures_download_sentinel: "data/protein_structures/.{analysis}_{paramset}_{group}_structures_complete"
+    coverage_data: "results/{analysis}_{paramset}/gene_selection/coverage_count.tsv"
+    proteins_to_study: "results/{analysis}_{paramset}/gene_selection/selected_genes_gram_{group}.txt"
+
+  # -------------------------------------------------------------------------
+  # STAGE 1: Sequence Preparation
+  # -------------------------------------------------------------------------
+  sequence_prep:
+    # Base directory for all analysis outputs
+    base_dir: "results/{analysis}_{paramset}/protein_analysis"
+    # MSA sequence references  
+    msa_sequence_refs: "results/{analysis}_{paramset}/protein_analysis/msa_sequence_refs/gram_{group}"
+    # Selected 3D structure paths
+    selected_3d_paths: "results/{analysis}_{paramset}/protein_analysis/selected_3d_paths_gram_{group}.txt"
+    selected_3d_tsv: "results/{analysis}_{paramset}/protein_analysis/selected_3d_fasta_gram_{group}.tsv"
+
+  # -------------------------------------------------------------------------
+  # STAGE 2: Multiple Sequence Alignment
+  # -------------------------------------------------------------------------
+  msa:
+    # MSA input sequences (FASTA files by gene)
+    sequences_no_3d: "results/{analysis}_{paramset}/protein_analysis/no_3d/msa_sequences/gram_{group}"
+    sequences_with_3d: "results/{analysis}_{paramset}/protein_analysis/with_3d/msa_sequences/gram_{group}"
+    
+    # MAFFT alignment results
+    alignments_no_3d: "results/{analysis}_{paramset}/protein_analysis/no_3d/msa_alignments/gram_{group}"
+    alignments_with_3d: "results/{analysis}_{paramset}/protein_analysis/with_3d/msa_alignments/gram_{group}"
+    
+    # trimAl trimmed alignments
+    trimmed_no_3d: "results/{analysis}_{paramset}/protein_analysis/no_3d/msa_trimmed/gram_{group}"
+    trimmed_with_3d: "results/{analysis}_{paramset}/protein_analysis/with_3d/msa_trimmed/gram_{group}"
+
+  # -------------------------------------------------------------------------
+  # STAGE 3: Quality Assessment
+  # -------------------------------------------------------------------------
+  quality:
+    # Alignment quality metrics
+    assessment_no_3d: "results/{analysis}_{paramset}/protein_analysis/no_3d/msa_quality/gram_{group}"
+    assessment_with_3d: "results/{analysis}_{paramset}/protein_analysis/with_3d/msa_quality/gram_{group}"
+
+  # -------------------------------------------------------------------------
+  # STAGE 4: Conservation Analysis
+  # -------------------------------------------------------------------------
+  conservation:
+    # Conservation analysis results
+    results_no_3d: "results/{analysis}_{paramset}/protein_analysis/no_3d/conservation/gram_{group}"
+    results_with_3d: "results/{analysis}_{paramset}/protein_analysis/with_3d/conservation/gram_{group}"
+
+  # -------------------------------------------------------------------------
+  # STAGE 5: Epitope Prediction
+  # -------------------------------------------------------------------------
+  epitopes:
+    # BepiPred 3.0 predictions
+    bepipred_predictions: "results/{analysis}_{paramset}/protein_analysis/epitope_predictions_bepipred/gram_{group}"
+
+  # -------------------------------------------------------------------------
+  # STAGE 6: Summaries and Reports  
+  # -------------------------------------------------------------------------
+  # reports:
+    # Final integrated reports (EXCLUDED from this pipeline)
+    # final_report: "results/{analysis}_{paramset}/protein_analysis_report_{use_3d_dir}.html"
+
+# =============================================================================
+# SCRIPT PATHS
+# =============================================================================
+
+# Script paths - organized by analysis stage
+scripts:
+  
+  # -------------------------------------------------------------------------
+  # STAGE 1: Sequence Preparation Scripts
+  # -------------------------------------------------------------------------
+  sequence_prep:
+    create_sequence_references: "scripts/protein_analysis/create_sequence_references.py"
+    create_msa_fasta: "scripts/protein_analysis/create_msa_fasta.py"
+  
+  # -------------------------------------------------------------------------
+  # STAGE 2: Multiple Sequence Alignment Scripts  
+  # -------------------------------------------------------------------------
+  msa:
+    run_mafft_alignments: "scripts/protein_analysis/run_mafft_alignments.py"
+    trim_alignments: "scripts/protein_analysis/trim_alignments.py"
+  
+  # -------------------------------------------------------------------------
+  # STAGE 3: Quality Assessment Scripts
+  # -------------------------------------------------------------------------
+  quality:
+    assess_alignment_quality: "scripts/protein_analysis/assess_alignment_quality_comparison.py"
+  
+  # -------------------------------------------------------------------------
+  # STAGE 4: Conservation Analysis Scripts
+  # -------------------------------------------------------------------------
+  conservation:
+    analyze_conservation: "scripts/protein_analysis/analyze_conservation_adaptive.py"
+  
+  # -------------------------------------------------------------------------
+  # STAGE 5: Epitope Prediction Scripts
+  # -------------------------------------------------------------------------
+  epitopes:
+    predict_epitopes_bepipred: "scripts/protein_analysis/predict_epitopes_bepipred_3d_only.py"
+  
+  # -------------------------------------------------------------------------
+  # STAGE 6: Summary and Report Scripts
+  # -------------------------------------------------------------------------
+  # reports:
+    # generate_final_report: "scripts/protein_analysis/generate_final_report.py"  # EXCLUDED

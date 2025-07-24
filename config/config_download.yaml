@@ -1,0 +1,228 @@
+# config/config_download.yaml
+# ------------------------------------------------------
+# Configuration file for TargSeek Download Pipeline
+#
+# Defines all paths, thresholds, and settings for data collection,
+# species classification, gene selection, and protein/structure downloads.
+# 
+# Only this file needs to be edited to adjust download parameters,
+# thresholds, or update paths without modifying the Snakefile_download.
+# ------------------------------------------------------
+
+# =============================================================================
+# PIPELINE CONFIGURATION
+# =============================================================================
+
+# Species analysis batches - each analysis represents a different dataset
+species_batches:
+  - analysis1
+  #- analysis2
+  #- analysis3
+
+# Species input files for each analysis batch
+species_files:
+  analysis1: "config/species/analysis1.txt"
+  #analysis2: "config/species/analysis2.txt"
+  #analysis3: "config/species/analysis3.txt"
+
+# QuickGO parameter sets - different GO term configurations
+quickgo_paramsets:
+  - params1
+  #- params2
+  #- params3
+
+# Defined Gram stain groups
+groups:
+  - positive
+  - negative
+
+# =============================================================================
+# EXTERNAL API CREDENTIALS
+# =============================================================================
+
+# Login information for external APIs
+login:
+  bacdive_info: "config/login/bacdive_info.txt"
+  ncbi_info: "config/login/ncbi_info.txt"
+
+# =============================================================================
+# ANALYSIS PARAMETERS
+# =============================================================================
+
+# Coverage thresholds for protein selection
+gram_thresholds:
+  positive: 50  # Minimum % coverage for Gram-positive proteins
+  negative: 50  # Minimum % coverage for Gram-negative proteins
+
+# Protein selection criteria
+protein_selection:
+  # Select all proteins above threshold or limit to top N
+  selection_mode: "all_above_threshold"  # or "top_n"
+  # If using top_n mode, specify maximum proteins per group
+  max_proteins_per_group: 50
+
+# 3D structure download configuration
+3d_structures:
+  # Maximum number of structures to download per gene (1-10)
+  max_structures: 10
+  # Download computed models if no experimental structures available
+  include_computed_models: true
+  # Only download bacterial structures (taxonomy ID 2)
+  bacterial_only: true
+
+# =============================================================================
+# FILE SYSTEM PATHS
+# =============================================================================
+
+# Path templates - organized by workflow stage and data type
+paths:
+  
+  # -------------------------------------------------------------------------
+  # STAGE 1: Species Classification (BacDive)
+  # -------------------------------------------------------------------------
+  bacdive:
+    # Raw classification data
+    gram_raw_json: "data/bacdive/{analysis}/gram_raw.json"
+    gram_classification: "data/bacdive/{analysis}/gram.tsv"
+    updated_gram_classification: "data/bacdive/{analysis}/updated_gram.tsv"
+    
+    # Species lists by Gram stain
+    gram_positive: "data/bacdive/{analysis}/gram_positive.txt"
+    gram_negative: "data/bacdive/{analysis}/gram_negative.txt"
+    all_identified: "data/bacdive/{analysis}/all_identified.txt"
+    
+    # Error tracking and metadata
+    not_found: "data/bacdive/{analysis}/not_found.txt"
+    updated_not_found: "data/bacdive/{analysis}/updated_not_found.txt"
+    errors: "data/bacdive/{analysis}/errors.txt"
+    downloaded: "data/bacdive/{analysis}/downloaded.txt"
+
+  # -------------------------------------------------------------------------
+  # STAGE 2: Gene Ontology Data (QuickGO)
+  # -------------------------------------------------------------------------
+  quickgo:
+    # Configuration and parameters
+    params_file: "config/quickgo/{paramset}.json"
+    surface_accessible_config: "config/quickgo/surface_accessible.txt"
+    
+    # Raw GO data
+    annotations: "data/quickgo/{paramset}/annotations.json"
+    gene_symbols: "data/quickgo/{paramset}/gene_symbols.txt"
+    gene_aliases: "data/quickgo/{paramset}/gene_and_aliases_names.tsv"
+    
+    # Filtered and validated data
+    go_validation_report: "data/quickgo/{paramset}/protein_go_validation_report.tsv"
+    surface_accessible_proteins: "data/quickgo/{paramset}/surface_accessible_proteins.txt"
+    proteins_to_test: "data/quickgo/{paramset}/protein_to_be_tested.txt"
+
+  # -------------------------------------------------------------------------
+  # STAGE 3: Gene Selection and Coverage Analysis
+  # -------------------------------------------------------------------------
+  gene_selection:
+    # Base directory for all gene selection outputs
+    base_dir: "results/{analysis}_{paramset}/gene_selection"
+    
+    # Coverage analysis results
+    coverage_count: "results/{analysis}_{paramset}/gene_selection/coverage_count.tsv"
+    summary: "results/{analysis}_{paramset}/gene_selection/summary.tsv"
+    
+    # Selected gene lists by Gram group
+    selected_genes_positive: "results/{analysis}_{paramset}/gene_selection/selected_genes_gram_positive.txt"
+    selected_genes_negative: "results/{analysis}_{paramset}/gene_selection/selected_genes_gram_negative.txt"
+    
+    # Gene-specific species lists for downloads
+    genes_species_dir: "results/{analysis}_{paramset}/gene_selection/genes_species/gram_{group}"
+    
+    # Final report
+    download_report: "results/{analysis}_{paramset}/gene_selection_report.html"
+
+  # -------------------------------------------------------------------------
+  # STAGE 4: Protein Sequence Downloads
+  # -------------------------------------------------------------------------
+  protein_sequences:
+    # Base directory for protein FASTA files
+    base_dir: "data/protein_sequences"
+    # Completion sentinel files
+    download_sentinel: "data/protein_sequences/.{analysis}_{paramset}_{group}_download_complete"
+
+  # -------------------------------------------------------------------------
+  # STAGE 5: 3D Structure Downloads
+  # -------------------------------------------------------------------------
+  protein_structures:
+    # Base directory for 3D structure files
+    base_dir: "data/protein_structures"
+    # Completion sentinel files
+    download_sentinel: "data/protein_structures/.{analysis}_{paramset}_{group}_structures_complete"
+    # Metadata extraction
+    metadata_tsv: "data/protein_structures/{analysis}_{paramset}_downloaded_structures.tsv"
+
+  # -------------------------------------------------------------------------
+  # EXTERNAL DATA SOURCES
+  # -------------------------------------------------------------------------
+  uniprot:
+    protein_info: "data/uniprot/protein_info.json"
+
+  # -------------------------------------------------------------------------
+  # SYSTEM FILES
+  # -------------------------------------------------------------------------
+  logs:
+    coverage_unified: "logs/{analysis}_{paramset}_unified_coverage.log"
+
+# =============================================================================
+# SCRIPT PATHS
+# =============================================================================
+
+# Script paths - organized by workflow stage
+scripts:
+  
+  # -------------------------------------------------------------------------
+  # STAGE 1: Species Classification Scripts
+  # -------------------------------------------------------------------------
+  bacdive:
+    classify_gram: "scripts/gene_selection/classify_gram.py"
+    supplement_gram_classification: "scripts/gene_selection/supplement_gram_classification.py"
+  
+  # -------------------------------------------------------------------------
+  # STAGE 2: Gene Ontology Data Scripts
+  # -------------------------------------------------------------------------
+  quickgo:
+    fetch_quickgo_data: "scripts/gene_selection/fetch_quickgo_data.py"
+    fetch_gene_aliases: "scripts/gene_selection/fetch_gene_aliases.py"
+    validate_protein_go_assignments: "scripts/gene_selection/validate_protein_go_assignments.py"
+    filter_surface_accessible: "scripts/gene_selection/filter_surface_accessible.py"
+    filter_quickgo_data_simplified: "scripts/gene_selection/filter_quickgo_data_simplified.py"
+  
+  # -------------------------------------------------------------------------
+  # STAGE 3: Gene Selection and Coverage Scripts
+  # -------------------------------------------------------------------------
+  gene_selection:
+    gene_taxa_coverage_unified: "scripts/gene_selection/gene_taxa_coverage_unified.py"
+    select_proteins_to_study: "scripts/gene_selection/select_proteins_to_study.py"
+    create_gene_species_lists_from_coverage: "scripts/gene_selection/create_gene_species_lists_from_coverage.py"
+  
+  # -------------------------------------------------------------------------
+  # STAGE 4 & 5: Download Scripts
+  # -------------------------------------------------------------------------
+  downloads:
+    download_protein_sequences: "scripts/gene_selection/download_protein_sequences.py"
+    download_protein_structures: "scripts/gene_selection/download_protein_structures.py"
+    extract_protein_structures_metadata: "scripts/gene_selection/extract_protein_structures_metadata.py"
+  
+  # -------------------------------------------------------------------------
+  # REPORTING SCRIPTS
+  # -------------------------------------------------------------------------
+  reports:
+    generate_download_report: "scripts/gene_selection/generate_download_report.py"
+
+# =============================================================================
+# CACHE CONFIGURATION
+# =============================================================================
+
+# Cache configuration for persistent storage of API results
+cache:
+  # Gene-species coverage search results (NCBI API calls)
+  gene_species: "cache/gene_species/"
+  # Protein sequence downloads (UniProt API calls)
+  protein_sequences: "cache/protein_sequences/protein_fasta_cache.json"
+  # 3D structure searches and downloads (UniProt/PDB API calls)
+  protein_3d_structures: "cache/protein_structures/protein_3d_structure_cache.json"
