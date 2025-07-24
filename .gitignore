@@ -75,6 +75,9 @@ archive/temp_files/
 archive/backups/
 scripts_test/
 
+# Archived unused scripts (not part of active pipeline)
+scripts/archive_unused/
+
 # User-specific configurations and custom files
 custom/
 personal/
