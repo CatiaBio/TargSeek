@@ -359,7 +359,9 @@ cython_debug/
 config/config.local.yaml
 config/config_download.local.yaml
 config/config_analysis.local.yaml
-.claude/settings.local.json
+
+# Claude Code settings (user-specific)
+.claude/
 
 # Temporary downloads and processing
 downloads/
