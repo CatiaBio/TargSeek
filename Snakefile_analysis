@@ -1,0 +1,247 @@
+# Snakefile_analysis
+# ------------------------------------------------------
+# TargSeek Analysis Workflow
+# 
+# This pipeline performs MSA (MAFFT), alignment trimming, quality assessment,
+# conservation analysis, epitope prediction, and report generation.
+#
+# Configuration: config/config_analysis.yaml
+# Usage Guide: USAGE_ANALYSIS.txt
+# 
+# Quick Start: snakemake -s Snakefile_analysis all_analysis --cores 4
+# ------------------------------------------------------
+
+# Load configuration
+configfile: "config/config_analysis.yaml"
+
+# Define wildcard constraints to prevent ambiguous matches
+wildcard_constraints:
+    analysis="analysis[0-9]+",
+    paramset="params[0-9]+",
+    use_3d_dir="(no_3d|with_3d)"
+
+# =============================================================================
+# TARGET RULES
+# =============================================================================
+
+# Complete analysis pipeline - all stages
+rule all_analysis:
+    input:
+        expand(
+            [
+                config["paths"]["conservation"]["results_no_3d"],
+                config["paths"]["conservation"]["results_with_3d"],
+                config["paths"]["epitopes"]["bepipred_predictions"]
+            ],
+            analysis=config["species_batches"],
+            paramset=config["quickgo_paramsets"],
+            group=["positive", "negative"]
+        )
+
+# Partial pipeline targets - useful for testing and debugging individual stages
+rule all_sequence_preparation:
+    input:
+        expand(
+            [config["paths"]["sequence_prep"]["msa_sequence_refs"],
+             config["paths"]["msa"]["sequences_no_3d"],
+             config["paths"]["msa"]["sequences_with_3d"]],
+            analysis=config["species_batches"],
+            paramset=config["quickgo_paramsets"],
+            group=["positive", "negative"]
+        )
+
+rule all_alignments:
+    input:
+        expand(
+            [config["paths"]["msa"]["alignments_no_3d"],
+             config["paths"]["msa"]["alignments_with_3d"],
+             config["paths"]["msa"]["trimmed_no_3d"],
+             config["paths"]["msa"]["trimmed_with_3d"]],
+            analysis=config["species_batches"],
+            paramset=config["quickgo_paramsets"],
+            group=["positive", "negative"]
+        )
+
+rule all_quality_and_conservation:
+    input:
+        expand(
+            [config["paths"]["quality"]["assessment_no_3d"],
+             config["paths"]["quality"]["assessment_with_3d"],
+             config["paths"]["conservation"]["results_no_3d"],
+             config["paths"]["conservation"]["results_with_3d"]],
+            analysis=config["species_batches"],
+            paramset=config["quickgo_paramsets"],
+            group=["positive", "negative"]
+        )
+
+rule all_predictions_and_reports:
+    input:
+        expand(
+            [config["paths"]["epitopes"]["bepipred_predictions"]],
+            analysis=config["species_batches"],
+            paramset=config["quickgo_paramsets"],
+            group=["positive", "negative"]
+        )
+
+# =============================================================================
+# ANALYSIS RULES
+# =============================================================================
+
+# ---------------------
+# STAGE 1: Sequence Preparation
+# ---------------------
+
+# Select representative protein sequences for multiple sequence alignment
+rule create_msa_sequence_references:
+    input:
+        gene_lists=config["paths"]["input"]["gene_lists"],
+        protein_download_sentinel=config["paths"]["input"]["protein_download_sentinel"],
+        structures_download_sentinel=config["paths"]["input"]["structures_download_sentinel"]
+    output:
+        directory(config["paths"]["sequence_prep"]["msa_sequence_refs"])
+    params:
+        analysis="{analysis}",
+        paramset="{paramset}",
+        group="{group}"
+    script:
+        config["scripts"]["sequence_prep"]["create_sequence_references"]
+
+# Create FASTA files for MSA with and without 3D structures
+rule create_msa_fasta_files:
+    input:
+        reference_dir=config["paths"]["sequence_prep"]["msa_sequence_refs"]
+    output:
+        msa_no_3d=directory(config["paths"]["msa"]["sequences_no_3d"]),
+        msa_with_3d=directory(config["paths"]["msa"]["sequences_with_3d"]),
+        selected_3d_paths=config["paths"]["sequence_prep"]["selected_3d_paths"],
+        selected_3d_tsv=config["paths"]["sequence_prep"]["selected_3d_tsv"]
+    params:
+        analysis="{analysis}",
+        paramset="{paramset}",
+        group="{group}"
+    script:
+        config["scripts"]["sequence_prep"]["create_msa_fasta"]
+
+# ---------------------
+# STAGE 2: Multiple Sequence Alignment
+# ---------------------
+
+# Perform multiple sequence alignments using MAFFT algorithm
+rule run_all_mafft_for_group:
+    input:
+        msa_no_3d=config["paths"]["msa"]["sequences_no_3d"],
+        msa_with_3d=config["paths"]["msa"]["sequences_with_3d"]
+    output:
+        no_3d=directory(config["paths"]["msa"]["alignments_no_3d"]),
+        with_3d=directory(config["paths"]["msa"]["alignments_with_3d"])
+    params:
+        analysis="{analysis}",
+        paramset="{paramset}",
+        group="{group}",
+        threads=config["mafft"]["threads"]
+    script:
+        config["scripts"]["msa"]["run_mafft_alignments"]
+
+# Remove poorly aligned regions using trimAl automated trimming
+rule trim_alignments:
+    input:
+        no_3d=config["paths"]["msa"]["alignments_no_3d"],
+        with_3d=config["paths"]["msa"]["alignments_with_3d"]
+    output:
+        trim_no_3d=directory(config["paths"]["msa"]["trimmed_no_3d"]),
+        trim_with_3d=directory(config["paths"]["msa"]["trimmed_with_3d"])
+    params:
+        analysis="{analysis}",
+        paramset="{paramset}",
+        group="{group}",
+        use_3d=config.get("mafft", {}).get("use_3d_alignments", "no_3d")
+    script:
+        config["scripts"]["msa"]["trim_alignments"]
+
+# ---------------------
+# STAGE 3: Quality Assessment
+# ---------------------
+
+# Evaluate multiple sequence alignment quality before and after trimming
+rule assess_alignment_quality:
+    input:
+        no_3d=config["paths"]["msa"]["alignments_no_3d"],
+        with_3d=config["paths"]["msa"]["alignments_with_3d"],
+        trim_no_3d=config["paths"]["msa"]["trimmed_no_3d"],
+        trim_with_3d=config["paths"]["msa"]["trimmed_with_3d"]
+    output:
+        no_3d=directory(config["paths"]["quality"]["assessment_no_3d"]),
+        with_3d=directory(config["paths"]["quality"]["assessment_with_3d"])
+    params:
+        analysis="{analysis}",
+        paramset="{paramset}",
+        group="{group}",
+        use_3d=config.get("mafft", {}).get("use_3d_alignments", "no_3d")
+    script:
+        config["scripts"]["quality"]["assess_alignment_quality"]
+
+# ---------------------
+# STAGE 4: Conservation Analysis
+# ---------------------
+
+# Calculate amino acid conservation patterns from optimal alignments
+rule analyze_conservation:
+    input:
+        no_3d=config["paths"]["msa"]["alignments_no_3d"],
+        with_3d=config["paths"]["msa"]["alignments_with_3d"],
+        trim_no_3d=config["paths"]["msa"]["trimmed_no_3d"],
+        trim_with_3d=config["paths"]["msa"]["trimmed_with_3d"],
+        quality_assessment_no_3d=config["paths"]["quality"]["assessment_no_3d"],
+        quality_assessment_with_3d=config["paths"]["quality"]["assessment_with_3d"]
+    output:
+        no_3d=directory(config["paths"]["conservation"]["results_no_3d"]),
+        with_3d=directory(config["paths"]["conservation"]["results_with_3d"])
+    params:
+        analysis="{analysis}",
+        paramset="{paramset}",
+        group="{group}",
+        use_3d=config.get("mafft", {}).get("use_3d_alignments", "no_3d"),
+        create_logos=config.get("conservation", {}).get("create_logos", False)
+    script:
+        config["scripts"]["conservation"]["analyze_conservation"]
+
+# ---------------------
+# STAGE 5: Epitope Prediction
+# ---------------------
+
+# Predict B-cell epitopes using BepiPred 3.0 on selected 3D structure sequences
+rule predict_epitopes_bepipred:
+    input:
+        selected_3d_paths=config["paths"]["sequence_prep"]["selected_3d_paths"]
+    output:
+        directory(config["paths"]["epitopes"]["bepipred_predictions"])
+    params:
+        analysis="{analysis}",
+        paramset="{paramset}",
+        group="{group}"
+    script:
+        config["scripts"]["epitopes"]["predict_epitopes_bepipred"]
+
+# ---------------------
+# STAGE 6: Summaries and Reports
+# ---------------------
+
+# Compile integrated analysis report combining all pipeline results
+# EXCLUDED: This rule has been excluded as it tries to access data from the download pipeline
+# The analysis pipeline should only contain results generated by this Snakemake workflow
+# rule generate_final_report:
+#     input:
+#         quality_positive=lambda wildcards: config["paths"]["quality"][f"assessment_{wildcards.use_3d_dir}"].replace("{group}", "positive").format(analysis=wildcards.analysis, paramset=wildcards.paramset),
+#         quality_negative=lambda wildcards: config["paths"]["quality"][f"assessment_{wildcards.use_3d_dir}"].replace("{group}", "negative").format(analysis=wildcards.analysis, paramset=wildcards.paramset),
+#         conservation_positive=lambda wildcards: config["paths"]["conservation"][f"results_{wildcards.use_3d_dir}"].replace("{group}", "positive").format(analysis=wildcards.analysis, paramset=wildcards.paramset),
+#         conservation_negative=lambda wildcards: config["paths"]["conservation"][f"results_{wildcards.use_3d_dir}"].replace("{group}", "negative").format(analysis=wildcards.analysis, paramset=wildcards.paramset),
+#         proteins_to_study_positive=lambda wildcards: config["paths"]["input"]["proteins_to_study"].replace("{group}", "positive").format(analysis=wildcards.analysis, paramset=wildcards.paramset),
+#         proteins_to_study_negative=lambda wildcards: config["paths"]["input"]["proteins_to_study"].replace("{group}", "negative").format(analysis=wildcards.analysis, paramset=wildcards.paramset)
+#     output:
+#         config["paths"]["reports"]["final_report"]
+#     params:
+#         analysis="{analysis}",
+#         paramset="{paramset}",
+#         use_3d_dir="{use_3d_dir}"
+#     script:
+#         config["scripts"]["reports"]["generate_final_report"]
