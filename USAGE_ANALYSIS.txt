@@ -1,0 +1,280 @@
+# TargSeek Analysis Pipeline Usage Guide
+# ==========================================
+
+## Overview
+The analysis pipeline (Snakefile_analysis) handles protein sequence analysis, multiple sequence alignment,
+conservation analysis, and epitope prediction for the TargSeek project.
+
+## Prerequisites
+- Conda environment 'targseek' must be activated: `conda activate targseek`
+- Download pipeline must be completed first (proteins and structures downloaded)
+- MAFFT, trimAl, and BepiPred 3.0 must be installed
+- AliStat must be compiled for quality assessment
+
+## Basic Usage
+
+### 1. Run Complete Analysis Pipeline
+```bash
+snakemake -s Snakefile_analysis all_analysis --cores 4
+```
+
+### 2. Run with More Cores and Quiet Output
+```bash
+snakemake -s Snakefile_analysis all_analysis --cores 8 --quiet
+```
+
+### 3. Dry Run (Check What Would Be Executed)
+```bash
+snakemake -s Snakefile_analysis all_analysis --dry-run
+```
+
+### 4. Suppress NumPy Warnings
+```bash
+PYTHONWARNINGS="ignore" snakemake -s Snakefile_analysis all_analysis --cores 4
+```
+
+## Pipeline Stages (For Testing/Debugging)
+
+### Run Individual Stages
+```bash
+# Sequence preparation only
+snakemake -s Snakefile_analysis all_sequence_preparation --cores 4
+
+# Multiple sequence alignments (includes sequence preparation)
+snakemake -s Snakefile_analysis all_alignments --cores 4
+
+# Quality assessment and conservation analysis
+snakemake -s Snakefile_analysis all_quality_and_conservation --cores 4
+
+# Epitope predictions and final reports
+snakemake -s Snakefile_analysis all_predictions_and_reports --cores 4
+```
+
+## Troubleshooting
+
+### Force Re-run Specific Rules
+```bash
+snakemake -s Snakefile_analysis all_analysis --cores 4 --forcerun run_all_mafft_for_group
+```
+
+### Clean Up Failed Analysis
+```bash
+# Remove specific analysis results to restart
+rm -rf results/analysis1_params1/protein_analysis/
+```
+
+### Check Rule Dependencies
+```bash
+snakemake -s Snakefile_analysis all_analysis --dry-run --printshellcmds
+```
+
+## Visualization
+
+### Generate Workflow Diagram
+```bash
+# PNG format
+snakemake -s Snakefile_analysis --dag | dot -Tpng > analysis_workflow.png
+
+# SVG format  
+snakemake -s Snakefile_analysis --dag | dot -Tsvg > analysis_workflow.svg
+
+# Rule graph (simplified)
+snakemake -s Snakefile_analysis --rulegraph | dot -Tpng > analysis_rulegraph.png
+```
+
+## Output Locations
+
+### Sequence Preparation
+- MSA sequence references: `results/{analysis}_{paramset}/protein_analysis/msa_sequence_refs/gram_{group}/`
+- Selected 3D paths: `results/{analysis}_{paramset}/protein_analysis/selected_3d_paths_gram_{group}.txt`
+
+### Multiple Sequence Alignments
+- MAFFT alignments: `results/{analysis}_{paramset}/protein_analysis/{no_3d|with_3d}/msa_alignments/gram_{group}/`
+- trimAl trimmed: `results/{analysis}_{paramset}/protein_analysis/{no_3d|with_3d}/msa_trimmed/gram_{group}/`
+
+### Quality Assessment
+- Alignment quality: `results/{analysis}_{paramset}/protein_analysis/{no_3d|with_3d}/msa_quality/gram_{group}/`
+
+### Conservation Analysis
+- Conservation results: `results/{analysis}_{paramset}/protein_analysis/{no_3d|with_3d}/conservation/gram_{group}/`
+
+### Epitope Predictions
+- BepiPred predictions: `results/{analysis}_{paramset}/protein_analysis/epitope_predictions_bepipred/gram_{group}/`
+
+### Reports
+- Download summaries: `results/{analysis}_{paramset}/protein_analysis/download_summary/gram_{group}/`
+- Final reports: `results/{analysis}_{paramset}/protein_analysis/reports/final_report_{no_3d|with_3d}.html`
+
+## Configuration
+
+### Main Configuration File
+Edit `config/config_analysis.yaml` to modify:
+- Analysis parameters (MAFFT, trimAl, conservation, BepiPred)
+- Quality control thresholds
+- Output settings
+- File paths
+
+### Key Analysis Parameters
+- **MAFFT threads**: `mafft.threads` (default: 8)
+- **3D alignment type**: `mafft.use_3d_alignments` ("no_3d" or "with_3d")
+- **trimAl method**: `trimal.method` ("automated1", "gappyout", "strict", "custom")
+- **Conservation threshold**: `conservation.min_conservation_score` (0.0-1.0)
+- **BepiPred threshold**: `bepipred.threshold` (0.0-1.0)
+
+## Common Issues
+
+### MAFFT Issues
+```bash
+# Check MAFFT installation
+mafft --version
+
+# Reduce threads if memory issues
+# Edit config/config_analysis.yaml: mafft.threads: 4
+```
+
+### trimAl Issues
+```bash
+# Check trimAl installation
+trimal -h
+
+# Try different trimming method in config
+# trimal.method: "gappyout"  # Less aggressive than automated1
+```
+
+### BepiPred Issues
+```bash
+# Check BepiPred installation
+python tools/BepiPred3.0/predict.py --help
+
+# Set up BepiPred (Ubuntu only)
+./setup_bepipred.sh
+```
+
+### AliStat Issues
+```bash
+# Compile AliStat manually if needed
+cd tools/AliStat/
+make
+
+# Check if alistat is in PATH
+which alistat
+```
+
+### Memory Issues
+Reduce the number of cores if running out of memory:
+```bash
+snakemake -s Snakefile_analysis all_analysis --cores 2
+```
+
+## Performance Tips
+
+1. **Use more cores** for MAFFT-intensive tasks: `--cores 8`
+2. **Use quiet mode** to reduce output: `--quiet`
+3. **Monitor progress** with: `--printshellcmds`
+4. **Choose alignment type** wisely:
+   - "no_3d": Faster, includes all sequences
+   - "with_3d": Slower, only sequences with 3D structures
+
+## Examples for Different Scenarios
+
+### Quick Test Run (Single Stage)
+```bash
+# Test sequence preparation only
+snakemake -s Snakefile_analysis all_sequence_preparation --dry-run
+snakemake -s Snakefile_analysis all_sequence_preparation --cores 2
+```
+
+### Production Run (Full Analysis)
+```bash
+# Full pipeline with optimal settings
+PYTHONWARNINGS="ignore" snakemake -s Snakefile_analysis all_analysis --cores 8 --quiet
+```
+
+### Development/Debugging
+```bash
+# Run with detailed output and shell commands shown
+snakemake -s Snakefile_analysis all_alignments --cores 4 --printshellcmds --verbose
+```
+
+### Focus on Specific Gram Group
+```bash
+# Run analysis for only gram-positive bacteria
+snakemake -s Snakefile_analysis results/analysis1_params1/protein_analysis/no_3d/conservation/gram_positive --cores 4
+```
+
+## Analysis Workflow Stages
+
+### Stage 1: Sequence Preparation
+- Creates MSA sequence references
+- Separates sequences with/without 3D structures
+- Generates FASTA files for alignment
+
+### Stage 2: Multiple Sequence Alignment
+- MAFFT alignment for each gene
+- trimAl automated trimming
+- Separate processing for no_3d and with_3d datasets
+
+### Stage 3: Quality Assessment
+- AliStat quality metrics
+- Before/after trimming comparison
+- Alignment statistics and visualization
+
+### Stage 4: Conservation Analysis
+- Amino acid conservation scoring
+- Conserved region identification
+- Optional sequence logo generation
+
+### Stage 5: Epitope Prediction
+- BepiPred 3.0 B-cell epitope prediction
+- Processing of 3D structure sequences
+- Epitope scoring and filtering
+
+### Stage 6: Reports and Summaries
+- Download summary generation
+- Final integrated analysis report
+- HTML reports with visualizations
+
+## Integration with Download Pipeline
+
+The analysis pipeline requires successful completion of the download pipeline:
+
+1. **Download Pipeline Output Required**:
+   - `results/{analysis}_{paramset}/gene_selection/genes_species/gram_{group}/`
+   - `data/protein_sequences/.{analysis}_{paramset}_{group}_download_complete`
+   - `data/protein_structures/.{analysis}_{paramset}_{group}_structures_complete`
+
+2. **Sequential Execution**:
+   ```bash
+   # First: Download pipeline
+   snakemake -s Snakefile_download all_download_data --cores 4
+   
+   # Then: Analysis pipeline
+   snakemake -s Snakefile_analysis all_analysis --cores 4
+   ```
+
+## Customization
+
+### Custom Conservation Analysis
+Edit `config/config_analysis.yaml`:
+```yaml
+conservation:
+  min_conservation_score: 0.8  # Higher threshold
+  window_size: 7              # Larger window
+  create_logos: true          # Generate sequence logos
+```
+
+### Custom BepiPred Settings
+```yaml
+bepipred:
+  threshold: 0.7              # Higher confidence
+  min_epitope_length: 8       # Longer epitopes
+  top_percentage: 0.3         # Top 30% of residues
+```
+
+### Custom Quality Control
+```yaml
+quality_control:
+  min_alignment_length: 100   # Longer alignments required
+  min_species_per_alignment: 5 # More species required
+  max_gap_percentage: 0.6     # Less gaps allowed
+```
