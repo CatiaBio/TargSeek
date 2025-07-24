@@ -4,7 +4,12 @@
       "WebFetch(domain:www.ebi.ac.uk)",
       "WebFetch(domain:www.uniprot.org)",
       "WebFetch(domain:rest.uniprot.org)",
-      "Bash(mv:*)"
+      "Bash(mv:*)",
+      "Bash(find:*)",
+      "Bash(snakemake:*)",
+      "Bash(rm:*)",
+      "Bash(mkdir:*)",
+      "Bash(ls:*)"
     ],
     "deny": []
   }
