@@ -1,6 +1,6 @@
 # 🎯 TargSeek: Protein Discovery & Epitope Prediction Pipeline
 
-A **Snakemake pipeline** for discovering conserved, functionally relevant proteins within microbial groups, with integrated **3D structure analysis** and **epitope prediction**.
+A **dual Snakemake pipeline system** for discovering conserved, functionally relevant proteins within microbial groups, with integrated **3D structure analysis** and **epitope prediction**.
 
 [![Snakemake](https://img.shields.io/badge/snakemake-≥6.0-brightgreen.svg)](https://snakemake.github.io)
 [![Python](https://img.shields.io/badge/python-3.10+-blue.svg)](https://python.org)
@@ -13,6 +13,7 @@ A **Snakemake pipeline** for discovering conserved, functionally relevant protei
 TargSeek identifies candidate proteins suitable for **vaccine development**, **diagnostic applications**, and **therapeutic targets** by processing taxonomic data and Gene Ontology terms to find conserved, surface-accessible proteins.
 
 **Key Capabilities:**
+- Dual-pipeline architecture: Download → Analysis workflow
 - Taxonomic classification and gene coverage assessment
 - Surface accessibility filtering for membrane proteins
 - 3D structure integration from PDB
@@ -23,40 +24,54 @@ TargSeek identifies candidate proteins suitable for **vaccine development**, **d
 
 ## 🏗️ Pipeline Architecture
 
+### **Two-Stage Pipeline System:**
+
 ```mermaid
 graph TD
-    A[Species to Study] --> B[BacDive Classification]
-    C[GO Terms] --> D[QuickGO Gene Fetching] 
-    B --> E[Gene Coverage Assessment<br/>≥50% Coverage Threshold]
-    D --> E
-    E --> F[Surface Accessibility Filtering]
-    F --> G[Protein Sequence Download<br/>UniProt + NCBI with Caching]
-    G --> H[3D Structure Download<br/>PDB Integration]
-    H --> I[MSA Sequence Selection<br/>3D Structure Priority]
-    I --> J[Multiple Sequence Alignment<br/>MAFFT + trimAl]
-    J --> K[Conservation Analysis<br/>Position-Specific Scoring]
-    K --> L[Epitope Prediction<br/>IEDB API + BepiPred 3.0]
-    L --> M[Final Reports<br/>HTML + Performance Metrics]
+    subgraph "DOWNLOAD PIPELINE"
+        A[Species to Study] --> B[BacDive Classification]
+        C[GO Terms] --> D[QuickGO Gene Fetching] 
+        B --> E[Gene Coverage Assessment<br/>≥50% Coverage Threshold]
+        D --> E
+        E --> F[Surface Accessibility Filtering]
+        F --> G[Protein Sequence Download<br/>UniProt + NCBI with Caching]
+        G --> H[3D Structure Download<br/>PDB Integration]
+        H --> I[Download Complete]
+    end
+    
+    subgraph "ANALYSIS PIPELINE"
+        I --> J[MSA Sequence Selection<br/>3D Structure Priority]
+        J --> K[Multiple Sequence Alignment<br/>MAFFT + trimAl]
+        K --> L[Quality Assessment<br/>AliStat Analysis]
+        L --> M[Conservation Analysis<br/>Position-Specific Scoring]
+        M --> N[Epitope Prediction<br/>BepiPred 3.0]
+    end
     
     style G fill:#e1f5fe
     style H fill:#e1f5fe
-    style K fill:#f3e5f5
-    style L fill:#fff3e0
-    style M fill:#e8f5e8
+    style M fill:#f3e5f5
+    style N fill:#fff3e0
 ```
 
 ### 📁 Output Structure
 ```
 results/{analysis}_{paramset}/
-├── coverage/                    # Gene coverage analysis
-├── proteins_to_study/          # Filtered surface-accessible proteins  
-├── msa_sequences/              # MSA-ready sequences with 3D priority
-├── msa_alignments/             # MAFFT alignments
-├── msa_trimmed/                # trimAl optimized alignments
-├── conservation/               # Conservation analysis results
-├── epitope_predictions/        # IEDB predictions
-├── epitope_predictions_bepipred/ # BepiPred 3.0 predictions
-└── reports/                    # Final HTML reports
+├── gene_selection/              # Download pipeline outputs
+│   ├── coverage_count.tsv      # Gene coverage analysis
+│   ├── summary.tsv             # Selected proteins summary
+│   ├── selected_genes_gram_*.txt # Gene lists by Gram type
+│   └── genes_species/          # Gene-specific species lists
+└── protein_analysis/           # Analysis pipeline outputs
+    ├── msa_sequence_refs/      # MSA reference sequences
+    ├── no_3d/                  # Analysis without 3D structures
+    │   ├── msa_sequences/      # FASTA files for MSA
+    │   ├── msa_alignments/     # MAFFT alignments
+    │   ├── msa_trimmed/        # trimAl optimized alignments
+    │   ├── msa_quality/        # AliStat quality assessment
+    │   └── conservation/       # Conservation analysis
+    ├── with_3d/               # Analysis with 3D structures
+    │   └── [same structure]
+    └── epitope_predictions_bepipred/ # BepiPred 3.0 results
 ```
 
 ---
@@ -85,19 +100,30 @@ cp config/login/ncbi_info.example.txt config/login/ncbi_info.txt
 ### 🏃 Run Pipeline
 
 ```bash
-# Complete pipeline with epitope prediction
-snakemake all_epitope_predictions_bepipred --cores 8
+# STEP 1: Download Pipeline (required first)
+snakemake -s Snakefile_download all_download_data --cores 8
 
-# Core protein discovery only
-snakemake all_conservation --cores 8
+# STEP 2: Analysis Pipeline
+snakemake -s Snakefile_analysis all_analysis --cores 8
+
+# Individual stages (for testing/debugging)
+snakemake -s Snakefile_download all_species_classification --cores 4
+snakemake -s Snakefile_analysis all_sequence_preparation --cores 4
 
 # Monitor progress
-snakemake --dry-run  # Check workflow
+snakemake -s Snakefile_download --dry-run  # Check download workflow
+snakemake -s Snakefile_analysis --dry-run  # Check analysis workflow
 ```
 
 ---
 
 ## 🔬 Key Features
+
+### **Dual Pipeline Architecture**
+- **Download Pipeline**: Data collection, classification, and sequence downloads
+- **Analysis Pipeline**: MSA, conservation analysis, and epitope prediction
+- **Independent execution**: Run stages separately for flexibility
+- **Clear separation**: Download data once, analyze multiple times
 
 ### **Intelligent Caching System**
 - **Protein sequences**: Avoids re-downloading existing sequences
@@ -109,45 +135,63 @@ snakemake --dry-run  # Check workflow
 - **Multi-source**: UniProt batch → individual → NCBI fallback
 - **Alias support**: Uses gene aliases when primary names fail
 - **Resumable**: Sentinel files prevent incomplete downloads
-- **Shared data**: Organized by gene in `data/proteins_fasta/`
+- **Shared data**: Organized by gene in `data/protein_sequences/`
 
 ### **Advanced Analysis**
 - **Coverage-based selection**: Only proteins with ≥50% species coverage
 - **Surface accessibility**: GO cellular component filtering
 - **3D structure priority**: Structures selected first for MSA
-- **Dual epitope prediction**: IEDB API + BepiPred 3.0
-- **Conservation scoring**: Epitope ranking by evolutionary conservation
+- **Dual MSA approach**: With and without 3D structures
+- **Quality assessment**: AliStat-based alignment evaluation
+- **Conservation scoring**: Position-specific conservation analysis
 
 ---
 
 ## 📊 Pipeline Stages
 
-### 1. **Species Processing & Classification**
+### **DOWNLOAD PIPELINE** (`Snakefile_download`)
+
+#### 1. **Species Processing & Classification**
 - BacDive API for Gram-positive/negative classification
 - Genus-based inference for missing classifications
 - **Output**: Species lists by Gram type
 
-### 2. **Gene Discovery & Coverage**
+#### 2. **Gene Discovery & Coverage**
 - QuickGO integration for GO term-based gene discovery
 - NCBI coverage assessment across species
 - **≥50% coverage threshold** for gene selection
 - **Output**: High-coverage gene lists
 
-### 3. **Protein Filtering & Download**
+#### 3. **Protein & Structure Downloads**
 - Surface accessibility filtering using GO annotations
 - Multi-source download with caching system
-- **Output**: Curated protein sequences
-
-### 4. **Structure Integration & MSA**
 - PDB structure download and integration
-- 3D structure-guided sequence selection for MSA
-- MAFFT alignment with trimAl optimization
+- **Output**: Curated protein sequences and 3D structures
+
+### **ANALYSIS PIPELINE** (`Snakefile_analysis`)
+
+#### 4. **Sequence Preparation**
+- MSA-ready sequence selection with 3D structure priority
+- Separate preparation for with/without 3D structure analysis
+- **Output**: Organized FASTA files for alignment
+
+#### 5. **Multiple Sequence Alignment**
+- MAFFT alignment with configurable parameters
+- trimAl automated trimming for optimal alignments
 - **Output**: High-quality alignments
 
-### 5. **Conservation & Epitope Prediction**
-- Position-specific conservation analysis
-- BepiPred 3.0 B-cell epitope prediction
-- Conservation-weighted epitope scoring
+#### 6. **Quality Assessment**
+- AliStat quality metrics before and after trimming
+- Alignment statistics and evaluation
+- **Output**: Quality assessment reports
+
+#### 7. **Conservation Analysis**
+- Position-specific conservation scoring
+- Conserved region identification
+- **Output**: Conservation analysis results
+
+#### 8. **Epitope Prediction**
+- BepiPred 3.0 B-cell epitope prediction on 3D structures
 - **Output**: Ranked epitope candidates
 
 ---
@@ -167,10 +211,10 @@ snakemake --dry-run  # Check workflow
 - **UniProt**: Protein sequences and information
 - **NCBI**: Protein database
 - **PDB**: 3D structures
-- **IEDB**: Epitope prediction
 
 **Optional**:
 - **BepiPred 3.0**: Advanced B-cell epitope prediction (Ubuntu setup required)
+- **AliStat**: Alignment quality assessment (manual compilation required)
 
 ---
 
@@ -178,36 +222,73 @@ snakemake --dry-run  # Check workflow
 
 ```
 TargSeek/
-├── Snakefile                   # Main workflow
+├── Snakefile_download          # Download pipeline workflow
+├── Snakefile_analysis          # Analysis pipeline workflow
 ├── env.yml                     # Conda environment
+├── CLAUDE.md                   # Technical documentation
+├── USAGE_DOWNLOAD.txt          # Download pipeline usage guide
+├── USAGE_ANALYSIS.txt          # Analysis pipeline usage guide
 ├── config/                     # Configuration files
-├── scripts/                    # Core pipeline scripts
+│   ├── config_download.yaml   # Download pipeline config
+│   ├── config_analysis.yaml   # Analysis pipeline config
+│   ├── login/                  # API credentials
+│   ├── microbiome/            # Species lists by analysis
+│   └── quickgo/               # GO terms and parameters
+├── scripts/                    # Pipeline scripts
+│   ├── gene_selection/        # Download pipeline scripts
+│   └── protein_analysis/      # Analysis pipeline scripts
 ├── utils/                      # Utility scripts
-│   ├── cache/                 # Cache management
-│   └── setup/                 # BepiPred installation
+│   ├── cache/                 # Cache management utilities
+│   ├── setup/                 # Installation scripts
+│   └── migration/             # Data migration utilities
+├── docs/                       # Documentation files
+├── archive/                    # Archived files
+├── cache/                      # Persistent API caches
 ├── data/                       # Raw and processed data
-├── results/                    # Analysis outputs
-└── cache/                      # Persistent caches
+├── results/                    # Pipeline analysis outputs
+└── tools/                      # External tools (BepiPred, etc.)
 ```
 
 ---
 
 ## 🎯 Use Cases
 
-**Vaccine Development**:
-1. Run: `snakemake all_epitope_predictions_bepipred --cores 8`
-2. Focus on high-conservation epitopes from results
-3. Analyze population coverage for vaccine design
+**Complete Protein Discovery Workflow**:
+```bash
+# 1. Download all data
+snakemake -s Snakefile_download all_download_data --cores 8
 
-**Biomarker Discovery**:
-1. Run: `snakemake all_surface_accessible_proteins --cores 4`
-2. Prioritize surface-accessible proteins with consistent coverage
-3. Validate with 3D structure data
+# 2. Run complete analysis
+snakemake -s Snakefile_analysis all_analysis --cores 8
+```
 
-**Comparative Analysis**:
-1. Compare conservation patterns between Gram-positive/negative bacteria
-2. Analyze evolutionary pressure on surface proteins
-3. Generate comparative reports
+**Development and Testing**:
+```bash
+# Test download pipeline stages
+snakemake -s Snakefile_download all_species_classification --cores 4
+snakemake -s Snakefile_download all_gene_selection --cores 4
+
+# Test analysis pipeline stages
+snakemake -s Snakefile_analysis all_sequence_preparation --cores 4
+snakemake -s Snakefile_analysis all_alignments --cores 4
+```
+
+**Epitope Prediction Focus**:
+```bash
+# After download pipeline completion
+snakemake -s Snakefile_analysis all_predictions_and_reports --cores 4
+```
+
+---
+
+## 📚 Documentation
+
+- **[CLAUDE.md](CLAUDE.md)** - Comprehensive technical documentation and project guidance
+- **[USAGE_DOWNLOAD.txt](USAGE_DOWNLOAD.txt)** - Download pipeline usage guide with examples
+- **[USAGE_ANALYSIS.txt](USAGE_ANALYSIS.txt)** - Analysis pipeline usage guide with examples
+- **[docs/](docs/)** - Additional documentation files
+
+For detailed configuration, troubleshooting, and advanced usage, see the specific usage guides and [CLAUDE.md](CLAUDE.md).
 
 ---
 
@@ -221,7 +302,7 @@ If you use TargSeek in your research, please cite:
   author={Cátia Baptista},
   year={2024},
   url={https://github.com/CatiaBio/TargSeek},
-  note={Snakemake pipeline for conserved protein discovery with integrated 3D structure analysis and epitope prediction}
+  note={Dual Snakemake pipeline for conserved protein discovery with integrated 3D structure analysis and epitope prediction}
 }
 ```
 
@@ -231,16 +312,6 @@ If you use TargSeek in your research, please cite:
 ## 📝 License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
----
-
-## 📚 Documentation
-
-- **[CLAUDE.md](CLAUDE.md)** - Detailed technical documentation
-- **[docs/](docs/)** - Additional documentation files
-- **API Documentation**: Inline documentation in scripts
-
-For detailed configuration, troubleshooting, and advanced usage, see [CLAUDE.md](CLAUDE.md).
 
 ---
 
@@ -260,4 +331,3 @@ TargSeek integrates multiple bioinformatics tools and databases. If you use this
 - **RCSB PDB**: Berman, H. M., et al. (2000). The Protein Data Bank. *Nucleic Acids Research*, 28(1), 235-242.
 - **BacDive**: Reimer, L. C., et al. (2019). BacDive in 2019: bacterial phenotypic data for biodiversity analysis. *Nucleic Acids Research*, 47(D1), D631-D636.
 - **QuickGO**: Binns, D., et al. (2009). QuickGO: a web-based tool for Gene Ontology searching. *Bioinformatics*, 25(22), 3045-3046.
-

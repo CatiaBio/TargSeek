@@ -38,33 +38,52 @@ conda activate targseek
 ```
 
 ### Pipeline Execution
+
+#### Download Pipeline (Snakefile_download)
 ```bash
-# Run entire pipeline
-snakemake --cores 8
+# Run complete download pipeline
+snakemake -s Snakefile_download all_download_data --cores 8
 
-# Run specific rule
-snakemake classify_taxa_by_gram --cores 4
+# Run individual download stages
+snakemake -s Snakefile_download all_species_classification --cores 4
+snakemake -s Snakefile_download all_gene_selection --cores 4
+snakemake -s Snakefile_download all_downloads --cores 4
 
-# Run with specific target
-snakemake results/gram_positive_proteins.txt --cores 4
+# Dry run to check download workflow
+snakemake -s Snakefile_download --dry-run
 
-# Dry run to check workflow
-snakemake --dry-run
-
-# Generate workflow visualization
-snakemake --dag | dot -Tsvg > workflow.svg
+# Generate download workflow visualization
+snakemake -s Snakefile_download --dag | dot -Tsvg > download_workflow.svg
 
 # Run with minimal output (suppress NumPy warnings)
-PYTHONWARNINGS="ignore" snakemake all_downloaded_proteins --cores 4 --quiet
+PYTHONWARNINGS="ignore" snakemake -s Snakefile_download all_download_data --cores 4 --quiet
 
 # Resume interrupted downloads (downloads use sentinel files for proper resumption)
-snakemake all_downloaded_proteins --cores 4  # Will automatically detect and resume
+snakemake -s Snakefile_download all_downloads --cores 4  # Will automatically detect and resume
+```
+
+#### Analysis Pipeline (Snakefile_analysis)
+```bash
+# Run complete analysis pipeline
+snakemake -s Snakefile_analysis all_analysis --cores 8
+
+# Run individual analysis stages
+snakemake -s Snakefile_analysis all_sequence_preparation --cores 4
+snakemake -s Snakefile_analysis all_alignments --cores 4
+snakemake -s Snakefile_analysis all_quality_and_conservation --cores 4
+snakemake -s Snakefile_analysis all_predictions_and_reports --cores 4
+
+# Dry run to check analysis workflow
+snakemake -s Snakefile_analysis --dry-run
+
+# Generate analysis workflow visualization
+snakemake -s Snakefile_analysis --dag | dot -Tsvg > analysis_workflow.svg
 
 # Run BepiPred 3.0 epitope predictions (requires Ubuntu setup)
-snakemake all_epitope_predictions_bepipred --cores 4
+snakemake -s Snakefile_analysis all_predictions_and_reports --cores 4
 
 # Run epitope predictions for specific group
-snakemake results/epitope_predictions_bepipred/analysis_1_params_1_gram_positive --cores 4
+snakemake -s Snakefile_analysis results/analysis1_params1/protein_analysis/epitope_predictions_bepipred/gram_positive --cores 4
 ```
 
 ### BepiPred 3.0 Setup (Ubuntu/Linux)
@@ -80,17 +99,30 @@ snakemake all_epitope_predictions_bepipred --cores 4
 ```
 
 ### Configuration
-- All pipeline parameters are centralized in `config/config.yaml`
-- Modify thresholds, protein selection counts, and file paths without touching the Snakefile
+- **Download pipeline**: All parameters centralized in `config/config_download.yaml`
+- **Analysis pipeline**: All parameters centralized in `config/config_analysis.yaml`
+- Modify thresholds, protein selection counts, and file paths without touching the Snakefiles
 - Login credentials for BacDive and NCBI APIs are stored in `config/login/`
+- Usage guides available: `USAGE_DOWNLOAD.txt` and `USAGE_ANALYSIS.txt`
 
 ## Key Scripts
 
-- `scripts/bacdive_classification.py`: Gram stain classification via BacDive API
-- `scripts/fetch_quickgo_data.py`: GO annotation retrieval from QuickGO
-- `scripts/gene_taxa_coverage.py`: NCBI protein database coverage assessment
-- `scripts/download_proteins.py`: Protein sequence download from NCBI
-- `scripts/get_msa_sequences.py`: Representative sequence selection for MSA
+### Download Pipeline Scripts (`scripts/gene_selection/`)
+- `classify_gram.py`: Gram stain classification via BacDive API
+- `fetch_quickgo_data.py`: GO annotation retrieval from QuickGO
+- `gene_taxa_coverage_unified.py`: NCBI protein database coverage assessment
+- `download_protein_sequences.py`: Protein sequence download with caching
+- `download_3d_structures.py`: PDB structure download and integration
+- `select_proteins_to_study.py`: Final protein selection based on thresholds
+
+### Analysis Pipeline Scripts (`scripts/protein_analysis/`)
+- `create_sequence_references.py`: MSA-ready sequence preparation
+- `create_msa_fasta.py`: FASTA file creation for alignments
+- `run_mafft_alignments.py`: Multiple sequence alignment with MAFFT
+- `trim_alignments.py`: Alignment trimming with trimAl
+- `assess_alignment_quality_comparison.py`: Quality assessment with AliStat
+- `analyze_conservation_adaptive.py`: Conservation analysis and scoring
+- `predict_epitopes_bepipred_3d_only.py`: BepiPred 3.0 epitope prediction
 
 ## Cache Management
 
@@ -163,19 +195,22 @@ BibTeX format:
 
 ```
 TargSeek/
-├── Snakefile                    # Main workflow definition
+├── Snakefile_download           # Download pipeline workflow
+├── Snakefile_analysis           # Analysis pipeline workflow
 ├── env.yml                      # Conda environment specification
 ├── CLAUDE.md                    # Project guidance (this file)
 ├── README.md                    # Project overview
+├── USAGE_DOWNLOAD.txt           # Download pipeline usage guide
+├── USAGE_ANALYSIS.txt           # Analysis pipeline usage guide
 ├── config/                      # Configuration files
-│   ├── config.yaml             # Main pipeline configuration
+│   ├── config_download.yaml    # Download pipeline configuration
+│   ├── config_analysis.yaml    # Analysis pipeline configuration
 │   ├── login/                  # API credentials
 │   ├── microbiome/            # Species lists by analysis
 │   └── quickgo/               # GO terms and parameters
-├── scripts/                     # Active pipeline scripts
-│   ├── [18 core pipeline scripts]
-│   └── archive_unused/        # Deprecated scripts (preserved)
-├── scripts_test/               # Testing and development scripts
+├── scripts/                     # Pipeline scripts (organized by function)
+│   ├── gene_selection/        # Download pipeline scripts (14 scripts)
+│   └── protein_analysis/      # Analysis pipeline scripts (8 scripts)
 ├── utils/                      # Utility scripts
 │   ├── cache/                 # Cache management utilities
 │   ├── setup/                 # Installation and setup scripts
@@ -191,9 +226,15 @@ TargSeek/
 ### Key File Locations
 
 **Pipeline Files:**
-- Main workflow: `Snakefile`
+- Download workflow: `Snakefile_download`
+- Analysis workflow: `Snakefile_analysis`
 - Environment: `env.yml` 
-- Configuration: `config/config.yaml`
+- Download configuration: `config/config_download.yaml`
+- Analysis configuration: `config/config_analysis.yaml`
+
+**Script Organization:**
+- Download pipeline: `scripts/gene_selection/` (14 scripts)
+- Analysis pipeline: `scripts/protein_analysis/` (8 scripts)
 
 **Utility Scripts:**
 - Cache management: `utils/cache/`
@@ -202,6 +243,8 @@ TargSeek/
 
 **Documentation:**
 - Project guidance: `CLAUDE.md` 
+- Download usage: `USAGE_DOWNLOAD.txt`
+- Analysis usage: `USAGE_ANALYSIS.txt`
 - Additional docs: `docs/`
 
 ## Data Structure
