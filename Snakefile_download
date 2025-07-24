@@ -1,0 +1,329 @@
+# Snakefile_download
+# ------------------------------------------------------
+# TargSeek Data Download Workflow
+# 
+# This pipeline downloads BacDive metadata, classifies species by Gram stain,
+# fetches QuickGO annotations, selects important proteins, downloads protein sequences,
+# and downloads 3D structures.
+#
+# Configuration: config/config_download.yaml
+# Usage Guide: USAGE_DOWNLOAD.txt
+# 
+# Quick Start: snakemake -s Snakefile_download all_download_data --cores 4
+# ------------------------------------------------------
+
+# Load configuration
+configfile: "config/config_download.yaml"
+
+# Define wildcard constraints to prevent ambiguous matches
+wildcard_constraints:
+    analysis="analysis[0-9]+",
+    paramset="params[0-9]+"
+
+# Download rules - comprehensive data collection target
+rule all_download_data:
+    input:
+        expand(
+            [
+                config["paths"]["bacdive"]["updated_gram_classification"],
+                config["paths"]["bacdive"]["gram_positive"],
+                config["paths"]["bacdive"]["gram_negative"],
+                config["paths"]["gene_selection"]["genes_species_dir"],
+                config["paths"]["protein_sequences"]["download_sentinel"],
+                config["paths"]["protein_structures"]["download_sentinel"]
+            ],
+            analysis=config["species_batches"],
+            paramset=config["quickgo_paramsets"],
+            group=["positive", "negative"]
+        ) + expand(
+            [
+                config["paths"]["quickgo"]["proteins_to_test"]
+            ],
+            paramset=config["quickgo_paramsets"]
+        ) + expand(
+            [
+                config["paths"]["gene_selection"]["coverage_count"],
+                config["paths"]["gene_selection"]["summary"]
+            ],
+            analysis=config["species_batches"],
+            paramset=config["quickgo_paramsets"]
+        ) + expand(
+            [
+                config["paths"]["protein_structures"]["metadata_tsv"],
+                config["paths"]["gene_selection"]["download_report"]
+            ],
+            analysis=config["species_batches"],
+            paramset=config["quickgo_paramsets"]
+        )
+
+# Partial pipeline targets - useful for testing and debugging individual stages
+rule all_species_classification:
+    input:
+        expand(
+            [config["paths"]["bacdive"]["updated_gram_classification"],
+             config["paths"]["bacdive"]["gram_positive"],
+             config["paths"]["bacdive"]["gram_negative"]],
+            analysis=config["species_batches"]
+        )
+
+rule all_gene_selection:
+    input:
+        expand(
+            [config["paths"]["quickgo"]["proteins_to_test"],
+             config["paths"]["gene_selection"]["coverage_count"],
+             config["paths"]["gene_selection"]["summary"]],
+            analysis=config["species_batches"],
+            paramset=config["quickgo_paramsets"]
+        )
+
+rule all_downloads:
+    input:
+        expand(
+            [config["paths"]["protein_sequences"]["download_sentinel"],
+             config["paths"]["protein_structures"]["download_sentinel"]],
+            analysis=config["species_batches"],
+            paramset=config["quickgo_paramsets"],
+            group=["positive", "negative"]
+        )
+
+# ---------------------
+# Download Rules
+# ---------------------
+
+# Classify bacterial species by Gram staining properties
+# Queries BacDive API for comprehensive Gram stain classification data
+# Handles species identification and taxonomic validation with error tracking
+rule classify_taxa_by_gram:
+    input:
+        species=lambda wildcards: config["species_files"][wildcards.analysis],
+        bacdive_info=config["login"]["bacdive_info"]
+    output:
+        all_json=config["paths"]["bacdive"]["gram_raw_json"],
+        not_found=config["paths"]["bacdive"]["not_found"],
+        errors=config["paths"]["bacdive"]["errors"],
+        downloaded=config["paths"]["bacdive"]["downloaded"],
+        gram_classification=config["paths"]["bacdive"]["gram_classification"],
+        all_identified=config["paths"]["bacdive"]["all_identified"]
+    script:
+        config["scripts"]["bacdive"]["classify_gram"]
+
+# Enhance Gram classification using genus-based inference
+# Supplements BacDive results by inferring Gram status from well-characterized genus patterns
+# Reduces unclassified species by leveraging taxonomic relationships
+rule supplement_bacdive_gram_classification:
+    input:
+        bacdive_classification = config["paths"]["bacdive"]["gram_classification"],
+        not_found = config["paths"]["bacdive"]["not_found"],
+        bacdive_info = config["login"]["bacdive_info"]
+    output:
+        updated_classification = config["paths"]["bacdive"]["updated_gram_classification"],
+        updated_not_found = config["paths"]["bacdive"]["updated_not_found"]
+    script:
+        config["scripts"]["bacdive"]["supplement_gram_classification"]
+
+# Separate species by Gram classification for parallel processing
+# Creates Gram-specific species lists from unified classification data
+# Enables independent analysis of Gram-positive and Gram-negative bacterial groups
+rule split_species_by_gram:
+    input:
+        gram_classification = config["paths"]["bacdive"]["updated_gram_classification"]
+    output:
+        gram_positive = config["paths"]["bacdive"]["gram_positive"],
+        gram_negative = config["paths"]["bacdive"]["gram_negative"]
+    shell:
+        """
+        awk -F'\t' 'NR > 1 && $2 == "positive" {{ print $1 }}' {input.gram_classification} > {output.gram_positive}
+        awk -F'\t' 'NR > 1 && $2 == "negative" {{ print $1 }}' {input.gram_classification} > {output.gram_negative}
+        """
+     
+# Retrieve Gene Ontology annotations and symbols from QuickGO database
+# Downloads comprehensive GO term assignments and associated gene nomenclature
+# Filters by specified taxonomic groups and GO categories for targeted protein discovery
+rule fetch_quickgo_annotations:
+    input:
+        params_file = config["paths"]["quickgo"]["params_file"]
+    output:
+        annotations = config["paths"]["quickgo"]["annotations"],
+        genes = config["paths"]["quickgo"]["gene_symbols"]
+    script:
+        config["scripts"]["quickgo"]["fetch_quickgo_data"]
+
+# Collect gene aliases and synonyms from NCBI Gene database
+# Builds comprehensive alias mapping to improve protein search success rates
+# Essential for handling gene nomenclature variations across different databases
+rule fetch_gene_aliases:
+    input:
+        genes = config["paths"]["quickgo"]["gene_symbols"]
+    output:
+        aliases_file = config["paths"]["quickgo"]["gene_aliases"]
+    script:
+        config["scripts"]["quickgo"]["fetch_gene_aliases"]
+
+# Validate Gene Ontology term assignments using multiple gene identifiers
+# Cross-references GO annotations with gene aliases to ensure assignment accuracy
+# Generates validation reports for quality control of GO-based protein selection
+rule validate_go_assignments:
+    input:
+        aliases = config["paths"]["quickgo"]["gene_aliases"]
+    output:
+        validation_report = config["paths"]["quickgo"]["go_validation_report"]
+    script:
+        config["scripts"]["quickgo"]["validate_protein_go_assignments"]
+
+# Select surface-accessible proteins using GO term validation
+# Filters candidates by cellular localization GO terms (membrane, extracellular, etc.)
+# Prioritizes proteins likely to be accessible for diagnostic or therapeutic targeting
+rule filter_surface_accessible_genes:
+    input:
+        go_validation = config["paths"]["quickgo"]["go_validation_report"],
+        surface_accessible = config["paths"]["quickgo"]["surface_accessible_config"]
+    output:
+        surface_genes = config["paths"]["quickgo"]["surface_accessible_proteins"]
+    script:
+        config["scripts"]["quickgo"]["filter_surface_accessible"]
+
+# Apply taxonomic coverage filters to surface-accessible proteins
+# Removes genes with insufficient representation across target bacterial species
+# Ensures selected proteins have broad applicability within the study group
+rule filter_quickgo_genes:
+    input:
+        genes = config["paths"]["quickgo"]["surface_accessible_proteins"],
+        annotations = config["paths"]["quickgo"]["annotations"],
+        aliases = config["paths"]["quickgo"]["gene_aliases"]
+    output:
+        proteins_to_test = config["paths"]["quickgo"]["proteins_to_test"]
+    script:
+        config["scripts"]["quickgo"]["filter_quickgo_data_simplified"]
+
+# Assess gene coverage across all bacterial species in unified analysis
+# Systematically queries NCBI Protein database to determine gene presence/absence
+# Uses intelligent caching and alias fallback to maximize coverage detection accuracy
+rule assess_gene_taxa_coverage_unified:
+    input:
+        all_species=config["paths"]["bacdive"]["all_identified"],
+        gram_positive=config["paths"]["bacdive"]["gram_positive"],
+        gram_negative=config["paths"]["bacdive"]["gram_negative"],
+        gene_list=config["paths"]["quickgo"]["proteins_to_test"],
+        aliases=config["paths"]["quickgo"]["gene_aliases"],
+        ncbi_info=config["login"]["ncbi_info"]
+    output:
+        directory(config["paths"]["gene_selection"]["base_dir"])
+    priority: 10
+    log:
+        config["paths"]["logs"]["coverage_unified"]
+    params:
+        analysis="{analysis}",
+        paramset="{paramset}"
+    script:
+        config["scripts"]["gene_selection"]["gene_taxa_coverage_unified"] 
+
+# Select proteins to study based on coverage thresholds
+# Creates simple gene lists per Gram group and comprehensive summary TSV with protein details
+# Filters by coverage thresholds and selects top proteins for further analysis
+rule select_proteins_to_study:
+    input:
+        coverage=config["paths"]["gene_selection"]["coverage_count"],
+        tested_proteins=config["paths"]["quickgo"]["proteins_to_test"],
+        annotations=config["paths"]["quickgo"]["annotations"],
+        go_validation=config["paths"]["quickgo"]["go_validation_report"],
+        uniprot_info=config["paths"]["uniprot"]["protein_info"]
+    output:
+        summary_tsv=config["paths"]["gene_selection"]["summary"],
+        gene_list_positive=config["paths"]["gene_selection"]["selected_genes_positive"],
+        gene_list_negative=config["paths"]["gene_selection"]["selected_genes_negative"]
+    params:
+        analysis="{analysis}",
+        paramset="{paramset}"
+    group: "protein_to_study_{analysis}_{paramset}"
+    script:
+        config["scripts"]["gene_selection"]["select_proteins_to_study"]
+
+# Create gene-specific species lists for protein downloads
+# Extracts species that actually contain each selected gene from coverage data
+# Organizes species lists by gene in analysis-specific directories for downstream processing
+rule create_gene_species_lists:
+    input:
+        coverage=config["paths"]["gene_selection"]["coverage_count"],
+        genes=lambda wildcards: config["paths"]["gene_selection"]["selected_genes_positive"] if wildcards.group == "positive" else config["paths"]["gene_selection"]["selected_genes_negative"]
+    output:
+        directory(config["paths"]["gene_selection"]["genes_species_dir"])
+    params:
+        analysis="{analysis}",
+        paramset="{paramset}",
+        group="{group}"
+    group: "gram_group_{analysis}_{paramset}"
+    script:
+        config["scripts"]["gene_selection"]["create_gene_species_lists_from_coverage"]
+
+# Download protein sequences with intelligent search strategy
+# Multi-stage approach: UniProt primary search → gene alias fallback → NCBI bulk validation
+# Employs persistent caching and smart completion detection to avoid redundant downloads
+rule download_proteins_to_analyse:
+    input:
+        protein_lists=config["paths"]["gene_selection"]["genes_species_dir"],
+        aliases=config["paths"]["quickgo"]["gene_aliases"],
+        ncbi_info=config["login"]["ncbi_info"]
+    output:
+        sentinel=touch(config["paths"]["protein_sequences"]["download_sentinel"])
+    params:
+        analysis="{analysis}",
+        paramset="{paramset}",
+        group="{group}"
+    group: "gram_group_{analysis}_{paramset}"
+    script:
+        config["scripts"]["downloads"]["download_protein_sequences"]
+
+# Download bacterial 3D structures and sequences from PDB
+# Searches UniProt for bacterial proteins with available 3D structures, prioritizing by resolution
+# Downloads top 3 structures per gene with concurrent processing and intelligent completion checking
+rule download_3d_structures:
+    input:
+        protein_list=config["paths"]["gene_selection"]["summary"]
+    output:
+        sentinel=config["paths"]["protein_structures"]["download_sentinel"]
+    params:
+        analysis="{analysis}",
+        paramset="{paramset}",
+        group="{group}",
+        max_structures=config.get("3d_structures", {}).get("max_structures", 10),
+        include_computed_models=config.get("3d_structures", {}).get("include_computed_models", True)
+    group: "gram_group_{analysis}_{paramset}"
+    script:
+        config["scripts"]["downloads"]["download_protein_structures"]
+
+# Extract 3D structure metadata to TSV format
+# Creates comprehensive metadata table with structure information, quality scores, and organism details
+rule extract_3d_metadata:
+    input:
+        structures_positive=config["paths"]["protein_structures"]["download_sentinel"].replace("{group}", "positive"),
+        structures_negative=config["paths"]["protein_structures"]["download_sentinel"].replace("{group}", "negative")
+    output:
+        metadata_tsv=config["paths"]["protein_structures"]["metadata_tsv"]
+    params:
+        analysis="{analysis}",
+        paramset="{paramset}"
+    script:
+        config["scripts"]["downloads"]["extract_protein_structures_metadata"]
+
+# Generate comprehensive download report
+# Creates HTML report with species classification stats, gene filtering progress,
+# coverage tables by Gram group, selected proteins based on thresholds, and 3D structure download summaries
+rule generate_download_report:
+    input:
+        gram_classification=config["paths"]["bacdive"]["updated_gram_classification"],
+        gram_positive=config["paths"]["bacdive"]["gram_positive"],
+        gram_negative=config["paths"]["bacdive"]["gram_negative"],
+        initial_genes=config["paths"]["quickgo"]["gene_symbols"],
+        surface_genes=config["paths"]["quickgo"]["surface_accessible_proteins"],
+        filtered_genes=config["paths"]["quickgo"]["proteins_to_test"],
+        annotations=config["paths"]["quickgo"]["annotations"],
+        coverage=config["paths"]["gene_selection"]["coverage_count"],
+        summary=config["paths"]["gene_selection"]["summary"],
+        metadata=config["paths"]["protein_structures"]["metadata_tsv"]
+    output:
+        config["paths"]["gene_selection"]["download_report"]
+    params:
+        analysis="{analysis}",
+        paramset="{paramset}"
+    script:
+        config["scripts"]["reports"]["generate_download_report"]
