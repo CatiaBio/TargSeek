@@ -20,6 +20,27 @@ wildcard_constraints:
     paramset="params[0-9]+",
     use_3d_dir="(no_3d|with_3d)"
 
+# Helper function to get enabled processing paths
+def get_enabled_paths(path_dict):
+    """Get paths based on enabled processing options"""
+    enabled_paths = []
+    
+    # Check if no_3d processing is enabled
+    if config.get("processing", {}).get("enable_no_3d", True):
+        enabled_paths.extend([
+            path for key, path in path_dict.items() 
+            if "no_3d" in key
+        ])
+    
+    # Check if with_3d processing is enabled  
+    if config.get("processing", {}).get("enable_with_3d", True):
+        enabled_paths.extend([
+            path for key, path in path_dict.items() 
+            if "with_3d" in key
+        ])
+    
+    return enabled_paths
+
 # =============================================================================
 # TARGET RULES
 # =============================================================================
@@ -28,35 +49,52 @@ wildcard_constraints:
 rule all_analysis:
     input:
         expand(
-            [
-                config["paths"]["conservation"]["results_no_3d"],
-                config["paths"]["conservation"]["results_with_3d"],
-                config["paths"]["epitopes"]["bepipred_predictions"]
-            ],
+            get_enabled_paths({
+                "conservation_main": config["paths"]["conservation"]["results_main"],
+                "conservation_structure": config["paths"]["conservation"]["results_structure"],
+                "raw_sequences_main": config["paths"]["conserved"]["raw_sequences_main"],
+                "raw_sequences_structure": config["paths"]["conserved"]["raw_sequences_structure"],
+                "trimmed_sequences_main": config["paths"]["conserved"]["trimmed_sequences_main"],
+                "trimmed_sequences_structure": config["paths"]["conserved"]["trimmed_sequences_structure"]
+            }),
             analysis=config["species_batches"],
             paramset=config["quickgo_paramsets"],
             group=["positive", "negative"]
+        ) + expand(
+            [config["paths"]["epitopes"]["bepipred_predictions"]],
+            analysis=config["species_batches"],
+            paramset=config["quickgo_paramsets"]
         )
 
 # Partial pipeline targets - useful for testing and debugging individual stages
 rule all_sequence_preparation:
     input:
         expand(
-            [config["paths"]["sequence_prep"]["msa_sequence_refs"],
-             config["paths"]["msa"]["sequences_no_3d"],
-             config["paths"]["msa"]["sequences_with_3d"]],
+            [config["paths"]["sequence_prep"]["msa_sequence_refs"]] +
+            [config["paths"]["msa"]["main_sequences"]] +
+            get_enabled_paths({
+                "sequences_main": config["paths"]["msa"]["sequences_main"],
+                "sequences_structure": config["paths"]["msa"]["sequences_structure"]
+            }),
             analysis=config["species_batches"],
             paramset=config["quickgo_paramsets"],
             group=["positive", "negative"]
-        )
+        ) + (expand(
+            [config["paths"]["sequence_prep"]["selected_3d_paths"]],
+            analysis=config["species_batches"],
+            paramset=config["quickgo_paramsets"],
+            group=["positive", "negative"]
+        ) if config.get("processing", {}).get("enable_with_3d", True) else [])
 
 rule all_alignments:
     input:
         expand(
-            [config["paths"]["msa"]["alignments_no_3d"],
-             config["paths"]["msa"]["alignments_with_3d"],
-             config["paths"]["msa"]["trimmed_no_3d"],
-             config["paths"]["msa"]["trimmed_with_3d"]],
+            get_enabled_paths({
+                "alignments_main": config["paths"]["msa"]["alignments_main"],
+                "alignments_structure": config["paths"]["msa"]["alignments_structure"],
+                "trimmed_main": config["paths"]["msa"]["trimmed_main"],
+                "trimmed_structure": config["paths"]["msa"]["trimmed_structure"]
+            }),
             analysis=config["species_batches"],
             paramset=config["quickgo_paramsets"],
             group=["positive", "negative"]
@@ -65,10 +103,30 @@ rule all_alignments:
 rule all_quality_and_conservation:
     input:
         expand(
-            [config["paths"]["quality"]["assessment_no_3d"],
-             config["paths"]["quality"]["assessment_with_3d"],
-             config["paths"]["conservation"]["results_no_3d"],
-             config["paths"]["conservation"]["results_with_3d"]],
+            get_enabled_paths({
+                "quality_main": config["paths"]["quality"]["assessment_main"],
+                "quality_structure": config["paths"]["quality"]["assessment_structure"],
+                "conservation_main": config["paths"]["conservation"]["results_main"],
+                "conservation_structure": config["paths"]["conservation"]["results_structure"],
+                "raw_sequences_main": config["paths"]["conserved"]["raw_sequences_main"],
+                "raw_sequences_structure": config["paths"]["conserved"]["raw_sequences_structure"],
+                "trimmed_sequences_main": config["paths"]["conserved"]["trimmed_sequences_main"],
+                "trimmed_sequences_structure": config["paths"]["conserved"]["trimmed_sequences_structure"]
+            }),
+            analysis=config["species_batches"],
+            paramset=config["quickgo_paramsets"],
+            group=["positive", "negative"]
+        )
+
+rule all_conserved_sequences:
+    input:
+        expand(
+            get_enabled_paths({
+                "raw_sequences_main": config["paths"]["conserved"]["raw_sequences_main"],
+                "raw_sequences_structure": config["paths"]["conserved"]["raw_sequences_structure"],
+                "trimmed_sequences_main": config["paths"]["conserved"]["trimmed_sequences_main"],
+                "trimmed_sequences_structure": config["paths"]["conserved"]["trimmed_sequences_structure"]
+            }),
             analysis=config["species_batches"],
             paramset=config["quickgo_paramsets"],
             group=["positive", "negative"]
@@ -79,8 +137,7 @@ rule all_predictions_and_reports:
         expand(
             [config["paths"]["epitopes"]["bepipred_predictions"]],
             analysis=config["species_batches"],
-            paramset=config["quickgo_paramsets"],
-            group=["positive", "negative"]
+            paramset=config["quickgo_paramsets"]
         )
 
 # =============================================================================
@@ -106,21 +163,51 @@ rule create_msa_sequence_references:
     script:
         config["scripts"]["sequence_prep"]["create_sequence_references"]
 
-# Create FASTA files for MSA with and without 3D structures
-rule create_msa_fasta_files:
+# STAGE 1: Create main MSA sequences with diversity-based selection (foundation for both no_3d and with_3d)
+rule create_main_msa_sequences:
     input:
         reference_dir=config["paths"]["sequence_prep"]["msa_sequence_refs"]
     output:
-        msa_no_3d=directory(config["paths"]["msa"]["sequences_no_3d"]),
-        msa_with_3d=directory(config["paths"]["msa"]["sequences_with_3d"]),
-        selected_3d_paths=config["paths"]["sequence_prep"]["selected_3d_paths"],
-        selected_3d_tsv=config["paths"]["sequence_prep"]["selected_3d_tsv"]
+        main_msa_dir=directory(config["paths"]["msa"]["main_sequences"])
     params:
         analysis="{analysis}",
         paramset="{paramset}",
         group="{group}"
     script:
-        config["scripts"]["sequence_prep"]["create_msa_fasta"]
+        config["scripts"]["sequence_prep"]["create_main_msa"]
+
+# STAGE 2: Select optimal 3D structures using 5 sequences from main MSA (only when 3D processing is enabled)
+rule select_3d_from_main_msa:
+    input:
+        reference_dir=config["paths"]["sequence_prep"]["msa_sequence_refs"],
+        main_msa_dir=config["paths"]["msa"]["main_sequences"]
+    output:
+        selected_3d_paths=config["paths"]["sequence_prep"]["selected_3d_paths"],
+        selected_3d_tsv=config["paths"]["sequence_prep"]["selected_3d_tsv"]
+    params:
+        analysis="{analysis}",
+        paramset="{paramset}",
+        group="{group}",
+        structure_selection_method=config.get("structure_selection", {}).get("method", "similarity"),
+        max_structures_per_gene=config.get("structure_selection", {}).get("max_structures_per_gene", 1),
+        min_similarity_score=config.get("structure_selection", {}).get("min_similarity_score", 0.1),
+        similarity_method=config.get("structure_selection", {}).get("similarity_method", "local_alignment")
+    script:
+        config["scripts"]["sequence_prep"]["select_3d_from_main_msa"]
+
+# STAGE 3: Create structure MSA files (combines main MSA + selected 3D structures)
+rule create_structure_msa_files:
+    input:
+        main_msa_dir=config["paths"]["msa"]["main_sequences"],
+        selected_3d_paths=config["paths"]["sequence_prep"]["selected_3d_paths"]
+    output:
+        structure_msa_dir=directory(config["paths"]["msa"]["sequences_structure"])
+    params:
+        analysis="{analysis}",
+        paramset="{paramset}",
+        group="{group}"
+    script:
+        config["scripts"]["sequence_prep"]["create_final_msa"]
 
 # ---------------------
 # STAGE 2: Multiple Sequence Alignment
@@ -129,32 +216,39 @@ rule create_msa_fasta_files:
 # Perform multiple sequence alignments using MAFFT algorithm
 rule run_all_mafft_for_group:
     input:
-        msa_no_3d=config["paths"]["msa"]["sequences_no_3d"],
-        msa_with_3d=config["paths"]["msa"]["sequences_with_3d"]
+        msa_main=config["paths"]["msa"]["sequences_main"],
+        msa_structure=config["paths"]["msa"]["sequences_structure"]
     output:
-        no_3d=directory(config["paths"]["msa"]["alignments_no_3d"]),
-        with_3d=directory(config["paths"]["msa"]["alignments_with_3d"])
+        main=directory(config["paths"]["msa"]["alignments_main"]),
+        structure=directory(config["paths"]["msa"]["alignments_structure"])
     params:
         analysis="{analysis}",
         paramset="{paramset}",
         group="{group}",
-        threads=config["mafft"]["threads"]
+        threads=config["mafft"]["threads"],
+        enable_no_3d=config.get("processing", {}).get("enable_no_3d", True),
+        enable_with_3d=config.get("processing", {}).get("enable_with_3d", True)
     script:
         config["scripts"]["msa"]["run_mafft_alignments"]
 
 # Remove poorly aligned regions using trimAl automated trimming
 rule trim_alignments:
     input:
-        no_3d=config["paths"]["msa"]["alignments_no_3d"],
-        with_3d=config["paths"]["msa"]["alignments_with_3d"]
+        main=config["paths"]["msa"]["alignments_main"],
+        structure=config["paths"]["msa"]["alignments_structure"]
     output:
-        trim_no_3d=directory(config["paths"]["msa"]["trimmed_no_3d"]),
-        trim_with_3d=directory(config["paths"]["msa"]["trimmed_with_3d"])
+        trim_main=directory(config["paths"]["msa"]["trimmed_main"]),
+        trim_structure=directory(config["paths"]["msa"]["trimmed_structure"])
     params:
         analysis="{analysis}",
         paramset="{paramset}",
         group="{group}",
-        use_3d=config.get("mafft", {}).get("use_3d_alignments", "no_3d")
+        use_3d=config.get("mafft", {}).get("use_3d_alignments", "no_3d"),
+        trimming_method=config.get("trimming", {}).get("method", "clipkit"),
+        clipkit_mode=config.get("trimming", {}).get("clipkit", {}).get("mode", "smart-gap"),
+        trimal_method=config.get("trimming", {}).get("trimal", {}).get("method", "automated1"),
+        enable_no_3d=config.get("processing", {}).get("enable_no_3d", True),
+        enable_with_3d=config.get("processing", {}).get("enable_with_3d", True)
     script:
         config["scripts"]["msa"]["trim_alignments"]
 
@@ -165,13 +259,13 @@ rule trim_alignments:
 # Evaluate multiple sequence alignment quality before and after trimming
 rule assess_alignment_quality:
     input:
-        no_3d=config["paths"]["msa"]["alignments_no_3d"],
-        with_3d=config["paths"]["msa"]["alignments_with_3d"],
-        trim_no_3d=config["paths"]["msa"]["trimmed_no_3d"],
-        trim_with_3d=config["paths"]["msa"]["trimmed_with_3d"]
+        main=config["paths"]["msa"]["alignments_main"],
+        structure=config["paths"]["msa"]["alignments_structure"],
+        trim_main=config["paths"]["msa"]["trimmed_main"],
+        trim_structure=config["paths"]["msa"]["trimmed_structure"]
     output:
-        no_3d=directory(config["paths"]["quality"]["assessment_no_3d"]),
-        with_3d=directory(config["paths"]["quality"]["assessment_with_3d"])
+        main=directory(config["paths"]["quality"]["assessment_main"]),
+        structure=directory(config["paths"]["quality"]["assessment_structure"])
     params:
         analysis="{analysis}",
         paramset="{paramset}",
@@ -187,40 +281,93 @@ rule assess_alignment_quality:
 # Calculate amino acid conservation patterns from optimal alignments
 rule analyze_conservation:
     input:
-        no_3d=config["paths"]["msa"]["alignments_no_3d"],
-        with_3d=config["paths"]["msa"]["alignments_with_3d"],
-        trim_no_3d=config["paths"]["msa"]["trimmed_no_3d"],
-        trim_with_3d=config["paths"]["msa"]["trimmed_with_3d"],
-        quality_assessment_no_3d=config["paths"]["quality"]["assessment_no_3d"],
-        quality_assessment_with_3d=config["paths"]["quality"]["assessment_with_3d"]
+        main=config["paths"]["msa"]["alignments_main"],
+        structure=config["paths"]["msa"]["alignments_structure"],
+        trim_main=config["paths"]["msa"]["trimmed_main"],
+        trim_structure=config["paths"]["msa"]["trimmed_structure"],
+        quality_main=config["paths"]["quality"]["assessment_main"],
+        quality_structure=config["paths"]["quality"]["assessment_structure"]
     output:
-        no_3d=directory(config["paths"]["conservation"]["results_no_3d"]),
-        with_3d=directory(config["paths"]["conservation"]["results_with_3d"])
+        main=directory(config["paths"]["conservation"]["results_main"]),
+        structure=directory(config["paths"]["conservation"]["results_structure"])
     params:
         analysis="{analysis}",
         paramset="{paramset}",
         group="{group}",
         use_3d=config.get("mafft", {}).get("use_3d_alignments", "no_3d"),
-        create_logos=config.get("conservation", {}).get("create_logos", False)
+        create_logos=config.get("conservation", {}).get("create_logos", False),
+        enable_no_3d=config.get("processing", {}).get("enable_no_3d", True),
+        enable_with_3d=config.get("processing", {}).get("enable_with_3d", True)
     script:
         config["scripts"]["conservation"]["analyze_conservation"]
 
 # ---------------------
-# STAGE 5: Epitope Prediction
+# STAGE 5: Conserved Sequence Extraction
+# ---------------------
+
+# Extract conserved sequences (≥5 amino acids) from MSAs with conservation percentages
+def get_conserved_inputs(wildcards):
+    """Get inputs based on enabled processing options"""
+    inputs = {}
+    
+    if config.get("processing", {}).get("enable_no_3d", True):
+        inputs["raw_main"] = config["paths"]["msa"]["alignments_main"].format(analysis=wildcards.analysis, paramset=wildcards.paramset, group=wildcards.group)
+        inputs["trimmed_main"] = config["paths"]["msa"]["trimmed_main"].format(analysis=wildcards.analysis, paramset=wildcards.paramset, group=wildcards.group)
+    
+    if config.get("processing", {}).get("enable_with_3d", True):
+        inputs["raw_structure"] = config["paths"]["msa"]["alignments_structure"].format(analysis=wildcards.analysis, paramset=wildcards.paramset, group=wildcards.group)
+        inputs["trimmed_structure"] = config["paths"]["msa"]["trimmed_structure"].format(analysis=wildcards.analysis, paramset=wildcards.paramset, group=wildcards.group)
+    
+    return inputs
+
+def get_conserved_outputs(wildcards):
+    """Get outputs based on enabled processing options"""
+    outputs = {}
+    
+    if config.get("processing", {}).get("enable_no_3d", True):
+        outputs["raw_sequences_main"] = config["paths"]["conserved"]["raw_sequences_main"].format(analysis=wildcards.analysis, paramset=wildcards.paramset, group=wildcards.group)
+        outputs["trimmed_sequences_main"] = config["paths"]["conserved"]["trimmed_sequences_main"].format(analysis=wildcards.analysis, paramset=wildcards.paramset, group=wildcards.group)
+    
+    if config.get("processing", {}).get("enable_with_3d", True):
+        outputs["raw_sequences_structure"] = config["paths"]["conserved"]["raw_sequences_structure"].format(analysis=wildcards.analysis, paramset=wildcards.paramset, group=wildcards.group)
+        outputs["trimmed_sequences_structure"] = config["paths"]["conserved"]["trimmed_sequences_structure"].format(analysis=wildcards.analysis, paramset=wildcards.paramset, group=wildcards.group)
+    
+    return outputs
+
+rule extract_conserved_sequences:
+    input:
+        unpack(get_conserved_inputs)
+    output:
+        raw_sequences_structure=config["paths"]["conserved"]["raw_sequences_structure"],
+        trimmed_sequences_structure=config["paths"]["conserved"]["trimmed_sequences_structure"]
+    params:
+        analysis="{analysis}",
+        paramset="{paramset}",
+        group="{group}",
+        min_conservation=config.get("conserved", {}).get("min_conservation", 0.5),
+        min_length=config.get("conserved", {}).get("min_length", 5),
+        enable_no_3d=config.get("processing", {}).get("enable_no_3d", True),
+        enable_with_3d=config.get("processing", {}).get("enable_with_3d", True)
+    script:
+        config["scripts"]["conserved"]["extract_sequences"]
+
+# ---------------------
+# STAGE 6: Epitope Prediction
 # ---------------------
 
 # Predict B-cell epitopes using BepiPred 3.0 on selected 3D structure sequences
 rule predict_epitopes_bepipred:
     input:
-        selected_3d_paths=config["paths"]["sequence_prep"]["selected_3d_paths"]
+        selected_3d_paths_positive=config["paths"]["sequence_prep"]["selected_3d_paths"].replace("{group}", "positive"),
+        selected_3d_paths_negative=config["paths"]["sequence_prep"]["selected_3d_paths"].replace("{group}", "negative")
     output:
         directory(config["paths"]["epitopes"]["bepipred_predictions"])
     params:
         analysis="{analysis}",
-        paramset="{paramset}",
-        group="{group}"
+        paramset="{paramset}"
     script:
         config["scripts"]["epitopes"]["predict_epitopes_bepipred"]
+
 
 # ---------------------
 # STAGE 6: Summaries and Reports

@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
 """
-trimAl Alignment Trimming
-========================
+MSA Alignment Trimming (ClipKIT/trimAl)
+======================================
 
-This script runs trimAl on all alignment files to remove poorly aligned regions,
-gaps, and spurious sequences, improving alignment quality for downstream analysis.
+This script runs ClipKIT (preferred) or trimAl on all alignment files to remove 
+poorly aligned regions, gaps, and spurious sequences, improving alignment quality 
+for downstream analysis.
+
+ClipKIT is the recommended tool as it significantly outperforms trimAl by retaining
+phylogenetically informative sites rather than aggressively removing gaps.
 """
 
 import subprocess
@@ -15,9 +19,54 @@ import sys
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
+def run_clipkit(input_file, output_file, mode="smart-gap"):
+    """
+    Run ClipKIT on a single alignment file (preferred method)
+    
+    Args:
+        input_file: Path to input aligned FASTA file
+        output_file: Path to output trimmed FASTA file
+        mode: ClipKIT mode (smart-gap, kpic, kpic-smart-gap, kpi, etc.)
+        
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    try:
+        # Create output directory if needed
+        output_file.parent.mkdir(parents=True, exist_ok=True)
+        
+        # Run ClipKIT command
+        cmd = [
+            "clipkit",
+            str(input_file),
+            "-o", str(output_file),
+            "-m", mode
+        ]
+        
+        logging.info(f"Running ClipKIT: {input_file.name} -> {output_file.name}")
+        logging.debug(f"Command: {' '.join(cmd)}")
+        
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        
+        logging.debug(f"ClipKIT stdout: {result.stdout}")
+        return True
+        
+    except subprocess.CalledProcessError as e:
+        logging.error(f"ClipKIT failed for {input_file.name}: {e}")
+        logging.error(f"ClipKIT stderr: {e.stderr}")
+        return False
+    except Exception as e:
+        logging.error(f"Unexpected error running ClipKIT on {input_file.name}: {e}")
+        return False
+
 def run_trimal(input_file, output_file, method="automated1"):
     """
-    Run trimAl on a single alignment file
+    Run trimAl on a single alignment file (legacy fallback)
     
     Args:
         input_file: Path to input aligned FASTA file
@@ -97,11 +146,25 @@ def process_alignment_directory(input_dir, output_dir, dir_name):
         gene_name = fasta_file.stem
         output_file = output_dir / f"{gene_name}.fasta"
         
-        # Run trimAl
-        if run_trimal(fasta_file, output_file, method="automated1"):
-            successful += 1
+        # Try ClipKIT first, fallback to trimAl if it fails
+        trimming_method = getattr(snakemake.params, 'trimming_method', 'clipkit') if 'snakemake' in globals() else 'clipkit'
+        
+        if trimming_method == 'clipkit':
+            clipkit_mode = getattr(snakemake.params, 'clipkit_mode', 'smart-gap') if 'snakemake' in globals() else 'smart-gap'
+            if run_clipkit(fasta_file, output_file, mode=clipkit_mode):
+                successful += 1
+            elif run_trimal(fasta_file, output_file, method="automated1"):
+                logging.warning(f"ClipKIT failed for {fasta_file.name}, used trimAl fallback")
+                successful += 1
+            else:
+                failed += 1
         else:
-            failed += 1
+            # Use trimAl directly
+            trimal_method = getattr(snakemake.params, 'trimal_method', 'automated1') if 'snakemake' in globals() else 'automated1'
+            if run_trimal(fasta_file, output_file, method=trimal_method):
+                successful += 1
+            else:
+                failed += 1
     
     return successful, failed
 
@@ -110,10 +173,10 @@ def main():
     
     try:
         # Get inputs from Snakemake
-        input_no_3d = Path(snakemake.input.no_3d)
-        input_with_3d = Path(snakemake.input.with_3d)
-        output_no_3d = Path(snakemake.output.trim_no_3d)
-        output_with_3d = Path(snakemake.output.trim_with_3d)
+        input_main = Path(snakemake.input.main)
+        input_structure = Path(snakemake.input.structure)
+        output_main = Path(snakemake.output.trim_main)
+        output_structure = Path(snakemake.output.trim_structure)
         
         analysis = snakemake.params.analysis
         paramset = snakemake.params.paramset
@@ -122,13 +185,13 @@ def main():
     except NameError:
         # Test mode
         if len(sys.argv) != 5:
-            print("Usage: python trim_alignments.py <input_no_3d> <input_with_3d> <output_no_3d> <output_with_3d>")
+            print("Usage: python trim_alignments.py <input_main> <input_structure> <output_main> <output_structure>")
             sys.exit(1)
             
-        input_no_3d = Path(sys.argv[1])
-        input_with_3d = Path(sys.argv[2])
-        output_no_3d = Path(sys.argv[3])
-        output_with_3d = Path(sys.argv[4])
+        input_main = Path(sys.argv[1])
+        input_structure = Path(sys.argv[2])
+        output_main = Path(sys.argv[3])
+        output_structure = Path(sys.argv[4])
         
         analysis = "test"
         paramset = "test"
@@ -143,13 +206,13 @@ def main():
     total_successful = 0
     total_failed = 0
     
-    # Process no-3D alignments
-    successful, failed = process_alignment_directory(input_no_3d, output_no_3d, "no-3D")
+    # Process main alignments
+    successful, failed = process_alignment_directory(input_main, output_main, "main")
     total_successful += successful
     total_failed += failed
     
-    # Process with-3D alignments
-    successful, failed = process_alignment_directory(input_with_3d, output_with_3d, "with-3D")
+    # Process structure alignments
+    successful, failed = process_alignment_directory(input_structure, output_structure, "structure")
     total_successful += successful
     total_failed += failed
     

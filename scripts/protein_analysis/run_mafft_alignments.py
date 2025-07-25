@@ -5,11 +5,11 @@ MAFFT Multiple Sequence Alignment Runner
 
 This script runs MAFFT alignments on all genes in a group.
 It reads input FASTA files from:
-  - msa_sequences/gram_{group}         → no 3D structure
-  - msa_sequences_with_3d_fasta/gram_{group} → with 3D structure
+  - main_msa_sequences/gram_{group}      → main MSA sequences only
+  - structure_msa_sequences/gram_{group} → main MSA + 3D structures
 And writes aligned outputs to:
-  - msa_alignments/gram_{group}
-  - msa_alignments_with_3d_fasta/gram_{group}
+  - main_alignments/gram_{group}      → alignments from main MSA
+  - structure_alignments/gram_{group} → alignments from structure MSA
 """
 
 import sys
@@ -39,32 +39,72 @@ def run_mafft(input_fasta: Path, output_fasta: Path, threads: int = 8):
 
 def main():
     try:
-        msa_no_3d = Path(snakemake.input.msa_no_3d)
-        msa_with_3d = Path(snakemake.input.msa_with_3d)
-        output_no_3d = Path(snakemake.output.no_3d)
-        output_with_3d = Path(snakemake.output.with_3d)
+        msa_main = Path(snakemake.input.msa_main)
+        msa_structure = Path(snakemake.input.msa_structure)
+        output_main = Path(snakemake.output.main)
+        output_structure = Path(snakemake.output.structure)
         threads = snakemake.params.threads
+        enable_no_3d = snakemake.params.enable_no_3d
+        enable_with_3d = snakemake.params.enable_with_3d
     except NameError:
-        msa_no_3d = Path(sys.argv[1])
-        msa_with_3d = Path(sys.argv[2])
-        output_no_3d = Path(sys.argv[3])
-        output_with_3d = Path(sys.argv[4])
+        msa_main = Path(sys.argv[1])
+        msa_structure = Path(sys.argv[2])
+        output_main = Path(sys.argv[3])
+        output_structure = Path(sys.argv[4])
         threads = int(sys.argv[5]) if len(sys.argv) > 5 else 4
+        enable_no_3d = True
+        enable_with_3d = True
 
-    output_no_3d.mkdir(parents=True, exist_ok=True)
-    output_with_3d.mkdir(parents=True, exist_ok=True)
+    output_main.mkdir(parents=True, exist_ok=True)
+    output_structure.mkdir(parents=True, exist_ok=True)
 
-    # Align no-3D sequences
-    for fasta_path in sorted(msa_no_3d.glob("*.fasta")):
-        gene = fasta_path.stem
-        output_fasta = output_no_3d / f"{gene}.fasta"
-        run_mafft(fasta_path, output_fasta, threads)
+    logging.info("=== MAFFT Multiple Sequence Alignment ===")
+    logging.info(f"Main MSA input: {msa_main}")
+    logging.info(f"Structure MSA input: {msa_structure}")
+    logging.info(f"Main alignments output: {output_main}")
+    logging.info(f"Structure alignments output: {output_structure}")
+    logging.info(f"Threads: {threads}")
 
-    # Align with-3D sequences
-    for fasta_path in sorted(msa_with_3d.glob("*.fasta")):
-        gene = fasta_path.stem
-        output_fasta = output_with_3d / f"{gene}.fasta"
-        run_mafft(fasta_path, output_fasta, threads)
+    total_genes = 0
+    successful_main = 0
+    successful_structure = 0
+
+    # Get all FASTA files from structure MSA (this should be the complete set)
+    fasta_files = list(msa_structure.glob("*.fasta"))
+    total_genes = len(fasta_files)
+    
+    logging.info(f"Found {total_genes} genes to align")
+
+    # Align main sequences (if enabled)
+    if enable_no_3d and msa_main.exists():
+        logging.info("\n--- Aligning Main MSA Sequences ---")
+        for fasta_path in sorted(msa_main.glob("*.fasta")):
+            gene = fasta_path.stem
+            output_fasta = output_main / f"{gene}.fasta"
+            if run_mafft(fasta_path, output_fasta, threads):
+                successful_main += 1
+    else:
+        logging.info("--- Skipping Main MSA Alignment (disabled or missing) ---")
+
+    # Align structure sequences (if enabled)
+    if enable_with_3d and msa_structure.exists():
+        logging.info("\n--- Aligning Structure MSA Sequences ---")
+        for fasta_path in sorted(msa_structure.glob("*.fasta")):
+            gene = fasta_path.stem
+            output_fasta = output_structure / f"{gene}.fasta"
+            if run_mafft(fasta_path, output_fasta, threads):
+                successful_structure += 1
+    else:
+        logging.info("--- Skipping Structure MSA Alignment (disabled or missing) ---")
+
+    # Summary
+    logging.info(f"\n=== MAFFT Alignment Summary ===")
+    logging.info(f"Total genes found: {total_genes}")
+    if enable_no_3d:
+        logging.info(f"Main alignments successful: {successful_main}")
+    if enable_with_3d:
+        logging.info(f"Structure alignments successful: {successful_structure}")
+    logging.info(f"=== MAFFT alignment completed! ===")
 
 if __name__ == "__main__":
     main()

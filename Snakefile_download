@@ -79,11 +79,15 @@ rule all_gene_selection:
 rule all_downloads:
     input:
         expand(
-            [config["paths"]["protein_sequences"]["download_sentinel"],
-             config["paths"]["protein_structures"]["download_sentinel"]],
+            config["paths"]["protein_sequences"]["download_sentinel"],
             analysis=config["species_batches"],
             paramset=config["quickgo_paramsets"],
-            group=["positive", "negative"]
+            group=["positive", "negative"]  # Keep protein_sequences by group
+        ),
+        expand(
+            config["paths"]["protein_structures"]["download_sentinel"],
+            analysis=config["species_batches"],
+            paramset=config["quickgo_paramsets"]
         )
 
 # ---------------------
@@ -284,10 +288,13 @@ rule download_3d_structures:
     params:
         analysis="{analysis}",
         paramset="{paramset}",
-        group="{group}",
+        group="unified",  # No longer gram-specific
         max_structures=config.get("3d_structures", {}).get("max_structures", 10),
-        include_computed_models=config.get("3d_structures", {}).get("include_computed_models", True)
-    group: "gram_group_{analysis}_{paramset}"
+        include_computed_models=config.get("3d_structures", {}).get("include_computed_models", True),
+        prioritize_extracellular=config.get("3d_structures", {}).get("prioritize_extracellular", True),
+        extracellular_keywords=config.get("3d_structures", {}).get("extracellular_keywords", ["extracellular", "outer membrane", "cell surface", "secreted"]),
+        intracellular_keywords=config.get("3d_structures", {}).get("intracellular_keywords", ["cytoplasm", "cytosol", "intracellular", "ribosome"])
+    group: "unified_structures_{analysis}_{paramset}"
     script:
         config["scripts"]["downloads"]["download_protein_structures"]
 
