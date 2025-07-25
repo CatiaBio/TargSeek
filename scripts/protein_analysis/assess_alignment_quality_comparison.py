@@ -289,13 +289,13 @@ def main():
     
     try:
         # Get parameters from Snakemake - handle 4 directory inputs
-        raw_no_3d = Path(snakemake.input.no_3d)
-        raw_with_3d = Path(snakemake.input.with_3d)
-        trimmed_no_3d = Path(snakemake.input.trim_no_3d)
-        trimmed_with_3d = Path(snakemake.input.trim_with_3d)
+        raw_main = Path(snakemake.input.main)
+        raw_structure = Path(snakemake.input.structure)
+        trimmed_main = Path(snakemake.input.trim_main)
+        trimmed_structure = Path(snakemake.input.trim_structure)
         
-        output_no_3d = Path(snakemake.output.no_3d)
-        output_with_3d = Path(snakemake.output.with_3d)
+        output_main = Path(snakemake.output.main)
+        output_structure = Path(snakemake.output.structure)
         
         analysis = snakemake.params.analysis
         paramset = snakemake.params.paramset
@@ -306,15 +306,15 @@ def main():
         # Test mode
         import sys
         if len(sys.argv) != 7:
-            print("Usage: python assess_alignment_quality_comparison.py <raw_no_3d> <raw_with_3d> <trim_no_3d> <trim_with_3d> <output_no_3d> <output_with_3d>")
+            print("Usage: python assess_alignment_quality_comparison.py <raw_main> <raw_structure> <trim_main> <trim_structure> <output_main> <output_structure>")
             sys.exit(1)
             
-        raw_no_3d = Path(sys.argv[1])
-        raw_with_3d = Path(sys.argv[2])
-        trimmed_no_3d = Path(sys.argv[3])
-        trimmed_with_3d = Path(sys.argv[4])
-        output_no_3d = Path(sys.argv[5])
-        output_with_3d = Path(sys.argv[6])
+        raw_main = Path(sys.argv[1])
+        raw_structure = Path(sys.argv[2])
+        trimmed_main = Path(sys.argv[3])
+        trimmed_structure = Path(sys.argv[4])
+        output_main = Path(sys.argv[5])
+        output_structure = Path(sys.argv[6])
         
         analysis = "test"
         paramset = "test"
@@ -328,19 +328,19 @@ def main():
     logging.info(f"Group: {group}")
     
     # Create output directories
-    output_no_3d.mkdir(parents=True, exist_ok=True)
-    output_with_3d.mkdir(parents=True, exist_ok=True)
+    output_main.mkdir(parents=True, exist_ok=True)
+    output_structure.mkdir(parents=True, exist_ok=True)
     
-    # Process no-3D alignments
-    no_3d_results, no_3d_files = process_alignment_set(raw_no_3d, trimmed_no_3d, output_no_3d, "no-3D")
+    # Process main alignments
+    main_results, main_files = process_alignment_set(raw_main, trimmed_main, output_main, "main")
     
-    # Process with-3D alignments
-    with_3d_results, with_3d_files = process_alignment_set(raw_with_3d, trimmed_with_3d, output_with_3d, "with-3D")
+    # Process structure alignments
+    structure_results, structure_files = process_alignment_set(raw_structure, trimmed_structure, output_structure, "structure")
     
     # Generate reports for each set separately
     all_sets = [
-        (no_3d_results, output_no_3d, "no-3D"),
-        (with_3d_results, output_with_3d, "with-3D")
+        (main_results, output_main, "main"),
+        (structure_results, output_structure, "structure")
     ]
     
     for results, output_dir, set_name in all_sets:

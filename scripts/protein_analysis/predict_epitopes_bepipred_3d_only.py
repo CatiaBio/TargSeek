@@ -26,7 +26,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 class BepiPredPredictor:
     """Interface for BepiPred 3.0 predictions"""
     
-    def __init__(self, bepipred_path="tools/BepiPred3.0", method="vt_pred", top_percentage=0.2):
+    def __init__(self, bepipred_path="tools/BepiPred3.0", method="vt_pred", top_percentage=0.2, raw_only=False):
         """
         Initialize BepiPred predictor
         
@@ -34,10 +34,12 @@ class BepiPredPredictor:
             bepipred_path: Path to BepiPred 3.0 installation
             method: Prediction method ('vt_pred' or 'mjv_pred')
             top_percentage: Top percentage of epitope residues to include (0.0-1.0)
+            raw_only: If True, skip HTML visualizations and extra files for faster processing
         """
         self.bepipred_path = Path(bepipred_path)
         self.method = method
         self.top_percentage = top_percentage
+        self.raw_only = raw_only
         self.script_path = self.bepipred_path / "bepipred3_CLI.py"
         
         if not self.script_path.exists():
@@ -69,40 +71,16 @@ class BepiPredPredictor:
                 fasta_file_abs = Path(fasta_file).resolve()
                 output_dir_abs = Path(output_dir).resolve()
                 
-                # Check environment type and set up command
-                venv_script = bepipred_dir / "venv" / "bin" / "activate"
-                activate_script = bepipred_dir / "activate_bepipred_conda.sh"
+                # Use targseek conda environment (preferred approach)
+                bepipred_unix = str(bepipred_dir).replace('\\', '/').replace('C:/', '/mnt/c/')
+                fasta_unix = str(fasta_file_abs).replace('\\', '/').replace('C:/', '/mnt/c/')
+                output_unix = str(output_dir_abs).replace('\\', '/').replace('C:/', '/mnt/c/')
                 
-                if venv_script.exists():
-                    # Use virtual environment
-                    # Convert Windows paths to Unix-style for bash
-                    bepipred_unix = str(bepipred_dir).replace('\\', '/').replace('C:/', '/mnt/c/')
-                    fasta_unix = str(fasta_file_abs).replace('\\', '/').replace('C:/', '/mnt/c/')
-                    output_unix = str(output_dir_abs).replace('\\', '/').replace('C:/', '/mnt/c/')
-                    
-                    cmd = [
-                        "bash", "-c", 
-                        f"cd '{bepipred_unix}' && source venv/bin/activate && python bepipred3_CLI.py -i '{fasta_unix}' -o '{output_unix}' -pred {self.method} -top {self.top_percentage}"
-                    ]
-                elif activate_script.exists():
-                    # Use conda environment
-                    bepipred_unix = str(bepipred_dir).replace('\\', '/').replace('C:/', '/mnt/c/')
-                    fasta_unix = str(fasta_file_abs).replace('\\', '/').replace('C:/', '/mnt/c/')
-                    output_unix = str(output_dir_abs).replace('\\', '/').replace('C:/', '/mnt/c/')
-                    
-                    cmd = [
-                        "bash", "-c",
-                        f"cd '{bepipred_unix}' && source activate_bepipred_conda.sh && python bepipred3_CLI.py -i '{fasta_unix}' -o '{output_unix}' -pred {self.method} -top {self.top_percentage}"
-                    ]
-                else:
-                    # Direct execution
-                    cmd = [
-                        "python", "bepipred3_CLI.py",
-                        "-i", str(fasta_file_abs),
-                        "-o", str(output_dir_abs),
-                        "-pred", self.method,
-                        "-top", str(self.top_percentage)
-                    ]
+                # Use BepiPred virtual environment (simpler and more reliable)
+                cmd = [
+                    "bash", "-c",
+                    f"cd '{bepipred_unix}' && source venv/bin/activate && python bepipred3_CLI.py -i '{fasta_unix}' -o '{output_unix}' -pred {self.method} -top {self.top_percentage}"
+                ]
                 
                 logging.info(f"Running BepiPred from directory: {bepipred_dir}")
                 result = subprocess.run(cmd, capture_output=True, text=True, timeout=900, cwd=str(bepipred_dir))
@@ -139,13 +117,22 @@ class BepiPredPredictor:
             save_path.mkdir(parents=True, exist_ok=True)
             
             # List of BepiPred output files to preserve
-            bepipred_files = [
-                'raw_output.csv',
-                'Bcell_epitope_preds.fasta',
-                'Bcell_epitope_top_20pct_preds.fasta',
-                'Bcell_linepitope_top_20pct_preds.fasta',
-                'output_interactive_figures.html'
-            ]
+            if self.raw_only:
+                # Raw-only mode: save only essential CSV and FASTA files
+                bepipred_files = [
+                    'raw_output.csv',
+                    'Bcell_epitope_preds.fasta'
+                ]
+                logging.info(f"Raw-only mode: saving only CSV and FASTA files for {sequence_id}")
+            else:
+                # Full mode: save all output files including visualizations
+                bepipred_files = [
+                    'raw_output.csv',
+                    'Bcell_epitope_preds.fasta',
+                    'Bcell_epitope_top_20pct_preds.fasta',
+                    'Bcell_linepitope_top_20pct_preds.fasta',
+                    'output_interactive_figures.html'
+                ]
             
             for filename in bepipred_files:
                 source_file = temp_path / filename
@@ -232,23 +219,36 @@ def predict_epitopes_for_3d_structure(fasta_path, predictor, output_dir):
         logging.error(f"Error processing {fasta_path}: {e}")
         return None
 
-def load_selected_3d_paths(paths_file):
-    """Load the list of selected 3D structure FASTA paths"""
-    paths = []
+def load_selected_3d_paths(paths_files):
+    """Load the list of selected 3D structure FASTA paths from multiple files"""
+    all_paths = []
     
-    try:
-        with open(paths_file, 'r') as f:
-            for line in f:
-                path = line.strip()
-                if path:
-                    paths.append(path)
-        
-        logging.info(f"Loaded {len(paths)} 3D structure paths")
-        return paths
-        
-    except Exception as e:
-        logging.error(f"Error loading paths file: {e}")
-        return []
+    if isinstance(paths_files, str):
+        paths_files = [paths_files]
+    
+    for paths_file in paths_files:
+        try:
+            with open(paths_file, 'r') as f:
+                for line in f:
+                    path = line.strip()
+                    if path:
+                        all_paths.append(path)
+            
+            logging.info(f"Loaded {len(all_paths)} paths from {paths_file}")
+            
+        except Exception as e:
+            logging.warning(f"Error loading paths file {paths_file}: {e}")
+    
+    # Remove duplicates while preserving order
+    unique_paths = []
+    seen = set()
+    for path in all_paths:
+        if path not in seen:
+            unique_paths.append(path)
+            seen.add(path)
+    
+    logging.info(f"Total: {len(all_paths)} paths, Unique: {len(unique_paths)} paths")
+    return unique_paths
 
 def create_summary_report(results, output_dir):
     """Create a summary report of all predictions"""
@@ -318,41 +318,54 @@ def main():
     """Main function for Snakemake integration"""
     
     try:
-        # Get inputs from Snakemake
-        selected_3d_paths_file = snakemake.input.selected_3d_paths
+        # Get inputs from Snakemake - expect both gram groups
+        selected_3d_paths_positive = snakemake.input.selected_3d_paths_positive
+        selected_3d_paths_negative = snakemake.input.selected_3d_paths_negative
         output_dir = snakemake.output[0]
         
         # Get parameters
         analysis = snakemake.params.analysis
         paramset = snakemake.params.paramset
-        group = snakemake.params.group
         
         # Get BepiPred config
         bepipred_config = snakemake.config.get('bepipred', {})
         bepipred_path = bepipred_config.get('path', 'tools/BepiPred3.0')
         
+        # Combine both paths files
+        paths_files = [selected_3d_paths_positive, selected_3d_paths_negative]
+        
     except NameError:
         # Test mode
         import sys
-        if len(sys.argv) != 3:
-            print("Usage: python predict_epitopes_bepipred_3d_only.py <selected_3d_paths.txt> <output_dir>")
+        if len(sys.argv) < 3:
+            print("Usage: python predict_epitopes_bepipred_3d_only.py <output_dir> [selected_3d_paths_file1] [selected_3d_paths_file2] ...")
+            print("Or: python predict_epitopes_bepipred_3d_only.py <output_dir> <selected_3d_paths_positive.txt> <selected_3d_paths_negative.txt>")
             sys.exit(1)
             
-        selected_3d_paths_file = sys.argv[1]
-        output_dir = sys.argv[2]
+        output_dir = sys.argv[1]
+        paths_files = sys.argv[2:] if len(sys.argv) > 2 else ["selected_3d_paths_gram_positive.txt", "selected_3d_paths_gram_negative.txt"]
         bepipred_path = "tools/BepiPred3.0"
-        bepipred_config = {'method': 'vt_pred', 'top_percentage': 0.2}
+        bepipred_config = {'method': 'vt_pred', 'top_percentage': 0.2, 'raw_only': True}
+        analysis = "analysis1"
+        paramset = "params1"
     
-    logging.info("=== BepiPred 3.0 Epitope Prediction for 3D Structures ===")
-    logging.info(f"Selected 3D paths file: {selected_3d_paths_file}")
+    logging.info("=== BepiPred 3.0 Epitope Prediction for Selected 3D Structures ===")
+    logging.info(f"Selected 3D paths files: {paths_files}")
     logging.info(f"Output directory: {output_dir}")
+    
+    # Show configuration
+    raw_only = bepipred_config.get('raw_only', False)
+    if raw_only:
+        logging.info("Raw-only mode: ENABLED (faster processing, essential files only)")
+    else:
+        logging.info("Full mode: ENABLED (includes HTML visualizations)")
     
     # Create output directory
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     
-    # Load selected 3D structure paths
-    paths = load_selected_3d_paths(selected_3d_paths_file)
+    # Load selected 3D structure paths from both gram groups
+    paths = load_selected_3d_paths(paths_files)
     
     if not paths:
         logging.error("No 3D structure paths found")
@@ -362,11 +375,13 @@ def main():
     try:
         method = bepipred_config.get('method', 'vt_pred')
         top_percentage = bepipred_config.get('top_percentage', 0.2)
+        raw_only = bepipred_config.get('raw_only', False)
         
         predictor = BepiPredPredictor(
             bepipred_path=bepipred_path, 
             method=method, 
-            top_percentage=top_percentage
+            top_percentage=top_percentage,
+            raw_only=raw_only
         )
     except FileNotFoundError as e:
         logging.error(f"BepiPred not found: {e}")

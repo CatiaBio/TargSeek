@@ -61,14 +61,38 @@ protein_selection:
   # If using top_n mode, specify maximum proteins per group
   max_proteins_per_group: 50
 
-# 3D structure download configuration
+# 3D structure download configuration (Enhanced with PDBML support)
 3d_structures:
-  # Maximum number of structures to download per gene (1-10)
-  max_structures: 10
+  # Maximum number of structures to download per gene (1-20)
+  max_structures: 20
   # Download computed models if no experimental structures available
   include_computed_models: true
   # Only download bacterial structures (taxonomy ID 2)
   bacterial_only: true
+  # Enhanced search: Use protein names from summary.tsv for better UniProt matching
+  use_protein_names: true
+  # Download both PDB (.pdb.gz) and PDBML (.xml.gz) formats for accurate residue mapping
+  download_pdbml: true
+  # Prioritize extracellular/surface proteins
+  prioritize_extracellular: true
+  # Preferred localization keywords (highest priority first)
+  extracellular_keywords:
+    - "extracellular"
+    - "outer membrane" 
+    - "cell surface"
+    - "secreted"
+    - "periplasm"
+    - "cell wall"
+    - "membrane"
+    - "surface"
+  # Keywords to deprioritize (intracellular proteins)
+  intracellular_keywords:
+    - "cytoplasm"
+    - "cytosol"
+    - "intracellular"
+    - "ribosome"
+    - "nucleus"
+    - "nucleoid"
 
 # =============================================================================
 # FILE SYSTEM PATHS
@@ -146,15 +170,22 @@ paths:
     download_sentinel: "data/protein_sequences/.{analysis}_{paramset}_{group}_download_complete"
 
   # -------------------------------------------------------------------------
-  # STAGE 5: 3D Structure Downloads
+  # STAGE 5: 3D Structure Downloads (Enhanced with PDBML support)
   # -------------------------------------------------------------------------
   protein_structures:
     # Base directory for 3D structure files
+    # Each gene directory contains:
+    #   - .pdb.gz files (legacy PDB format)  
+    #   - .xml.gz files (PDBML format with accurate residue numbering)
+    #   - .fasta files (protein sequences from PDB/UniProt)
+    #   - metadata.json (structure metadata)
     base_dir: "data/protein_structures"
-    # Completion sentinel files
-    download_sentinel: "data/protein_structures/.{analysis}_{paramset}_{group}_structures_complete"
+    # Completion sentinel files (unified, inside protein_structures folder)
+    download_sentinel: "data/protein_structures/{analysis}_{paramset}_structures_complete.sentinel"
     # Metadata extraction
     metadata_tsv: "data/protein_structures/{analysis}_{paramset}_downloaded_structures.tsv"
+    # Summary file with protein names (used for enhanced UniProt searches)
+    summary_file: "results/{analysis}_{paramset}/gene_selection/summary.tsv"
 
   # -------------------------------------------------------------------------
   # EXTERNAL DATA SOURCES
@@ -226,3 +257,5 @@ cache:
   protein_sequences: "cache/protein_sequences/protein_fasta_cache.json"
   # 3D structure searches and downloads (UniProt/PDB API calls)
   protein_3d_structures: "cache/protein_structures/protein_3d_structure_cache.json"
+  # Gene-level download completion tracking (prevents re-downloading existing structures)
+  gene_downloads: "cache/protein_structures/gene_downloads_cache.json"

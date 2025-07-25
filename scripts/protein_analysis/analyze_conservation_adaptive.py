@@ -449,15 +449,15 @@ def main():
     
     try:
         # Get parameters from Snakemake - handle 6 directory inputs
-        raw_no_3d = Path(snakemake.input.no_3d)
-        raw_with_3d = Path(snakemake.input.with_3d)
-        trimmed_no_3d = Path(snakemake.input.trim_no_3d)
-        trimmed_with_3d = Path(snakemake.input.trim_with_3d)
-        quality_no_3d = Path(snakemake.input.quality_assessment_no_3d)
-        quality_with_3d = Path(snakemake.input.quality_assessment_with_3d)
+        raw_main = Path(snakemake.input.main)
+        raw_structure = Path(snakemake.input.structure)
+        trimmed_main = Path(snakemake.input.trim_main)
+        trimmed_structure = Path(snakemake.input.trim_structure)
+        quality_main = Path(snakemake.input.quality_main)
+        quality_structure = Path(snakemake.input.quality_structure)
         
-        output_no_3d = Path(snakemake.output.no_3d)
-        output_with_3d = Path(snakemake.output.with_3d)
+        output_main = Path(snakemake.output.main)
+        output_structure = Path(snakemake.output.structure)
         
         analysis = snakemake.params.analysis
         paramset = snakemake.params.paramset
@@ -468,17 +468,17 @@ def main():
     except NameError:
         # Test mode
         if len(sys.argv) != 9:
-            print("Usage: python analyze_conservation_adaptive.py <raw_no_3d> <raw_with_3d> <trim_no_3d> <trim_with_3d> <quality_no_3d> <quality_with_3d> <output_no_3d> <output_with_3d>")
+            print("Usage: python analyze_conservation_adaptive.py <raw_main> <raw_structure> <trim_main> <trim_structure> <quality_main> <quality_structure> <output_main> <output_structure>")
             sys.exit(1)
             
-        raw_no_3d = Path(sys.argv[1])
-        raw_with_3d = Path(sys.argv[2])
-        trimmed_no_3d = Path(sys.argv[3])
-        trimmed_with_3d = Path(sys.argv[4])
-        quality_no_3d = Path(sys.argv[5])
-        quality_with_3d = Path(sys.argv[6])
-        output_no_3d = Path(sys.argv[7])
-        output_with_3d = Path(sys.argv[8])
+        raw_main = Path(sys.argv[1])
+        raw_structure = Path(sys.argv[2])
+        trimmed_main = Path(sys.argv[3])
+        trimmed_structure = Path(sys.argv[4])
+        quality_main = Path(sys.argv[5])
+        quality_structure = Path(sys.argv[6])
+        output_main = Path(sys.argv[7])
+        output_structure = Path(sys.argv[8])
         
         analysis = "test"
         paramset = "test"
@@ -495,24 +495,24 @@ def main():
     
     total_genes = 0
     
-    # Process no-3D conservation
-    genes_no_3d = process_conservation_set(
-        raw_no_3d, trimmed_no_3d, quality_no_3d, 
-        output_no_3d, "no-3D", create_logos
+    # Process main conservation
+    genes_main = process_conservation_set(
+        raw_main, trimmed_main, quality_main, 
+        output_main, "main", create_logos
     )
-    total_genes += genes_no_3d
+    total_genes += genes_main
     
-    # Process with-3D conservation  
-    genes_with_3d = process_conservation_set(
-        raw_with_3d, trimmed_with_3d, quality_with_3d,
-        output_with_3d, "with-3D", create_logos
+    # Process structure conservation  
+    genes_structure = process_conservation_set(
+        raw_structure, trimmed_structure, quality_structure,
+        output_structure, "structure", create_logos
     )
-    total_genes += genes_with_3d
+    total_genes += genes_structure
     
     logging.info(f"\n=== Conservation Analysis Complete ===")
     logging.info(f"Total genes processed: {total_genes}")
-    logging.info(f"  No-3D genes: {genes_no_3d}")
-    logging.info(f"  With-3D genes: {genes_with_3d}")
+    logging.info(f"  Main genes: {genes_main}")
+    logging.info(f"  Structure genes: {genes_structure}")
     logging.info(f"Results saved to separate directories for no-3D and with-3D analyses")
 
 if __name__ == "__main__":
