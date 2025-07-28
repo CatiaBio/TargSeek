@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
 """
-MSA Alignment Trimming (ClipKIT/trimAl)
-======================================
+MSA Alignment Trimming (ClipKIT)
+================================
 
-This script runs ClipKIT (preferred) or trimAl on all alignment files to remove 
+This script runs ClipKIT on all alignment files to remove 
 poorly aligned regions, gaps, and spurious sequences, improving alignment quality 
 for downstream analysis.
 
-ClipKIT is the recommended tool as it significantly outperforms trimAl by retaining
-phylogenetically informative sites rather than aggressively removing gaps.
+ClipKIT retains phylogenetically informative sites while removing spurious gaps.
 """
 
 import subprocess
@@ -64,55 +63,6 @@ def run_clipkit(input_file, output_file, mode="smart-gap"):
         logging.error(f"Unexpected error running ClipKIT on {input_file.name}: {e}")
         return False
 
-def run_trimal(input_file, output_file, method="automated1"):
-    """
-    Run trimAl on a single alignment file (legacy fallback)
-    
-    Args:
-        input_file: Path to input aligned FASTA file
-        output_file: Path to output trimmed FASTA file
-        method: trimAl method to use (automated1, strict, etc.)
-        
-    Returns:
-        bool: True if successful, False otherwise
-    """
-    try:
-        # Create output directory if needed
-        output_file.parent.mkdir(parents=True, exist_ok=True)
-        
-        # Run trimAl command
-        cmd = [
-            "trimal",
-            "-in", str(input_file),
-            "-out", str(output_file),
-            f"-{method}"  # e.g., -automated1
-        ]
-        
-        logging.info(f"Running trimAl: {input_file.name} -> {output_file.name}")
-        logging.debug(f"Command: {' '.join(cmd)}")
-        
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            check=True
-        )
-        
-        # Check if output file was created and has content
-        if output_file.exists() and output_file.stat().st_size > 0:
-            logging.info(f"  ✓ Successfully trimmed {input_file.name}")
-            return True
-        else:
-            logging.warning(f"  ✗ trimAl produced empty output for {input_file.name}")
-            return False
-            
-    except subprocess.CalledProcessError as e:
-        logging.error(f"  ✗ trimAl failed for {input_file.name}: {e}")
-        logging.error(f"  stderr: {e.stderr}")
-        return False
-    except Exception as e:
-        logging.error(f"  ✗ Error processing {input_file.name}: {e}")
-        return False
 
 def process_alignment_directory(input_dir, output_dir, dir_name):
     """Process all alignments in a directory"""
@@ -146,25 +96,12 @@ def process_alignment_directory(input_dir, output_dir, dir_name):
         gene_name = fasta_file.stem
         output_file = output_dir / f"{gene_name}.fasta"
         
-        # Try ClipKIT first, fallback to trimAl if it fails
-        trimming_method = getattr(snakemake.params, 'trimming_method', 'clipkit') if 'snakemake' in globals() else 'clipkit'
-        
-        if trimming_method == 'clipkit':
-            clipkit_mode = getattr(snakemake.params, 'clipkit_mode', 'smart-gap') if 'snakemake' in globals() else 'smart-gap'
-            if run_clipkit(fasta_file, output_file, mode=clipkit_mode):
-                successful += 1
-            elif run_trimal(fasta_file, output_file, method="automated1"):
-                logging.warning(f"ClipKIT failed for {fasta_file.name}, used trimAl fallback")
-                successful += 1
-            else:
-                failed += 1
+        # Run ClipKIT on alignment
+        clipkit_mode = getattr(snakemake.params, 'clipkit_mode', 'smart-gap') if 'snakemake' in globals() else 'smart-gap'
+        if run_clipkit(fasta_file, output_file, mode=clipkit_mode):
+            successful += 1
         else:
-            # Use trimAl directly
-            trimal_method = getattr(snakemake.params, 'trimal_method', 'automated1') if 'snakemake' in globals() else 'automated1'
-            if run_trimal(fasta_file, output_file, method=trimal_method):
-                successful += 1
-            else:
-                failed += 1
+            failed += 1
     
     return successful, failed
 
@@ -197,7 +134,7 @@ def main():
         paramset = "test"
         group = "test"
     
-    logging.info(f"trimAl Alignment Trimming")
+    logging.info(f"ClipKIT Alignment Trimming")
     logging.info(f"="*50)
     logging.info(f"Analysis: {analysis}")
     logging.info(f"Paramset: {paramset}")
@@ -217,7 +154,7 @@ def main():
     total_failed += failed
     
     # Summary
-    logging.info(f"\ntrimAl processing complete:")
+    logging.info(f"\nClipKIT processing complete:")
     logging.info(f"  ✓ Total successful: {total_successful}")
     logging.info(f"  ✗ Total failed: {total_failed}")
     

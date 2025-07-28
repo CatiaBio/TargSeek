@@ -82,25 +82,18 @@ processing:
   enable_no_3d: false
   # Enable/disable with_3d processing (alignments with 3D structures)
   enable_with_3d: true
+
+# Epitope analysis settings
+epitope_analysis:
+  # Minimum length for linear epitopes (residues)
+  min_epitope_length: 6
   
-# MSA Trimming settings - ClipKIT (preferred) or trimAl (legacy)
+# MSA Trimming settings - ClipKIT
 trimming:
-  # Trimming tool: "clipkit" (recommended) or "trimal" (legacy)
-  method: "clipkit"
-  
-  # ClipKIT settings (when method="clipkit")
+  # ClipKIT settings
   clipkit:
     # ClipKIT mode: "smart-gap" (recommended), "kpic", "kpic-smart-gap", "kpi", "gappy", etc.
     mode: "smart-gap"
-  
-  # trimAl settings (when method="trimal" or as fallback)
-  trimal:
-    # Trimming method: "automated1", "gappyout", "strict", or "custom"
-    method: "automated1"
-    # Custom gap threshold (0.0-1.0, only used if method is "custom")
-    gap_threshold: 0.5
-    # Minimum sequence similarity threshold
-    similarity_threshold: 0.001
 
 # Conservation analysis settings
 conservation:
@@ -189,54 +182,58 @@ paths:
   # STAGE 2: Multiple Sequence Alignment
   # -------------------------------------------------------------------------
   msa:
-    # Main MSA sequences (foundation for both no_3d and with_3d)
-    main_sequences: "results/{analysis}_{paramset}/protein_analysis/main_msa_sequences/gram_{group}"
+    # MSA sequences (foundation for both no_3d and with_3d)
+    sequences: "results/{analysis}_{paramset}/protein_analysis/sequences/gram_{group}"
     
     # Final MSA input sequences (FASTA files by gene)
-    sequences_main: "results/{analysis}_{paramset}/protein_analysis/main_msa_sequences/gram_{group}"
-    sequences_structure: "results/{analysis}_{paramset}/protein_analysis/structure_msa_sequences/gram_{group}"
+    sequences_main: "results/{analysis}_{paramset}/protein_analysis/sequences/gram_{group}"
+    sequences_structure: "results/{analysis}_{paramset}/protein_analysis/sequences_with_structure/gram_{group}"
     
     # MAFFT alignment results
-    alignments_main: "results/{analysis}_{paramset}/protein_analysis/main_alignments/gram_{group}"
-    alignments_structure: "results/{analysis}_{paramset}/protein_analysis/structure_alignments/gram_{group}"
+    alignments_main: "results/{analysis}_{paramset}/protein_analysis/sequences/alignments/gram_{group}"
+    alignments_structure: "results/{analysis}_{paramset}/protein_analysis/sequences_with_structure/alignments/gram_{group}"
     
-    # trimAl trimmed alignments
-    trimmed_main: "results/{analysis}_{paramset}/protein_analysis/main_trimmed/gram_{group}"
-    trimmed_structure: "results/{analysis}_{paramset}/protein_analysis/structure_trimmed/gram_{group}"
+    # ClipKIT trimmed alignments
+    trimmed_main: "results/{analysis}_{paramset}/protein_analysis/sequences/trimmed/gram_{group}"
+    trimmed_structure: "results/{analysis}_{paramset}/protein_analysis/sequences_with_structure/trimmed/gram_{group}"
 
   # -------------------------------------------------------------------------
   # STAGE 3: Quality Assessment
   # -------------------------------------------------------------------------
   quality:
     # Alignment quality metrics
-    assessment_main: "results/{analysis}_{paramset}/protein_analysis/main_msa_quality/gram_{group}"
-    assessment_structure: "results/{analysis}_{paramset}/protein_analysis/structure_msa_quality/gram_{group}"
+    assessment_main: "results/{analysis}_{paramset}/protein_analysis/sequences/quality/gram_{group}"
+    assessment_structure: "results/{analysis}_{paramset}/protein_analysis/sequences_with_structure/quality/gram_{group}"
 
   # -------------------------------------------------------------------------
   # STAGE 4: Conservation Analysis
   # -------------------------------------------------------------------------
   conservation:
     # Conservation analysis results
-    results_main: "results/{analysis}_{paramset}/protein_analysis/main_conservation/gram_{group}"
-    results_structure: "results/{analysis}_{paramset}/protein_analysis/structure_conservation/gram_{group}"
+    results_main: "results/{analysis}_{paramset}/protein_analysis/sequences/conservation/gram_{group}"
+    results_structure: "results/{analysis}_{paramset}/protein_analysis/sequences_with_structure/conservation/gram_{group}"
 
   # -------------------------------------------------------------------------
   # STAGE 5: Conserved Sequence Extraction
   # -------------------------------------------------------------------------
   conserved:
     # Conserved sequences from raw alignments
-    raw_sequences_main: "results/{analysis}_{paramset}/protein_analysis/main_conserved_sequences_raw_gram_{group}.tsv"
-    raw_sequences_structure: "results/{analysis}_{paramset}/protein_analysis/structure_conserved_sequences_raw_gram_{group}.tsv"
+    raw_sequences_main: "results/{analysis}_{paramset}/protein_analysis/sequences/conserved_sequences_raw_gram_{group}.tsv"
+    raw_sequences_structure: "results/{analysis}_{paramset}/protein_analysis/sequences_with_structure/conserved_sequences_raw_gram_{group}.tsv"
     # Conserved sequences from trimmed alignments
-    trimmed_sequences_main: "results/{analysis}_{paramset}/protein_analysis/main_conserved_sequences_trimmed_gram_{group}.tsv"
-    trimmed_sequences_structure: "results/{analysis}_{paramset}/protein_analysis/structure_conserved_sequences_trimmed_gram_{group}.tsv"
+    trimmed_sequences_main: "results/{analysis}_{paramset}/protein_analysis/sequences/conserved_sequences_trimmed_gram_{group}.tsv"
+    trimmed_sequences_structure: "results/{analysis}_{paramset}/protein_analysis/sequences_with_structure/conserved_sequences_trimmed_gram_{group}.tsv"
 
   # -------------------------------------------------------------------------
   # STAGE 6: Epitope Prediction
   # -------------------------------------------------------------------------
   epitopes:
+    # Used structures mapping for BepiPred analysis
+    used_structures_mapping: "results/{analysis}_{paramset}/protein_analysis/sequences_with_structure/epitope_predictions_bepipred/used_structures_mapping.tsv"
     # BepiPred 3.0 predictions
-    bepipred_predictions: "results/{analysis}_{paramset}/protein_analysis/epitope_predictions_bepipred"
+    bepipred_predictions: "results/{analysis}_{paramset}/protein_analysis/sequences_with_structure/epitope_predictions_bepipred"
+    # Epitope tables (linear epitopes and raw scores)
+    epitope_tables_sentinel: "results/{analysis}_{paramset}/protein_analysis/sequences_with_structure/epitope_predictions_bepipred/epitope_tables_complete.sentinel"
 
   # -------------------------------------------------------------------------
   # STAGE 6: Summaries and Reports  
@@ -257,8 +254,8 @@ scripts:
   # -------------------------------------------------------------------------
   sequence_prep:
     create_sequence_references: "scripts/protein_analysis/create_sequence_references.py"
-    create_main_msa: "scripts/protein_analysis/create_main_msa_sequences.py"
-    select_3d_from_main_msa: "scripts/protein_analysis/select_3d_from_main_msa.py"
+    create_sequences: "scripts/protein_analysis/create_main_msa_sequences.py"
+    select_3d_from_sequences: "scripts/protein_analysis/select_3d_from_main_msa.py"
     create_final_msa: "scripts/protein_analysis/create_final_msa_files.py"
   
   # -------------------------------------------------------------------------
@@ -290,7 +287,9 @@ scripts:
   # STAGE 6: Epitope Prediction Scripts
   # -------------------------------------------------------------------------
   epitopes:
+    create_used_structures_mapping: "scripts/protein_analysis/create_used_structures_mapping.py"
     predict_epitopes_bepipred: "scripts/protein_analysis/predict_epitopes_bepipred_3d_only.py"
+    create_epitope_tables: "scripts/protein_analysis/create_epitope_tables_from_bepipred.py"
   
   # -------------------------------------------------------------------------
   # STAGE 6: Summary and Report Scripts

@@ -295,18 +295,49 @@ def process_bepipred_outputs(output_dir, min_epitope_length=6):
     logging.info(f"Success rate: {processed/(processed+failed)*100:.1f}%" if (processed+failed) > 0 else "No files processed")
 
 def main():
-    """Main function"""
-    parser = argparse.ArgumentParser(description='Create epitope tables from BepiPred CSV output')
-    parser.add_argument('output_dir', help='Directory containing BepiPred output files')
-    parser.add_argument('--min-length', type=int, default=6, help='Minimum epitope length (default: 6)')
+    """Main function for both command line and Snakemake usage"""
     
-    args = parser.parse_args()
-    
-    if not Path(args.output_dir).exists():
-        logging.error(f"Output directory does not exist: {args.output_dir}")
-        sys.exit(1)
-    
-    process_bepipred_outputs(args.output_dir, args.min_length)
+    # Check if running from Snakemake
+    if 'snakemake' in globals():
+        # Running from Snakemake
+        bepipred_sentinel = snakemake.input.bepipred_sentinel
+        sentinel_file = snakemake.output.epitope_tables_sentinel
+        min_length = snakemake.params.get('min_epitope_length', 6)
+        analysis = snakemake.params.analysis
+        paramset = snakemake.params.paramset
+        
+        # Derive BepiPred directory from sentinel file path
+        from pathlib import Path
+        bepipred_dir = Path(bepipred_sentinel).parent
+        
+        logging.info(f"Running epitope table creation for {analysis}_{paramset}")
+        logging.info(f"BepiPred directory: {bepipred_dir}")
+        logging.info(f"Sentinel file: {sentinel_file}")
+        
+        # Process BepiPred outputs
+        process_bepipred_outputs(bepipred_dir, min_length)
+        
+        # Create sentinel file
+        with open(sentinel_file, 'w') as f:
+            f.write(f"Epitope tables creation completed for {analysis}_{paramset}\n")
+            f.write(f"Minimum epitope length: {min_length}\n")
+            f.write(f"Processed directory: {bepipred_dir}\n")
+        
+        logging.info(f"Sentinel file created: {sentinel_file}")
+        
+    else:
+        # Running from command line
+        parser = argparse.ArgumentParser(description='Create epitope tables from BepiPred CSV output')
+        parser.add_argument('output_dir', help='Directory containing BepiPred output files')
+        parser.add_argument('--min-length', type=int, default=6, help='Minimum epitope length (default: 6)')
+        
+        args = parser.parse_args()
+        
+        if not Path(args.output_dir).exists():
+            logging.error(f"Output directory does not exist: {args.output_dir}")
+            sys.exit(1)
+        
+        process_bepipred_outputs(args.output_dir, args.min_length)
 
 if __name__ == "__main__":
     main()

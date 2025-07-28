@@ -3,7 +3,7 @@
 Alignment Quality Assessment - Before/After Comparison
 ====================================================
 
-This script compares alignment quality before and after trimAl processing:
+This script compares alignment quality before and after ClipKIT processing:
 - Basic statistics (length, gaps, sequences)
 - Conservation analysis
 - Gap distribution analysis
@@ -121,40 +121,40 @@ def create_comparison_plots(comparison_df, output_dir):
     
     # Subplot 1: Quality scores
     plt.subplot(2, 2, 1)
-    raw_scores = comparison_df[comparison_df['file_type'] == 'raw']['quality_score']
-    trimmed_scores = comparison_df[comparison_df['file_type'] == 'trimmed']['quality_score']
+    raw_scores = comparison_df[comparison_df['file_type'].str.startswith('raw')]['quality_score']
+    trimmed_scores = comparison_df[comparison_df['file_type'].str.startswith('trimmed')]['quality_score']
     
-    plt.boxplot([raw_scores, trimmed_scores], labels=['Raw MAFFT', 'After trimAl'])
+    plt.boxplot([raw_scores, trimmed_scores], tick_labels=['Raw MAFFT', 'After Trimming'])
     plt.ylabel('Quality Score')
     plt.title('Alignment Quality Comparison')
     plt.grid(True, alpha=0.3)
     
     # Subplot 2: Gap percentage
     plt.subplot(2, 2, 2)
-    raw_gaps = comparison_df[comparison_df['file_type'] == 'raw']['gap_percentage']
-    trimmed_gaps = comparison_df[comparison_df['file_type'] == 'trimmed']['gap_percentage']
+    raw_gaps = comparison_df[comparison_df['file_type'].str.startswith('raw')]['gap_percentage']
+    trimmed_gaps = comparison_df[comparison_df['file_type'].str.startswith('trimmed')]['gap_percentage']
     
-    plt.boxplot([raw_gaps, trimmed_gaps], labels=['Raw MAFFT', 'After trimAl'])
+    plt.boxplot([raw_gaps, trimmed_gaps], tick_labels=['Raw MAFFT', 'After Trimming'])
     plt.ylabel('Gap Percentage (%)')
     plt.title('Gap Content Comparison')
     plt.grid(True, alpha=0.3)
     
     # Subplot 3: Conservation
     plt.subplot(2, 2, 3)
-    raw_cons = comparison_df[comparison_df['file_type'] == 'raw']['mean_conservation']
-    trimmed_cons = comparison_df[comparison_df['file_type'] == 'trimmed']['mean_conservation']
+    raw_cons = comparison_df[comparison_df['file_type'].str.startswith('raw')]['mean_conservation']
+    trimmed_cons = comparison_df[comparison_df['file_type'].str.startswith('trimmed')]['mean_conservation']
     
-    plt.boxplot([raw_cons, trimmed_cons], labels=['Raw MAFFT', 'After trimAl'])
+    plt.boxplot([raw_cons, trimmed_cons], tick_labels=['Raw MAFFT', 'After Trimming'])
     plt.ylabel('Mean Conservation')
     plt.title('Conservation Comparison')
     plt.grid(True, alpha=0.3)
     
     # Subplot 4: Alignment length
     plt.subplot(2, 2, 4)
-    raw_length = comparison_df[comparison_df['file_type'] == 'raw']['alignment_length']
-    trimmed_length = comparison_df[comparison_df['file_type'] == 'trimmed']['alignment_length']
+    raw_length = comparison_df[comparison_df['file_type'].str.startswith('raw')]['alignment_length']
+    trimmed_length = comparison_df[comparison_df['file_type'].str.startswith('trimmed')]['alignment_length']
     
-    plt.boxplot([raw_length, trimmed_length], labels=['Raw MAFFT', 'After trimAl'])
+    plt.boxplot([raw_length, trimmed_length], tick_labels=['Raw MAFFT', 'After Trimming'])
     plt.ylabel('Alignment Length')
     plt.title('Length Comparison')
     plt.grid(True, alpha=0.3)
@@ -167,8 +167,8 @@ def create_comparison_plots(comparison_df, output_dir):
     plt.figure(figsize=(14, 8))
     
     # Merge raw and trimmed data for each gene
-    raw_df = comparison_df[comparison_df['file_type'] == 'raw'].set_index('gene')
-    trimmed_df = comparison_df[comparison_df['file_type'] == 'trimmed'].set_index('gene')
+    raw_df = comparison_df[comparison_df['file_type'].str.startswith('raw')].set_index('gene')
+    trimmed_df = comparison_df[comparison_df['file_type'].str.startswith('trimmed')].set_index('gene')
     
     common_genes = set(raw_df.index) & set(trimmed_df.index)
     if common_genes:
@@ -204,8 +204,8 @@ def add_improvement_classification(comparison_df):
     """Add improvement classification column to comparison DataFrame"""
     
     # Separate raw and trimmed data
-    raw_df = comparison_df[comparison_df['file_type'] == 'raw'].set_index('gene')
-    trimmed_df = comparison_df[comparison_df['file_type'] == 'trimmed'].set_index('gene')
+    raw_df = comparison_df[comparison_df['file_type'].str.startswith('raw')].set_index('gene')
+    trimmed_df = comparison_df[comparison_df['file_type'].str.startswith('trimmed')].set_index('gene')
     
     # Add improvement columns to the original DataFrame
     improvement_classification = []
@@ -398,7 +398,7 @@ def main():
         logging.info(f"Quality comparison complete for {set_name}!")
         if 'improvement' in summary_stats:
             imp = summary_stats['improvement']
-            logging.info(f"trimAl Results for {set_name}:")
+            logging.info(f"ClipKIT Results for {set_name}:")
             logging.info(f"  Quality improvement: {imp['quality_improvement']:+.1f} points")
             logging.info(f"  Gap reduction: {imp['gap_reduction']:+.1f}%")
             logging.info(f"  Conservation change: {imp['conservation_change']:+.3f}")

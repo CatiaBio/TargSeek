@@ -81,7 +81,7 @@ scripts/
 ├── 📄 download_3d_structures.py          # PDB structure downloading
 ├── 📄 get_msa_sequences.py               # MSA sequence selection with 3D priority
 ├── 📄 run_mafft_alignments.py           # MAFFT alignment execution
-├── 📄 trim_alignments.py                # trimAl alignment optimization
+├── 📄 trim_alignments.py                # ClipKIT alignment optimization
 ├── 📄 assess_alignment_quality_comparison.py # Quality assessment
 └── 📄 analyze_conservation_adaptive.py   # Conservation analysis
 ```
@@ -234,7 +234,7 @@ results/
 │   └── 📁 analysis_1_params_1_gram_positive/
 │       ├── 📄 gene1_aligned.fasta
 │       └── 📄 gene2_aligned.fasta
-├── 📁 msa_trimmed/                  # trimAl optimized alignments
+├── 📁 msa_trimmed/                  # ClipKIT optimized alignments
 │   └── 📁 analysis_1_params_1_gram_positive/
 │       ├── 📄 gene1_trimmed.fasta
 │       └── 📄 gene2_trimmed.fasta

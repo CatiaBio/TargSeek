@@ -1342,9 +1342,9 @@ def main():
         extracellular_keywords = ["extracellular", "outer membrane", "cell surface", "secreted", "periplasm", "cell wall", "membrane", "surface"]
         intracellular_keywords = ["cytoplasm", "cytosol", "intracellular", "ribosome", "nucleus", "nucleoid"]
         proteins_file = Path(f"results/proteins_to_study/{analysis}_{paramset}_gram_{group}.tsv")
-        structures_dir = Path("data/proteins_3d_structure")
+        structures_dir = Path("data/protein_structures")
         aliases_file = Path(f"data/quickgo/{paramset}/gene_aliases.json")
-        sentinel_file = Path(f"data/proteins_3d_structure/.{analysis}_{paramset}_{group}_structures_complete")
+        sentinel_file = Path(f"data/protein_structures/.{analysis}_{paramset}_{group}_structures_complete")
         summary_file = Path(f"results/{analysis}_{paramset}/gene_selection/summary.tsv")
     
     logging.info(f"Downloading bacterial 3D structures for {analysis}_{paramset} (unified Gram-independent)")

@@ -64,7 +64,7 @@ protein_selection:
 # 3D structure download configuration (Enhanced with PDBML support)
 3d_structures:
   # Maximum number of structures to download per gene (1-20)
-  max_structures: 20
+  max_structures: 15
   # Download computed models if no experimental structures available
   include_computed_models: true
   # Only download bacterial structures (taxonomy ID 2)
@@ -184,6 +184,8 @@ paths:
     download_sentinel: "data/protein_structures/{analysis}_{paramset}_structures_complete.sentinel"
     # Metadata extraction
     metadata_tsv: "data/protein_structures/{analysis}_{paramset}_downloaded_structures.tsv"
+    # PDB numbering extraction
+    pdb_numbering_sentinel: "data/protein_structures/{analysis}_{paramset}_pdb_numbering_complete.sentinel"
     # Summary file with protein names (used for enhanced UniProt searches)
     summary_file: "results/{analysis}_{paramset}/gene_selection/summary.tsv"
 
@@ -238,6 +240,7 @@ scripts:
     download_protein_sequences: "scripts/gene_selection/download_protein_sequences.py"
     download_protein_structures: "scripts/gene_selection/download_protein_structures.py"
     extract_protein_structures_metadata: "scripts/gene_selection/extract_protein_structures_metadata.py"
+    extract_pdb_numbering: "scripts/gene_selection/extract_pdb_numbering.py"
   
   # -------------------------------------------------------------------------
   # REPORTING SCRIPTS

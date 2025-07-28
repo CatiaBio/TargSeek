@@ -15,9 +15,11 @@ The pipeline follows a **linear workflow** with these key stages:
 3. **Gene Coverage Assessment**: Checks how many taxa contain proteins for each gene using NCBI Protein database
 4. **Protein Selection**: Filters and selects top proteins based on coverage thresholds
 5. **Sequence Download**: Downloads protein sequences from NCBI for selected genes
-6. **Multiple Sequence Alignment**: Uses MAFFT for sequence alignment
-7. **Alignment Processing**: Quality checks with AliStat and trimming with trimAl
-8. **Conserved Region Analysis**: Identifies conserved amino acid positions
+6. **3D Structure Download**: Downloads 3D protein structures from PDB database
+7. **PDB Numbering Extraction**: Extracts amino acid numbering from PDB structure files
+8. **Multiple Sequence Alignment**: Uses MAFFT for sequence alignment
+9. **Alignment Processing**: Quality checks with AliStat and trimming with ClipKIT
+10. **Conserved Region Analysis**: Identifies conserved amino acid positions
 
 ## Core Components
 
@@ -113,16 +115,20 @@ snakemake all_epitope_predictions_bepipred --cores 4
 - `gene_taxa_coverage_unified.py`: NCBI protein database coverage assessment
 - `download_protein_sequences.py`: Protein sequence download with caching
 - `download_3d_structures.py`: PDB structure download and integration
+- `extract_protein_structures_metadata.py`: Extract structure metadata to TSV format
+- `extract_pdb_numbering.py`: Extract amino acid numbering from PDB files
 - `select_proteins_to_study.py`: Final protein selection based on thresholds
 
 ### Analysis Pipeline Scripts (`scripts/protein_analysis/`)
 - `create_sequence_references.py`: MSA-ready sequence preparation
 - `create_msa_fasta.py`: FASTA file creation for alignments
 - `run_mafft_alignments.py`: Multiple sequence alignment with MAFFT
-- `trim_alignments.py`: Alignment trimming with trimAl
+- `trim_alignments.py`: Alignment trimming with ClipKIT
 - `assess_alignment_quality_comparison.py`: Quality assessment with AliStat
 - `analyze_conservation_adaptive.py`: Conservation analysis and scoring
+- `create_used_structures_mapping.py`: Map used 3D structures for epitope analysis
 - `predict_epitopes_bepipred_3d_only.py`: BepiPred 3.0 epitope prediction
+- `create_epitope_tables_from_bepipred.py`: Generate epitope tables from BepiPred output
 
 ## Cache Management
 
@@ -166,7 +172,7 @@ python utils/cache/initialize_3d_structure_cache.py
 Core tools managed via conda (`env.yml`):
 - **Snakemake**: Workflow management
 - **MAFFT**: Multiple sequence alignment  
-- **trimAl**: Alignment trimming
+- **ClipKIT**: Alignment trimming
 - **Biopython**: Sequence parsing and API interactions
 - **pandas**: Data manipulation
 - **matplotlib, logomaker**: Visualization

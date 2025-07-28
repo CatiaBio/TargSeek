@@ -8,7 +8,7 @@ conservation analysis, and epitope prediction for the TargSeek project.
 ## Prerequisites
 - Conda environment 'targseek' must be activated: `conda activate targseek`
 - Download pipeline must be completed first (proteins and structures downloaded)
-- MAFFT, trimAl, and BepiPred 3.0 must be installed
+- MAFFT, ClipKIT, and BepiPred 3.0 must be installed
 - AliStat must be compiled for quality assessment
 
 ## Basic Usage
@@ -90,7 +90,7 @@ snakemake -s Snakefile_analysis --rulegraph | dot -Tpng > analysis_rulegraph.png
 
 ### Multiple Sequence Alignments
 - MAFFT alignments: `results/{analysis}_{paramset}/protein_analysis/{no_3d|with_3d}/msa_alignments/gram_{group}/`
-- trimAl trimmed: `results/{analysis}_{paramset}/protein_analysis/{no_3d|with_3d}/msa_trimmed/gram_{group}/`
+- ClipKIT trimmed: `results/{analysis}_{paramset}/protein_analysis/{no_3d|with_3d}/msa_trimmed/gram_{group}/`
 
 ### Quality Assessment
 - Alignment quality: `results/{analysis}_{paramset}/protein_analysis/{no_3d|with_3d}/msa_quality/gram_{group}/`
@@ -109,7 +109,7 @@ snakemake -s Snakefile_analysis --rulegraph | dot -Tpng > analysis_rulegraph.png
 
 ### Main Configuration File
 Edit `config/config_analysis.yaml` to modify:
-- Analysis parameters (MAFFT, trimAl, conservation, BepiPred)
+- Analysis parameters (MAFFT, ClipKIT, conservation, BepiPred)
 - Quality control thresholds
 - Output settings
 - File paths
@@ -117,7 +117,7 @@ Edit `config/config_analysis.yaml` to modify:
 ### Key Analysis Parameters
 - **MAFFT threads**: `mafft.threads` (default: 8)
 - **3D alignment type**: `mafft.use_3d_alignments` ("no_3d" or "with_3d")
-- **trimAl method**: `trimal.method` ("automated1", "gappyout", "strict", "custom")
+- **ClipKIT mode**: `clipkit.mode` ("smart-gap", "kpic", "kpic-smart-gap", "kpi", "gappy")
 - **Conservation threshold**: `conservation.min_conservation_score` (0.0-1.0)
 - **BepiPred threshold**: `bepipred.threshold` (0.0-1.0)
 
@@ -132,13 +132,13 @@ mafft --version
 # Edit config/config_analysis.yaml: mafft.threads: 4
 ```
 
-### trimAl Issues
+### ClipKIT Issues
 ```bash
-# Check trimAl installation
-trimal -h
+# Check ClipKIT installation
+clipkit --help
 
-# Try different trimming method in config
-# trimal.method: "gappyout"  # Less aggressive than automated1
+# Try different trimming mode in config
+# clipkit.mode: "kpic"  # Less aggressive than smart-gap
 ```
 
 ### BepiPred Issues
@@ -211,7 +211,7 @@ snakemake -s Snakefile_analysis results/analysis1_params1/protein_analysis/no_3d
 
 ### Stage 2: Multiple Sequence Alignment
 - MAFFT alignment for each gene
-- trimAl automated trimming
+- ClipKIT automated trimming
 - Separate processing for no_3d and with_3d datasets
 
 ### Stage 3: Quality Assessment
