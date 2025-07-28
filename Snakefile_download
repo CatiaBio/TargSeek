@@ -314,11 +314,12 @@ rule extract_3d_metadata:
         config["scripts"]["downloads"]["extract_protein_structures_metadata"]
 
 # Extract PDB amino acid numbering from 3D structure files
-# Creates *_numbering.txt files for each PDB structure containing chain, residue number, and residue type
+# Creates consolidated TSV file mapping genes to PDB structures with numbering information
 rule extract_pdb_numbering:
     input:
         metadata_tsv=config["paths"]["protein_structures"]["metadata_tsv"]
     output:
+        numbering_tsv=config["paths"]["protein_structures"]["pdb_numbering_tsv"],
         numbering_sentinel=config["paths"]["protein_structures"]["pdb_numbering_sentinel"]
     params:
         analysis="{analysis}",

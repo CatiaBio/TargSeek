@@ -818,7 +818,7 @@ def download_alphafold_model(alphafold_id, output_dir, cache=None):
 
 def download_pdb_structure(pdb_id, output_dir, cache=None):
     """
-    Download PDB structure files in both legacy format (gz) and PDBML/XML format (gz) with caching
+    Download PDB structure files with mmCIF fallback for large structures
     
     Args:
         pdb_id (str): PDB identifier
@@ -831,75 +831,100 @@ def download_pdb_structure(pdb_id, output_dir, cache=None):
     
     # Define file paths for both formats
     pdb_file = output_dir / f"{pdb_id}.pdb.gz"
-    pdbml_file = output_dir / f"{pdb_id}.xml.gz"
+    mmcif_file = output_dir / f"{pdb_id}.cif.gz"
     
-    # Check if both files already exist (quick check first)
+    # Check if either file already exists
     pdb_exists = pdb_file.exists() and pdb_file.stat().st_size > 0
-    pdbml_exists = pdbml_file.exists() and pdbml_file.stat().st_size > 0
+    mmcif_exists = mmcif_file.exists() and mmcif_file.stat().st_size > 0
     
-    if pdb_exists and pdbml_exists:
-        # Both files exist and are not empty, no need to re-download
+    if pdb_exists or mmcif_exists:
+        # File exists and is not empty, no need to re-download
+        existing_file = pdb_file if pdb_exists else mmcif_file
         if cache:
-            cache.cache_pdb_result(pdb_id, True, pdb_file)
+            cache.cache_pdb_result(pdb_id, True, existing_file)
         return True
     
-    # Check cache for download status only if files don't exist
+    # Check cache for download status only if no files exist
     if cache:
         cached_pdb = cache.get_cached_pdb(pdb_id)
         if cached_pdb and cached_pdb.get('success'):
             cached_path = Path(cached_pdb.get('file_path', ''))
-            cached_pdbml_path = cached_path.parent / f"{pdb_id}.xml.gz"
-            if (cached_path.exists() and cached_path.stat().st_size > 0 and 
-                cached_pdbml_path.exists() and cached_pdbml_path.stat().st_size > 0):
+            if cached_path.exists() and cached_path.stat().st_size > 0:
                 return True
     
-    # URLs for both formats
+    # Try PDB format first
     pdb_url = f"https://files.rcsb.org/download/{pdb_id}.pdb.gz"
-    pdbml_url = f"https://files.rcsb.org/download/{pdb_id}.xml.gz"
-    
-    success_count = 0
     
     try:
-        # Download PDB format (legacy format)
-        if not pdb_exists:
-            response = requests.get(pdb_url, timeout=30)
-            response.raise_for_status()
-            
-            with open(pdb_file, 'wb') as f:
-                f.write(response.content)
-            
-            logging.info(f"Downloaded PDB structure: {pdb_file}")
-            success_count += 1
-        else:
-            logging.info(f"PDB file already exists: {pdb_file}")
-            success_count += 1
+        # Download PDB format
+        response = requests.get(pdb_url, timeout=30)
+        response.raise_for_status()
         
-        # Download PDBML/XML format (contains correct sequence numbering)
-        if not pdbml_exists:
-            response = requests.get(pdbml_url, timeout=30)
-            response.raise_for_status()
-            
-            with open(pdbml_file, 'wb') as f:
-                f.write(response.content)
-            
-            logging.info(f"Downloaded PDBML/XML structure: {pdbml_file}")
-            success_count += 1
-        else:
-            logging.info(f"PDBML file already exists: {pdbml_file}")
-            success_count += 1
+        with open(pdb_file, 'wb') as f:
+            f.write(response.content)
         
-        # Consider successful if we have both files
-        if success_count >= 2:
-            if cache:
-                cache.cache_pdb_result(pdb_id, True, pdb_file)
-            return True
-        else:
-            if cache:
-                cache.cache_pdb_result(pdb_id, False)
-            return False
+        logging.info(f"Downloaded PDB structure: {pdb_file}")
+        
+        # Cache success and return
+        if cache:
+            cache.cache_pdb_result(pdb_id, True, pdb_file)
+        return True
+        
+    except requests.exceptions.HTTPError as e:
+        # If 404 error, try mmCIF format as fallback
+        logging.debug(f"HTTPError caught for {pdb_id}: {e}")
+        try:
+            status_code = e.response.status_code
+            logging.debug(f"Status code: {status_code}")
+            if status_code == 404:
+                logging.info(f"PDB format not available for {pdb_id} (404), trying mmCIF format...")
+                return download_mmcif_structure(pdb_id, output_dir, cache)
+        except (AttributeError, TypeError):
+            logging.debug(f"Could not get status code from HTTPError for {pdb_id}")
+        
+        logging.warning(f"Failed to download PDB structure for {pdb_id}: {e}")
+        if cache:
+            cache.cache_pdb_result(pdb_id, False)
+        return False
+    except requests.exceptions.RequestException as e:
+        logging.warning(f"Failed to download PDB structure for {pdb_id}: {e}")
+        if cache:
+            cache.cache_pdb_result(pdb_id, False)
+        return False
+
+def download_mmcif_structure(pdb_id, output_dir, cache=None):
+    """
+    Download mmCIF format structure file
+    
+    Args:
+        pdb_id (str): PDB identifier
+        output_dir (Path): Output directory to save the structure
+        cache (Protein3DStructureCache): Cache instance to use
+    
+    Returns:
+        bool: True if download succeeded, False otherwise
+    """
+    
+    mmcif_file = output_dir / f"{pdb_id}.cif.gz"
+    
+    try:
+        # Download mmCIF format
+        mmcif_url = f"https://files.rcsb.org/download/{pdb_id}.cif.gz"
+        response = requests.get(mmcif_url, timeout=30)
+        response.raise_for_status()
+        
+        with open(mmcif_file, 'wb') as f:
+            f.write(response.content)
+        
+        logging.info(f"Downloaded mmCIF structure: {mmcif_file}")
+        
+        # Cache success and return
+        if cache:
+            cache.cache_pdb_result(pdb_id, True, mmcif_file)
+        return True
         
     except requests.exceptions.RequestException as e:
-        logging.warning(f"Failed to download structure files for {pdb_id}: {e}")
+        logging.warning(f"Failed to download mmCIF format for {pdb_id}: {e}")
         if cache:
             cache.cache_pdb_result(pdb_id, False)
         return False
@@ -931,15 +956,16 @@ def download_3d_structures_for_gene(gene_name, structures_base_dir, organisms=No
         cached_structures = gene_cache.get_gene_structures(gene_name)
         logging.info(f"Gene {gene_name} already completed in cache with {len(cached_structures)} structures - SKIPPING")
         
-        # Verify files still exist
+        # Verify files still exist (both PDB and mmCIF formats)
         existing_pdb_files = list(gene_dir.glob("*.pdb.gz"))
-        existing_pdbml_files = list(gene_dir.glob("*.xml.gz"))
+        existing_mmcif_files = list(gene_dir.glob("*.cif.gz"))
         existing_fasta_files = list(gene_dir.glob("*.fasta"))
+        existing_structure_files = existing_pdb_files + existing_mmcif_files
         
-        if existing_pdb_files or existing_pdbml_files or existing_fasta_files:
+        if existing_structure_files or existing_fasta_files:
             return {
                 "sequences": len(existing_fasta_files),
-                "structures": len(existing_pdb_files), 
+                "structures": len(existing_structure_files), 
                 "found": True,
                 "skipped": True,
                 "pdb_ids": cached_structures
@@ -949,20 +975,22 @@ def download_3d_structures_for_gene(gene_name, structures_base_dir, organisms=No
     
     # Fallback to file-based completion checking if cache doesn't have info
     existing_pdb_files = list(gene_dir.glob("*.pdb.gz"))
-    existing_pdbml_files = list(gene_dir.glob("*.xml.gz"))
+    existing_mmcif_files = list(gene_dir.glob("*.cif.gz"))
     existing_fasta_files = list(gene_dir.glob("*.fasta"))
+    existing_structure_files = existing_pdb_files + existing_mmcif_files
     has_no_structures_marker = (gene_dir / "no_structures_found.txt").exists()
     
-    # If directory has any structure files (PDB, PDBML, or FASTA), consider it complete
-    if existing_pdb_files or existing_pdbml_files or existing_fasta_files:
-        logging.info(f"Gene {gene_name} already has structures: {len(existing_pdb_files)} PDB files, {len(existing_pdbml_files)} PDBML files, {len(existing_fasta_files)} FASTA files - SKIPPING")
+    # If directory has any structure files (PDB or mmCIF or FASTA), consider it complete
+    if existing_structure_files or existing_fasta_files:
+        logging.info(f"Gene {gene_name} already has structures: {len(existing_pdb_files)} PDB files, {len(existing_mmcif_files)} mmCIF files, {len(existing_fasta_files)} FASTA files - SKIPPING")
         
         # Update cache with existing structures
         if gene_cache:
-            existing_structure_ids = [f.stem.replace('.pdb', '') for f in existing_pdb_files]
+            existing_structure_ids = ([f.stem.replace('.pdb', '') for f in existing_pdb_files] + 
+                                      [f.stem.replace('.cif', '') for f in existing_mmcif_files])
             structures_info = {
                 "sequences": len(existing_fasta_files),
-                "structures": len(existing_pdb_files),
+                "structures": len(existing_structure_files),
                 "structure_ids": existing_structure_ids,
                 "experimental_count": len([sid for sid in existing_structure_ids if not sid.startswith('AF-')]),
                 "computed_count": len([sid for sid in existing_structure_ids if sid.startswith('AF-')])
@@ -971,10 +999,11 @@ def download_3d_structures_for_gene(gene_name, structures_base_dir, organisms=No
         
         return {
             "sequences": len(existing_fasta_files),
-            "structures": len(existing_pdb_files), 
+            "structures": len(existing_structure_files), 
             "found": True,
             "skipped": True,
-            "pdb_ids": [f.stem.replace('.pdb', '') for f in existing_pdb_files]
+            "pdb_ids": ([f.stem.replace('.pdb', '') for f in existing_pdb_files] + 
+                       [f.stem.replace('.cif', '') for f in existing_mmcif_files])
         }
     
     # Check if marked as no structures found (and directory is still empty)
