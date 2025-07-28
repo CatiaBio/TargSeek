@@ -64,6 +64,10 @@ rule all_analysis:
             [config["paths"]["epitopes"]["epitope_tables_sentinel"]],
             analysis=config["species_batches"],
             paramset=config["quickgo_paramsets"]
+        ) + expand(
+            [config["paths"]["epitopes"]["conservation_report"]],
+            analysis=config["species_batches"],
+            paramset=config["quickgo_paramsets"]
         )
 
 # Partial pipeline targets - useful for testing and debugging individual stages
@@ -357,25 +361,14 @@ rule extract_conserved_sequences:
 # STAGE 6: Epitope Prediction
 # ---------------------
 
-# Create mapping of used 3D structures for BepiPred analysis
-rule create_used_structures_mapping:
-    input:
-        selected_3d_paths_positive=config["paths"]["sequence_prep"]["selected_3d_paths"].replace("{group}", "positive"),
-        selected_3d_paths_negative=config["paths"]["sequence_prep"]["selected_3d_paths"].replace("{group}", "negative")
-    output:
-        mapping_tsv=config["paths"]["epitopes"]["used_structures_mapping"]
-    params:
-        analysis="{analysis}",
-        paramset="{paramset}"
-    script:
-        config["scripts"]["epitopes"]["create_used_structures_mapping"]
+# NOTE: create_used_structures_mapping rule removed - now using comprehensive
+# PDB numbering mapping from download pipeline: data/protein_structures/{analysis}_{paramset}_pdb_numbering_mapping.tsv
 
 # Predict B-cell epitopes using BepiPred 3.0 on selected 3D structure sequences
 rule predict_epitopes_bepipred:
     input:
         selected_3d_paths_positive=config["paths"]["sequence_prep"]["selected_3d_paths"].replace("{group}", "positive"),
-        selected_3d_paths_negative=config["paths"]["sequence_prep"]["selected_3d_paths"].replace("{group}", "negative"),
-        used_structures_mapping=config["paths"]["epitopes"]["used_structures_mapping"]
+        selected_3d_paths_negative=config["paths"]["sequence_prep"]["selected_3d_paths"].replace("{group}", "negative")
     output:
         bepipred_sentinel=config["paths"]["epitopes"]["bepipred_predictions"] + "/bepipred_complete.sentinel"
     params:
@@ -387,7 +380,8 @@ rule predict_epitopes_bepipred:
 # Create epitope tables from BepiPred 3.0 raw output
 rule create_epitope_tables:
     input:
-        bepipred_sentinel=config["paths"]["epitopes"]["bepipred_predictions"] + "/bepipred_complete.sentinel"
+        bepipred_sentinel=config["paths"]["epitopes"]["bepipred_predictions"] + "/bepipred_complete.sentinel",
+        pdb_numbering_mapping="data/protein_structures/{analysis}_{paramset}_pdb_numbering_mapping.tsv"
     output:
         epitope_tables_sentinel=config["paths"]["epitopes"]["epitope_tables_sentinel"]
     params:
@@ -401,6 +395,37 @@ rule create_epitope_tables:
 # ---------------------
 # STAGE 6: Summaries and Reports
 # ---------------------
+
+# Run epitope conservation analysis for all genes
+rule analyze_epitope_conservation:
+    input:
+        epitope_tables_sentinel=config["paths"]["epitopes"]["epitope_tables_sentinel"],
+        msa_sequences_positive=lambda wildcards: config["paths"]["msa"]["sequences_structure"].replace("{group}", "positive").format(analysis=wildcards.analysis, paramset=wildcards.paramset),
+        msa_sequences_negative=lambda wildcards: config["paths"]["msa"]["sequences_structure"].replace("{group}", "negative").format(analysis=wildcards.analysis, paramset=wildcards.paramset),
+        selected_3d_positive=lambda wildcards: config["paths"]["sequence_prep"]["selected_3d_paths"].replace("{group}", "positive").format(analysis=wildcards.analysis, paramset=wildcards.paramset),
+        selected_3d_negative=lambda wildcards: config["paths"]["sequence_prep"]["selected_3d_paths"].replace("{group}", "negative").format(analysis=wildcards.analysis, paramset=wildcards.paramset),
+        pdb_numbering_mapping="data/protein_structures/{analysis}_{paramset}_pdb_numbering_mapping.tsv"
+    output:
+        conservation_analysis_sentinel=config["paths"]["epitopes"]["conservation_analysis_sentinel"]
+    params:
+        analysis="{analysis}",
+        paramset="{paramset}",
+        conservation_analysis_dir=lambda wildcards: config["paths"]["epitopes"]["conservation_analysis_dir"].format(analysis=wildcards.analysis, paramset=wildcards.paramset)
+    script:
+        "scripts/protein_analysis/run_conservation_analysis_batch.py"
+
+# Generate comprehensive epitope conservation analysis report
+rule generate_epitope_conservation_report:
+    input:
+        conservation_analysis_sentinel=config["paths"]["epitopes"]["conservation_analysis_sentinel"]
+    output:
+        conservation_report=config["paths"]["epitopes"]["conservation_report"]
+    params:
+        analysis="{analysis}",
+        paramset="{paramset}",
+        conservation_analysis_dir=lambda wildcards: config["paths"]["epitopes"]["conservation_analysis_dir"].format(analysis=wildcards.analysis, paramset=wildcards.paramset)
+    script:
+        "scripts/protein_analysis/generate_epitope_conservation_report.py"
 
 # Compile integrated analysis report combining all pipeline results
 # EXCLUDED: This rule has been excluded as it tries to access data from the download pipeline

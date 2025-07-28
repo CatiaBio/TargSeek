@@ -228,12 +228,14 @@ paths:
   # STAGE 6: Epitope Prediction
   # -------------------------------------------------------------------------
   epitopes:
-    # Used structures mapping for BepiPred analysis
-    used_structures_mapping: "results/{analysis}_{paramset}/protein_analysis/sequences_with_structure/epitope_predictions_bepipred/used_structures_mapping.tsv"
     # BepiPred 3.0 predictions
     bepipred_predictions: "results/{analysis}_{paramset}/protein_analysis/sequences_with_structure/epitope_predictions_bepipred"
     # Epitope tables (linear epitopes and raw scores)
     epitope_tables_sentinel: "results/{analysis}_{paramset}/protein_analysis/sequences_with_structure/epitope_predictions_bepipred/epitope_tables_complete.sentinel"
+    # Epitope conservation analysis reports
+    conservation_analysis_dir: "results/{analysis}_{paramset}/protein_analysis/sequences_with_structure/epitope_conservation_analysis"
+    conservation_analysis_sentinel: "results/{analysis}_{paramset}/protein_analysis/sequences_with_structure/epitope_conservation_analysis/conservation_analysis_complete.sentinel"
+    conservation_report: "results/{analysis}_{paramset}/protein_analysis_report.html"
 
   # -------------------------------------------------------------------------
   # STAGE 6: Summaries and Reports  
@@ -287,9 +289,9 @@ scripts:
   # STAGE 6: Epitope Prediction Scripts
   # -------------------------------------------------------------------------
   epitopes:
-    create_used_structures_mapping: "scripts/protein_analysis/create_used_structures_mapping.py"
     predict_epitopes_bepipred: "scripts/protein_analysis/predict_epitopes_bepipred_3d_only.py"
     create_epitope_tables: "scripts/protein_analysis/create_epitope_tables_from_bepipred.py"
+    analyze_epitope_conservation: "scripts/protein_analysis/analyze_epitope_conservation.py"
   
   # -------------------------------------------------------------------------
   # STAGE 6: Summary and Report Scripts

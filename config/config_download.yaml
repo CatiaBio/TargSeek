@@ -176,7 +176,6 @@ paths:
     # Base directory for 3D structure files
     # Each gene directory contains:
     #   - .pdb.gz files (legacy PDB format)  
-    #   - .xml.gz files (PDBML format with accurate residue numbering)
     #   - .fasta files (protein sequences from PDB/UniProt)
     #   - metadata.json (structure metadata)
     base_dir: "data/protein_structures"
@@ -186,6 +185,7 @@ paths:
     metadata_tsv: "data/protein_structures/{analysis}_{paramset}_downloaded_structures.tsv"
     # PDB numbering extraction
     pdb_numbering_sentinel: "data/protein_structures/{analysis}_{paramset}_pdb_numbering_complete.sentinel"
+    pdb_numbering_tsv: "data/protein_structures/{analysis}_{paramset}_pdb_numbering_mapping.tsv"
     # Summary file with protein names (used for enhanced UniProt searches)
     summary_file: "results/{analysis}_{paramset}/gene_selection/summary.tsv"
 
