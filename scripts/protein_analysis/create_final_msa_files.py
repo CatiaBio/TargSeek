@@ -126,9 +126,9 @@ def create_structure_msa_for_gene(gene_name: str, main_msa_file: Path,
 def main():
     """Main function for creating structure MSA files"""
     try:
-        main_msa_dir = Path(snakemake.input.main_msa_dir)
+        main_msa_dir = Path(snakemake.input.sequences_dir)
         selected_3d_paths_file = Path(snakemake.input.selected_3d_paths) if hasattr(snakemake.input, 'selected_3d_paths') else None
-        output_structure_dir = Path(snakemake.output.structure_msa_dir)
+        output_structure_dir = Path(snakemake.output.sequences_with_structure_dir)
         
         # Get analysis parameters for output file naming
         analysis = snakemake.params.analysis

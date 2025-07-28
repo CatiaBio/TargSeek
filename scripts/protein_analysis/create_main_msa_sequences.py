@@ -26,8 +26,8 @@ import random
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-# Maximum sequences to include in main MSA
-MAX_SEQUENCES_PER_GENE = 100  # Reasonable limit for MAFFT
+# Maximum sequences to include in main MSA - None means no limit (include all species)
+MAX_SEQUENCES_PER_GENE = None  # Include all available species for comprehensive analysis
 
 def extract_genus(species_name):
     """Extract genus from species name"""
@@ -126,7 +126,7 @@ def select_diverse_sequences(fasta_paths, max_sequences=MAX_SEQUENCES_PER_GENE):
     selected.sort(key=lambda x: x[0].stem)
     
     # Apply max_sequences limit if specified
-    if len(selected) > max_sequences:
+    if max_sequences is not None and len(selected) > max_sequences:
         logging.info(f"Limiting from {len(selected)} to {max_sequences} sequences")
         # Prioritize taxonomic diversity when limiting
         genus_counts = defaultdict(int)
@@ -153,6 +153,8 @@ def select_diverse_sequences(fasta_paths, max_sequences=MAX_SEQUENCES_PER_GENE):
                         break
         
         selected = limited_selected
+    elif max_sequences is None:
+        logging.info(f"No sequence limit applied - including all {len(selected)} available species")
     
     return selected
 
@@ -210,7 +212,7 @@ def main():
     """Main function for creating main MSA sequences"""
     try:
         input_dir = Path(snakemake.input.reference_dir)
-        output_dir = Path(snakemake.output.main_msa_dir)
+        output_dir = Path(snakemake.output.sequences_dir)
         
         # Get analysis parameters
         analysis = snakemake.params.analysis
@@ -220,7 +222,7 @@ def main():
         # Get config parameters if available
         try:
             global MAX_SEQUENCES_PER_GENE
-            MAX_SEQUENCES_PER_GENE = snakemake.config.get('msa', {}).get('max_sequences_per_gene', 100)
+            MAX_SEQUENCES_PER_GENE = snakemake.config.get('msa', {}).get('max_sequences_per_gene', None)
         except:
             pass
             
@@ -236,7 +238,7 @@ def main():
     logging.info(f"Reference directory: {input_dir}")
     logging.info(f"Output directory: {output_dir}")
     logging.info(f"Analysis: {analysis}, Paramset: {paramset}, Group: {group}")
-    logging.info(f"Max sequences per gene: {MAX_SEQUENCES_PER_GENE}")
+    logging.info(f"Max sequences per gene: {'unlimited' if MAX_SEQUENCES_PER_GENE is None else MAX_SEQUENCES_PER_GENE}")
     
     output_dir.mkdir(parents=True, exist_ok=True)
 
