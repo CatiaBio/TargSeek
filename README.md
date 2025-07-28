@@ -41,7 +41,7 @@ graph TD
     
     subgraph "ANALYSIS PIPELINE"
         I --> J[MSA Sequence Selection<br/>3D Structure Priority]
-        J --> K[Multiple Sequence Alignment<br/>MAFFT + trimAl]
+        J --> K[Multiple Sequence Alignment<br/>MAFFT + ClipKIT]
         K --> L[Quality Assessment<br/>AliStat Analysis]
         L --> M[Conservation Analysis<br/>Position-Specific Scoring]
         M --> N[Epitope Prediction<br/>BepiPred 3.0]
@@ -66,7 +66,7 @@ results/{analysis}_{paramset}/
     ├── no_3d/                  # Analysis without 3D structures
     │   ├── msa_sequences/      # FASTA files for MSA
     │   ├── msa_alignments/     # MAFFT alignments
-    │   ├── msa_trimmed/        # trimAl optimized alignments
+    │   ├── msa_trimmed/        # ClipKIT optimized alignments
     │   ├── msa_quality/        # AliStat quality assessment
     │   └── conservation/       # Conservation analysis
     ├── with_3d/               # Analysis with 3D structures
@@ -177,7 +177,7 @@ snakemake -s Snakefile_analysis --dry-run  # Check analysis workflow
 
 #### 5. **Multiple Sequence Alignment**
 - MAFFT alignment with configurable parameters
-- trimAl automated trimming for optimal alignments
+- ClipKIT automated trimming for optimal alignments
 - **Output**: High-quality alignments
 
 #### 6. **Quality Assessment**
@@ -203,7 +203,7 @@ snakemake -s Snakefile_analysis --dry-run  # Check analysis workflow
 - `biopython` - Sequence analysis
 - `pandas` - Data manipulation
 - `mafft` - Multiple sequence alignment
-- `trimal` - Alignment trimming
+- `clipkit` - Alignment trimming
 
 **External APIs**:
 - **BacDive**: Bacterial classification
@@ -321,7 +321,7 @@ TargSeek integrates multiple bioinformatics tools and databases. If you use this
 
 ### **🧬 Core Tools**
 - **MAFFT**: Katoh, K., & Standley, D. M. (2013). MAFFT multiple sequence alignment software version 7. *Molecular Biology and Evolution*, 30(4), 772-780.
-- **trimAl**: Capella-Gutiérrez, S., et al. (2009). trimAl: automated alignment trimming in large-scale phylogenetic analyses. *Bioinformatics*, 25(15), 1972-1973.
+- **ClipKIT**: Steenwyk, J. L., et al. (2020). ClipKIT: a multiple sequence alignment trimming software for accurate phylogenomic inference. *PLoS Biology*, 18(12), e3001007.
 - **BepiPred 3.0**: Clifford, J. N., et al. (2022). BepiPred-3.0: Improved B-cell epitope prediction using protein language models. *Protein Science*, 31(12), e4497.
 - **Snakemake**: Köster, J., & Rahmann, S. (2012). Snakemake—a scalable bioinformatics workflow engine. *Bioinformatics*, 28(19), 2520-2522.
 

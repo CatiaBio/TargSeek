@@ -268,10 +268,10 @@ def create_all_logo_plots(alignment_file, conservation_data, gene_name, output_d
         logging.error(f"Error creating logo plots for {gene_name}: {e}")
         return 0
 
-def analyze_gene_conservation(alignment_file, gene_name, output_dir, logos_dir=None):
+def analyze_gene_conservation(alignment_file, gene_name, output_dir, alignment_type="unknown", logos_dir=None):
     """Analyze conservation for a single gene"""
     try:
-        result = analyze_alignment_conservation(alignment_file, "unknown")
+        result = analyze_alignment_conservation(alignment_file, alignment_type)
         if not result:
             return None
             
@@ -416,7 +416,7 @@ def process_conservation_set(raw_dir, trimmed_dir, quality_dir, output_dir, set_
         try:
             logging.info(f"    [{genes_processed + 1}] Analyzing {gene_name} ({alignment_type})")
             gene_results = analyze_gene_conservation(
-                alignment_file, gene_name, output_dir, logos_dir
+                alignment_file, gene_name, output_dir, alignment_type, logos_dir
             )
             
             if gene_results:

@@ -83,7 +83,8 @@ class BepiPredPredictor:
                 ]
                 
                 logging.info(f"Running BepiPred from directory: {bepipred_dir}")
-                result = subprocess.run(cmd, capture_output=True, text=True, timeout=900, cwd=str(bepipred_dir))
+                # No timeout - let BepiPred run until completion
+                result = subprocess.run(cmd, capture_output=True, text=True, cwd=str(bepipred_dir))
                 
                 if result.returncode != 0:
                     logging.error(f"BepiPred failed: {result.stderr}")
@@ -95,9 +96,7 @@ class BepiPredPredictor:
                 
                 return True
                 
-        except subprocess.TimeoutExpired:
-            logging.error(f"BepiPred timed out for sequence {sequence_id}")
-            return False
+        # Removed timeout handling since we removed the timeout
         except Exception as e:
             logging.error(f"Error running BepiPred for {sequence_id}: {e}")
             return False
@@ -321,7 +320,10 @@ def main():
         # Get inputs from Snakemake - expect both gram groups
         selected_3d_paths_positive = snakemake.input.selected_3d_paths_positive
         selected_3d_paths_negative = snakemake.input.selected_3d_paths_negative
-        output_dir = snakemake.output[0]
+        sentinel_file = snakemake.output.bepipred_sentinel
+        
+        # Derive output directory from sentinel file path
+        output_dir = Path(sentinel_file).parent
         
         # Get parameters
         analysis = snakemake.params.analysis
@@ -364,13 +366,6 @@ def main():
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     
-    # Load selected 3D structure paths from both gram groups
-    paths = load_selected_3d_paths(paths_files)
-    
-    if not paths:
-        logging.error("No 3D structure paths found")
-        return
-    
     # Initialize BepiPred predictor
     try:
         method = bepipred_config.get('method', 'vt_pred')
@@ -387,18 +382,69 @@ def main():
         logging.error(f"BepiPred not found: {e}")
         return
     
-    # Process each 3D structure
-    results = []
+    # Process each gram group sequentially to avoid overwhelming the system
+    all_results = []
     
-    for i, fasta_path in enumerate(paths, 1):
-        logging.info(f"\n[{i}/{len(paths)}] Processing: {fasta_path}")
+    for group_idx, paths_file in enumerate(paths_files, 1):
+        group_name = "gram_positive" if "positive" in str(paths_file) else "gram_negative"
+        logging.info(f"\n=== Processing {group_name} (Group {group_idx}/{len(paths_files)}) ===")
         
-        result = predict_epitopes_for_3d_structure(fasta_path, predictor, output_dir)
-        if result:
-            results.append(result)
+        # Load paths for this group
+        paths = load_selected_3d_paths([paths_file])
+        
+        if not paths:
+            logging.warning(f"No 3D structure paths found for {group_name}")
+            continue
+        
+        logging.info(f"Found {len(paths)} structures for {group_name}")
+        
+        # Process each 3D structure in this group
+        group_results = []
+        
+        for i, fasta_path in enumerate(paths, 1):
+            logging.info(f"\n[{group_name} {i}/{len(paths)}] Processing: {fasta_path}")
+            
+            # Try prediction with retry logic
+            result = None
+            max_retries = 2
+            for attempt in range(max_retries):
+                try:
+                    result = predict_epitopes_for_3d_structure(fasta_path, predictor, output_dir)
+                    if result and result.get('success', False):
+                        break
+                    elif attempt < max_retries - 1:
+                        logging.warning(f"Prediction failed, retrying in 5 seconds... (attempt {attempt + 1}/{max_retries})")
+                        time.sleep(5)
+                except Exception as e:
+                    logging.error(f"Error during prediction attempt {attempt + 1}: {e}")
+                    if attempt < max_retries - 1:
+                        time.sleep(5)
+            
+            if result:
+                group_results.append(result)
+                all_results.append(result)
+            
+            # Add small delay between predictions to prevent system overload
+            time.sleep(2)
+        
+        logging.info(f"Completed {group_name}: {len(group_results)} successful predictions")
+    
+    results = all_results
     
     # Create summary report
     create_summary_report(results, output_dir)
+    
+    # Create sentinel file for Snakemake (only in Snakemake mode)
+    try:
+        if 'snakemake' in globals():
+            with open(sentinel_file, 'w') as f:
+                f.write(f"BepiPred predictions completed for {analysis}_{paramset}\n")
+                f.write(f"Total structures processed: {len(results)}\n")
+                f.write(f"Successful predictions: {len([r for r in results if r.get('success', False)])}\n")
+                f.write(f"Output directory: {output_dir}\n")
+            logging.info(f"Created sentinel file: {sentinel_file}")
+    except:
+        pass  # Skip sentinel file creation in test mode
     
     logging.info(f"\n=== BepiPred 3D Analysis Complete ===")
     logging.info(f"Processed {len(results)} structures")
