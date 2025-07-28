@@ -46,6 +46,12 @@ mafft:
   algorithm: "auto"  # auto, linsi, ginsi, einsi, fftns, fftnsi
   max_iterations: 1000
 
+# MSA sequence selection settings
+msa:
+  # Maximum sequences per gene for MSA (null = unlimited, includes all available species)
+  # Setting a limit can reduce computation time but may reduce phylogenetic diversity
+  max_sequences_per_gene: null  # null = include all species, or set integer limit (e.g., 100)
+
 # 3D Structure Selection settings
 structure_selection:
   # Selection method: "similarity" (compare against protein sequences) or "priority" (organism priority)
@@ -58,6 +64,8 @@ structure_selection:
   min_coverage_percentage: 10.0
   # Similarity calculation method: "local_alignment", "global_alignment", or "lcs"
   similarity_method: "local_alignment"
+  # Random seed for deterministic structure selection (set to null for random behavior)
+  random_seed: 42
   
   # Combined scoring weights (must sum to 1.0)
   scoring_weights:

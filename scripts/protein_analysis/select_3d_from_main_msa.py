@@ -373,7 +373,7 @@ def main():
     """Main function for 3D structure selection"""
     try:
         reference_dir = Path(snakemake.input.reference_dir)
-        main_msa_dir = Path(snakemake.input.main_msa_dir)
+        main_msa_dir = Path(snakemake.input.sequences_dir)
         selected_3d_paths = Path(snakemake.output.selected_3d_paths)
         selected_3d_tsv = Path(snakemake.output.selected_3d_tsv)
         
@@ -393,6 +393,11 @@ def main():
         length_config = snakemake.config.get('structure_selection', {}).get('length_filtering', {})
         enable_prefilter = length_config.get('enable_prefilter', False)
         max_length_deviation = length_config.get('max_length_deviation', 0.5)
+        
+        # Set random seed for deterministic structure selection
+        random_seed = snakemake.config.get('structure_selection', {}).get('random_seed', 42)
+        random.seed(random_seed)
+        logging.info(f"Random seed set to: {random_seed}")
         
         # Structure directory path
         structure_base_dir = Path("data/protein_structures")
