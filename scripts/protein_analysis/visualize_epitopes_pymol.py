@@ -79,8 +79,21 @@ class EpitopeVisualizer:
             # Find linear epitopes table
             for epitope_file in gene_dir.glob("*_linear_epitopes.tsv"):
                 try:
-                    # Extract structure ID from filename (e.g., bamA_5D0Q_linear_epitopes.tsv)
-                    structure_id = epitope_file.stem.replace(f"{gene_name}_", "").replace("_linear_epitopes", "")
+                    # Extract structure ID from filename (e.g., bamA_5OR1_linear_epitopes.tsv)
+                    raw_structure_id = epitope_file.stem.replace(f"{gene_name}_", "").replace("_linear_epitopes", "")
+                    
+                    # Convert to match structure mapping format
+                    # Experimental structures: 5OR1 -> 5OR1_1
+                    # Computed structures: AF-O66043 -> AF-O66043 (no change)
+                    if raw_structure_id.startswith('AF-'):
+                        # AlphaFold computed structure - use as is
+                        structure_id = raw_structure_id
+                    else:
+                        # Experimental structure - add _1 suffix if not present
+                        if not raw_structure_id.endswith('_1'):
+                            structure_id = f"{raw_structure_id}_1"
+                        else:
+                            structure_id = raw_structure_id
                     
                     # Read epitope table
                     df = pd.read_csv(epitope_file, sep='\t', comment='#')
@@ -108,18 +121,25 @@ class EpitopeVisualizer:
             mapping = {}
             
             for _, row in df.iterrows():
-                gene = row['Gene']
-                structure_id = row['Structure_ID']
-                chain = row['Chain']
-                fasta_path = row['FASTA_Path']
+                gene = row['gene_name']
+                structure_id = row['structure_id']
+                structure_type = row.get('structure_type', 'unknown')
+                chain = row['chain']
+                chain_start = row.get('chain_start')
+                chain_end = row.get('chain_end')
+                fasta_path = row['fasta_path']
+                structure_path = row['structure_path']
                 
                 key = f"{gene}_{structure_id}"
                 mapping[key] = {
                     'gene': gene,
                     'structure_id': structure_id,
+                    'structure_type': structure_type,
                     'chain': chain,
+                    'chain_start': chain_start,
+                    'chain_end': chain_end,
                     'fasta_path': fasta_path,
-                    'pdb_file': self._find_pdb_file(gene, structure_id)
+                    'pdb_file': Path(structure_path)  # Use structure_path directly from mapping
                 }
             
             logging.info(f"Loaded structure mapping for {len(mapping)} structures")
@@ -179,11 +199,16 @@ class EpitopeVisualizer:
         
         gene = structure_info['gene']
         structure_id = structure_info['structure_id']
+        structure_type = structure_info.get('structure_type', 'unknown')
         chain = structure_info['chain']
+        chain_start = structure_info.get('chain_start')
+        chain_end = structure_info.get('chain_end')
         pdb_file = structure_info['pdb_file']
         
+        # Check if the PDB file exists
         if not pdb_file.exists():
             logging.error(f"PDB file not found: {pdb_file}")
+            logging.error(f"  Expected path from structure mapping: {pdb_file}")
             return False
         
         try:
@@ -194,10 +219,34 @@ class EpitopeVisualizer:
             # Load structure
             cmd.load(str(pdb_file), structure_id)
             
-            # Set up basic visualization
+            # Set up consistent visualization for all structures
             cmd.hide("all")
+            
+            # Always show cartoon representation first for the entire structure
             cmd.show("cartoon", structure_id)
             cmd.color("gray80", structure_id)
+            
+            # Create chain selection if available
+            if chain and len(chain) > 0:
+                chain_selection = f"{structure_id} and chain {chain}"
+                cmd.select("target_chain", chain_selection)
+                
+                # Ensure the target chain is properly colored
+                cmd.color("gray80", "target_chain")
+                
+                # If we have chain range information, focus on that region
+                if chain_start is not None and chain_end is not None:
+                    chain_range_selection = f"target_chain and resi {chain_start}-{chain_end}"
+                    cmd.select("chain_range", chain_range_selection)
+                    # Keep the chain range the same color as the rest for consistency
+                    cmd.color("gray80", "chain_range")
+                    logging.info(f"Focusing on chain {chain} residues {chain_start}-{chain_end}")
+                else:
+                    logging.info(f"Focusing on chain {chain} ({structure_type} structure)")
+            else:
+                # Select entire structure as target for consistency
+                cmd.select("target_chain", structure_id)
+                logging.warning(f"No chain information available for {gene_structure_key} - using entire structure")
             
             # Create epitope selections and color them
             epitope_info = []
@@ -213,28 +262,33 @@ class EpitopeVisualizer:
                 score = float(epitope['Score'])
                 color = self.epitope_colors[i]
                 
-                # Handle chain selection - some chains might have multiple identifiers
-                if len(chain) == 1:
-                    chain_selector = f"chain {chain}"
-                elif len(chain) == 2:
-                    # Handle cases like "AB" (could be chain A and B, or chain identifier "AB")
-                    chain_selector = f"chain {chain}"
-                else:
-                    # For longer chain identifiers, treat as single chain
-                    chain_selector = f"chain {chain}"
-                
-                # Create selection for this epitope
+                # Create selection for this epitope - ensure it's on the correct chain
                 selection_name = f"epitope_{i+1}"
-                selection = f"{structure_id} and {chain_selector} and resi {start}-{end}"
+                if chain and len(chain) > 0:
+                    # Use the specific chain from the mapping
+                    selection = f"{structure_id} and chain {chain} and resi {start}-{end}"
+                    
+                    # Additional validation: check if epitope is within chain range
+                    if chain_start is not None and chain_end is not None:
+                        # Adjust epitope positions if they're outside the chain range
+                        epitope_start = max(start, chain_start)
+                        epitope_end = min(end, chain_end)
+                        
+                        if epitope_start <= epitope_end:
+                            selection = f"{structure_id} and chain {chain} and resi {epitope_start}-{epitope_end}"
+                            if epitope_start != start or epitope_end != end:
+                                logging.info(f"Adjusted epitope {i+1} from {start}-{end} to {epitope_start}-{epitope_end} to fit chain range {chain_start}-{chain_end}")
+                        else:
+                            logging.warning(f"Epitope {i+1} ({start}-{end}) is outside chain range ({chain_start}-{chain_end}), skipping")
+                            continue
+                else:
+                    # Fallback if no chain information
+                    selection = f"{structure_id} and resi {start}-{end}"
                 
                 cmd.select(selection_name, selection)
                 
-                # Color the epitope
+                # Color cartoon representation only
                 cmd.color(color, selection_name)
-                
-                # Also show as spheres for emphasis
-                cmd.show("spheres", selection_name)
-                cmd.set("sphere_scale", 0.3, selection_name)
                 
                 epitope_info.append({
                     'number': i + 1,
@@ -247,28 +301,31 @@ class EpitopeVisualizer:
                 
                 logging.info(f"Created epitope {i+1}: {peptide} ({start}-{end}) in {color}")
             
-            # Set up nice view
-            cmd.orient(structure_id)
-            cmd.zoom(structure_id)
+            # Set up consistent view - always use target_chain selection
+            cmd.orient("target_chain")
+            cmd.zoom("target_chain")
             
-            # Set rendering options
+            # Set rendering options for better PNG generation
             cmd.set("ray_opaque_background", "off")
-            cmd.set("ray_shadows", "off")
+            cmd.set("ray_shadows", "on")
+            cmd.set("antialias", 2)
+            cmd.set("orthoscopic", "on")
             cmd.bg_color("white")
             
             # Save images
             output_prefix = self.output_dir / f"{gene}_{structure_id}"
             
-            # PNG image
+            # PNG image with improved settings
             png_file = f"{output_prefix}_epitopes.png"
-            cmd.png(str(png_file), width=1200, height=900, dpi=300, ray=1)
+            cmd.ray(1200, 900)  # Set ray tracing resolution
+            cmd.png(str(png_file), dpi=300)
             
             # PyMOL session file
             pse_file = f"{output_prefix}_epitopes.pse"
             cmd.save(str(pse_file))
             
             # Create legend/summary file
-            self._create_legend(output_prefix, gene, structure_id, epitope_info, chain)
+            self._create_legend(output_prefix, gene, structure_id, epitope_info, chain, chain_start, chain_end)
             
             logging.info(f"✓ Created visualization for {gene}_{structure_id}")
             logging.info(f"  Files: {png_file}, {pse_file}")
@@ -280,7 +337,7 @@ class EpitopeVisualizer:
             return False
     
     def _create_legend(self, output_prefix: Path, gene: str, structure_id: str, 
-                      epitope_info: List[Dict], chain: str):
+                      epitope_info: List[Dict], chain: str, chain_start=None, chain_end=None):
         """Create a legend file with epitope information"""
         
         legend_file = f"{output_prefix}_legend.txt"
@@ -291,6 +348,8 @@ class EpitopeVisualizer:
             f.write(f"Gene: {gene}\n")
             f.write(f"Structure: {structure_id}\n")
             f.write(f"Chain: {chain}\n")
+            if chain_start is not None and chain_end is not None:
+                f.write(f"Chain Range: {chain_start}-{chain_end}\n")
             f.write(f"Total Epitopes: {len(epitope_info)}\n\n")
             
             f.write("Epitope Details:\n")
@@ -305,9 +364,14 @@ class EpitopeVisualizer:
                        f"{epitope['peptide']:<20}\n")
             
             f.write("\nVisualization Notes:\n")
+            f.write(f"- Visualization focuses on chain {chain}\n")
+            if chain_start is not None and chain_end is not None:
+                f.write(f"- Only residues {chain_start}-{chain_end} from the chain are shown\n")
             f.write("- Protein backbone is shown in gray cartoon representation\n")
-            f.write("- Epitope regions are highlighted with colored spheres\n")
+            f.write("- Epitope regions are colored in cartoon representation\n")
             f.write("- Each epitope has a unique color as listed above\n")
+            f.write("- Epitopes are only shown if they fall within the chain range\n")
+            f.write("- Cartoon coloring shows epitope location on secondary structure\n")
             f.write("- Scores represent BepiPred 3.0 average epitope scores\n")
         
         # Also create JSON format for programmatic access
@@ -398,6 +462,8 @@ class EpitopeVisualizer:
                     gene = structure_info['gene']
                     structure_id = structure_info['structure_id']
                     chain = structure_info['chain']
+                    chain_start = structure_info.get('chain_start')
+                    chain_end = structure_info.get('chain_end')
                     
                     # Create epitope info
                     epitope_info = []
@@ -421,7 +487,7 @@ class EpitopeVisualizer:
                         f.write("# PyMOL not available - install with: conda install -c conda-forge pymol-open-source\n")
                     
                     # Create legend and JSON files
-                    self._create_legend(output_prefix, gene, structure_id, epitope_info, chain)
+                    self._create_legend(output_prefix, gene, structure_id, epitope_info, chain, chain_start, chain_end)
                     
                     results[gene_structure_key] = True
                     logging.info(f"✓ Created placeholder files for {gene}_{structure_id}")

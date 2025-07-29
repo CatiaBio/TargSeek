@@ -15,6 +15,8 @@ from Bio import AlignIO, SeqIO
 from Bio.Align import AlignInfo
 import numpy as np
 import pandas as pd
+import matplotlib
+matplotlib.use('Agg')  # Set non-interactive backend before importing pyplot
 import matplotlib.pyplot as plt
 from pathlib import Path
 import logging

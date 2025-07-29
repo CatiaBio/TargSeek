@@ -554,9 +554,37 @@ def process_bepipred_outputs_with_mapping(output_dir, min_epitope_length=6, stru
             sequence_id = csv_name
         
         try:
-            # Generate epitope tables
-            generator.process_bepipred_file(csv_file, sequence_id)
-            processed += 1
+            # Extract sequence from CSV data
+            df = pd.read_csv(csv_file)
+            if 'Residue' in df.columns:
+                sequence = ''.join(df['Residue'].astype(str))
+            elif 'AA' in df.columns:
+                sequence = ''.join(df['AA'].astype(str))
+            else:
+                logging.error(f"No residue column found in CSV {csv_file}")
+                failed += 1
+                continue
+            
+            # Parse CSV and create tables
+            epitope_data = generator.parse_bepipred_csv(csv_file, sequence_id, sequence)
+            
+            if epitope_data:
+                # Create output files in the same directory as CSV
+                output_dir_path = csv_file.parent
+                
+                # Linear epitopes table
+                linear_file = output_dir_path / f"{sequence_id}_linear_epitopes.tsv"
+                generator.write_linear_epitopes_table(epitope_data['linear_epitopes'], linear_file, sequence_id)
+                
+                # Raw scores table  
+                raw_file = output_dir_path / f"{sequence_id}_raw_scores.tsv"
+                generator.write_raw_scores_table(epitope_data['all_residues'], raw_file, sequence_id)
+                
+                logging.info(f"✓ Created tables for {sequence_id}: {len(epitope_data['linear_epitopes'])} linear epitopes")
+                processed += 1
+            else:
+                logging.error(f"✗ Failed to process {sequence_id}")
+                failed += 1
             
         except Exception as e:
             logging.error(f"Failed to process {csv_file}: {e}")
