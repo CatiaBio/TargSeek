@@ -78,6 +78,14 @@ def extract_organism_from_species(species_text):
     if not species_text:
         return None
     
+    # Convert to string if not already a string
+    if not isinstance(species_text, str):
+        species_text = str(species_text)
+    
+    # Handle NaN values from pandas
+    if species_text.lower() in ['nan', 'none', '']:
+        return None
+    
     # Extract organism name before parentheses and normalize
     organism = re.sub(r'\s*\([^)]*\)', '', species_text).strip()
     return organism.lower() if organism else None

@@ -56,9 +56,9 @@ class EpitopeConservationAnalyzer:
         self.paramset = paramset
         
         # File paths
-        self.msa_file = Path(f"results/{analysis}_{paramset}/protein_analysis/sequences_with_structure/msa_sequences/gram_{gram_type}/{gene}.fasta")
+        self.msa_file = Path(f"results/{analysis}_{paramset}/protein_analysis/sequences_with_structure/gram_{gram_type}/{gene}.fasta")
         self.epitope_file = Path(f"results/{analysis}_{paramset}/protein_analysis/sequences_with_structure/epitope_predictions_bepipred/{gene}")
-        self.selected_3d_file = Path(f"results/{analysis}_{paramset}/protein_analysis/sequences_with_structure/selected_3d_paths_gram_{gram_type}.txt")
+        self.selected_3d_file = Path(f"results/{analysis}_{paramset}/protein_analysis/selected_3d_paths_gram_{gram_type}.txt")
         
         # Data storage
         self.msa_sequences = []
@@ -99,7 +99,8 @@ class EpitopeConservationAnalyzer:
         with open(self.selected_3d_file, 'r') as f:
             for line in f:
                 if f"protein_structures/{self.gene}/" in line:
-                    return line.strip().split('/')[-1].split('_')[0].replace('.fasta', '')
+                    structure_id = line.strip().split('/')[-1].replace('.fasta', '')
+                    return structure_id
         return None
     
     def _find_structure_sequence(self):

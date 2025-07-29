@@ -364,7 +364,7 @@ rule extract_conserved_sequences:
 # ---------------------
 
 # NOTE: create_used_structures_mapping rule removed - now using comprehensive
-# PDB numbering mapping from download pipeline: data/protein_structures/{analysis}_{paramset}_pdb_numbering_mapping.tsv
+# PDB numbering mapping from download pipeline: data/protein_structures/{analysis}_{paramset}_fasta_structure_mapping_final.tsv
 
 # Predict B-cell epitopes using BepiPred 3.0 on selected 3D structure sequences
 rule predict_epitopes_bepipred:
@@ -398,7 +398,7 @@ rule create_epitope_tables:
 rule visualize_epitopes_pymol:
     input:
         epitope_tables_sentinel=config["paths"]["epitopes"]["epitope_tables_sentinel"], 
-        structures_mapping="results/{analysis}_{paramset}/protein_analysis/sequences_with_structure/epitope_predictions_bepipred/used_structures_mapping.tsv"
+        structures_mapping="data/protein_structures/{analysis}_{paramset}_fasta_structure_mapping_final.tsv"
     output:
         visualization_sentinel=config["paths"]["epitopes"]["bepipred_predictions"] + "/3d_visualizations/visualization_complete.sentinel"
     params:
@@ -419,7 +419,7 @@ rule analyze_epitope_conservation:
         msa_sequences_negative=lambda wildcards: config["paths"]["msa"]["sequences_structure"].replace("{group}", "negative").format(analysis=wildcards.analysis, paramset=wildcards.paramset),
         selected_3d_positive=lambda wildcards: config["paths"]["sequence_prep"]["selected_3d_paths"].replace("{group}", "positive").format(analysis=wildcards.analysis, paramset=wildcards.paramset),
         selected_3d_negative=lambda wildcards: config["paths"]["sequence_prep"]["selected_3d_paths"].replace("{group}", "negative").format(analysis=wildcards.analysis, paramset=wildcards.paramset),
-        pdb_numbering_mapping="data/protein_structures/{analysis}_{paramset}_pdb_numbering_mapping.tsv"
+        pdb_numbering_mapping="data/protein_structures/{analysis}_{paramset}_fasta_structure_mapping_final.tsv"
     output:
         conservation_analysis_sentinel=config["paths"]["epitopes"]["conservation_analysis_sentinel"]
     params:

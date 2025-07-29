@@ -341,6 +341,42 @@ def generate_comprehensive_report(results, output_file, analysis, paramset):
         .orientation-notice.landscape {{
             background: linear-gradient(135deg, #27ae60 0%, #2ecc71 100%);
         }}
+        .visualization-section {{
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            background: #fafafa;
+        }}
+        .visualization-container {{
+            margin: 15px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            background: white;
+        }}
+        .image-container {{
+            text-align: center;
+            margin: 10px 0;
+        }}
+        .legend-info {{
+            margin-top: 10px;
+            font-size: 0.9em;
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 3px;
+            border-left: 3px solid #3498db;
+        }}
+        .legend-info pre {{
+            font-family: 'Courier New', monospace;
+            font-size: 0.8em;
+            margin: 5px 0;
+            white-space: pre-wrap;
+            background: white;
+            padding: 8px;
+            border-radius: 3px;
+            border: 1px solid #e0e0e0;
+        }}
         @media screen and (orientation: landscape) {{
             .portrait-notice {{
                 display: none;
@@ -512,6 +548,65 @@ def generate_comprehensive_report(results, output_file, analysis, paramset):
         </table>
         </div>
 """
+        
+        # Add 3D visualization section for this gene
+        html_content += f"""
+        <h4>🎨 3D Epitope Visualizations for {gene}</h4>
+        <div class="visualization-section">
+"""
+        
+        # Look for visualization images
+        visualization_dir = Path(f"results/{analysis}_{paramset}/protein_analysis/sequences_with_structure/epitope_predictions_bepipred/3d_visualizations")
+        gene_images = list(visualization_dir.glob(f"{gene}_*_epitopes.png"))
+        
+        
+        if gene_images:
+            for img_path in sorted(gene_images):
+                # Extract structure ID from filename
+                img_name = img_path.name
+                structure_from_img = img_name.replace(f"{gene}_", "").replace("_epitopes.png", "")
+                
+                # Get relative path for HTML (from report location to images)
+                relative_img_path = f"protein_analysis/sequences_with_structure/epitope_predictions_bepipred/3d_visualizations/{img_name}"
+                
+                # Check for corresponding legend file
+                legend_file = img_path.with_name(img_name.replace("_epitopes.png", "_legend.txt"))
+                
+                html_content += f"""
+            <div class="visualization-container">
+                <h5>Structure: {structure_from_img}</h5>
+                <div class="image-container">
+                    <img src="{relative_img_path}" alt="3D Epitope Visualization for {gene} ({structure_from_img})" 
+                         style="max-width: 100%; height: auto; border: 1px solid #ddd; border-radius: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                </div>"""
+                
+                # Add legend information if available
+                if legend_file.exists():
+                    try:
+                        with open(legend_file, 'r') as f:
+                            legend_content = f.read()
+                        
+                        # Extract epitope details from legend
+                        if "Epitope Details:" in legend_content:
+                            details_section = legend_content.split("Epitope Details:")[1].split("Visualization Notes:")[0]
+                            html_content += f"""
+                <div class="legend-info" style="margin-top: 10px; font-size: 0.9em; background: #f8f9fa; padding: 10px; border-radius: 3px;">
+                    <strong>Epitope Color Legend:</strong>
+                    <pre style="font-family: 'Courier New', monospace; font-size: 0.8em; margin: 5px 0; white-space: pre-wrap;">{details_section.strip()}</pre>
+                </div>"""
+                    except Exception as e:
+                        pass
+                
+                html_content += """
+            </div>
+            <br>"""
+        else:
+            html_content += f"""
+            <p style="color: #666; font-style: italic;">No 3D visualizations available for {gene}</p>"""
+        
+        html_content += """
+        </div>
+"""
     
     html_content += f"""
         <div class="info-section">
@@ -523,6 +618,8 @@ def generate_comprehensive_report(results, output_file, analysis, paramset):
                 <li><strong>Low Conservation:</strong> &lt;0.4 (species-specific or highly variable)</li>
                 <li><strong>Consensus Sequences:</strong> Amino acids appearing above threshold frequency</li>
                 <li><strong>X in Consensus:</strong> No amino acid reaches the threshold (ambiguous position)</li>
+                <li><strong>3D Visualizations:</strong> PyMOL-generated images showing epitopes as colored cartoon regions on protein structures</li>
+                <li><strong>Epitope Colors:</strong> Each epitope is assigned a unique color (red, blue, green, yellow, etc.) for easy identification</li>
             </ul>
         </div>
         

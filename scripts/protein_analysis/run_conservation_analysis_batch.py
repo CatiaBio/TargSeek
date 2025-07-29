@@ -69,8 +69,8 @@ def load_gene_structure_mapping(pdb_numbering_file):
         try:
             df = pd.read_csv(pdb_numbering_file, sep='\t')
             for _, row in df.iterrows():
-                gene = row['Gene']
-                structure = row['Structure_ID']
+                gene = row['gene_name']
+                structure = row['structure_id']
                 if gene not in mapping:
                     mapping[gene] = structure
         except Exception as e:
@@ -105,7 +105,7 @@ def main():
         output_dir = Path("epitope_conservation_analysis")
         sentinel_file = output_dir / "conservation_analysis_complete.sentinel"
         epitope_predictions_dir = Path(f"results/{analysis}_{paramset}/protein_analysis/sequences_with_structure/epitope_predictions_bepipred")
-        pdb_numbering_mapping = f"data/protein_structures/{analysis}_{paramset}_pdb_numbering_mapping.tsv"
+        pdb_numbering_mapping = f"data/protein_structures/{analysis}_{paramset}_fasta_structure_mapping_final.tsv"
     
     # Create output directory
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -132,7 +132,7 @@ def main():
         
         # Check both gram types
         for gram_type in ['positive', 'negative']:
-            selected_paths_file = f"results/{analysis}_{paramset}/protein_analysis/sequences_with_structure/selected_3d_paths_gram_{gram_type}.txt"
+            selected_paths_file = f"results/{analysis}_{paramset}/protein_analysis/selected_3d_paths_gram_{gram_type}.txt"
             
             if Path(selected_paths_file).exists():
                 with open(selected_paths_file, 'r') as f:

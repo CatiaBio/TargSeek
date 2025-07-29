@@ -16,6 +16,8 @@ from Bio.Align import AlignInfo
 import numpy as np
 import pandas as pd
 from pathlib import Path
+import matplotlib
+matplotlib.use('Agg')  # Set non-interactive backend before importing pyplot
 import matplotlib.pyplot as plt
 import seaborn as sns
 from collections import Counter
