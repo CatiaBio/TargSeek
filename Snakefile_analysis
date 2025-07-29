@@ -379,29 +379,11 @@ rule predict_epitopes_bepipred:
     script:
         config["scripts"]["epitopes"]["predict_epitopes_bepipred"]
 
-# Extract PDB amino acid numbering from selected 3D structure files
-# Creates consolidated TSV file mapping selected structures to chains with numbering information
-rule extract_pdb_numbering:
-    input:
-        fasta_structure_mapping="data/protein_structures/{analysis}_{paramset}_fasta_structure_mapping.tsv",
-        selected_3d_paths_positive=config["paths"]["sequence_prep"]["selected_3d_paths"].replace("{group}", "positive"),
-        selected_3d_paths_negative=config["paths"]["sequence_prep"]["selected_3d_paths"].replace("{group}", "negative")
-    output:
-        numbering_tsv="results/{analysis}_{paramset}/protein_analysis/pdb_numbering_mapping.tsv",
-        numbering_sentinel="results/{analysis}_{paramset}/protein_analysis/pdb_numbering_complete.sentinel"
-    params:
-        analysis="{analysis}",
-        paramset="{paramset}",
-        structures_dir="data/protein_structures/pdb_files"
-    script:
-        "scripts/protein_analysis/extract_pdb_numbering_selected.py"
-
 # Create epitope tables from BepiPred 3.0 raw output
 rule create_epitope_tables:
     input:
         bepipred_sentinel=config["paths"]["epitopes"]["bepipred_predictions"] + "/bepipred_complete.sentinel",
-        pdb_numbering_sentinel="results/{analysis}_{paramset}/protein_analysis/pdb_numbering_complete.sentinel",
-        pdb_numbering_mapping="results/{analysis}_{paramset}/protein_analysis/pdb_numbering_mapping.tsv"
+        structure_mapping="data/protein_structures/{analysis}_{paramset}_fasta_structure_mapping_final.tsv"
     output:
         epitope_tables_sentinel=config["paths"]["epitopes"]["epitope_tables_sentinel"]
     params:

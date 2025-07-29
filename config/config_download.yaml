@@ -197,6 +197,10 @@ paths:
     # PDB numbering extraction (in pdb_files directory)
     pdb_numbering_sentinel: "data/protein_structures/pdb_files/{analysis}_{paramset}_pdb_numbering_complete.sentinel"
     pdb_numbering_tsv: "data/protein_structures/pdb_files/{analysis}_{paramset}_pdb_numbering_mapping.tsv"
+    # Chain information extraction (in pdb_files directory)
+    chains_complete_sentinel: "data/protein_structures/pdb_files/{analysis}_{paramset}_chains_complete.sentinel"
+    # Final mapping file with chain start/end information
+    fasta_structure_mapping_final: "data/protein_structures/{analysis}_{paramset}_fasta_structure_mapping_final.tsv"
     # Summary file with protein names (used for enhanced UniProt searches)
     summary_file: "results/{analysis}_{paramset}/gene_selection/summary.tsv"
 
