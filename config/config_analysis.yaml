@@ -96,6 +96,17 @@ epitope_analysis:
   # Minimum length for linear epitopes (residues)
   min_epitope_length: 6
   
+# PyMOL 3D visualization settings
+pymol_visualization:
+  # Enable PyMOL epitope visualizations (requires PyMOL installation)
+  enabled: true
+  # Image resolution settings
+  image_width: 1200
+  image_height: 900
+  image_dpi: 300
+  # Enable ray tracing for high-quality images (slower)
+  ray_tracing: true
+  
 # MSA Trimming settings - ClipKIT
 trimming:
   # ClipKIT settings
@@ -299,6 +310,7 @@ scripts:
   epitopes:
     predict_epitopes_bepipred: "scripts/protein_analysis/predict_epitopes_bepipred_3d_only.py"
     create_epitope_tables: "scripts/protein_analysis/create_epitope_tables_from_bepipred.py"
+    visualize_epitopes_pymol: "scripts/protein_analysis/visualize_epitopes_pymol.py"
     analyze_epitope_conservation: "scripts/protein_analysis/analyze_epitope_conservation.py"
   
   # -------------------------------------------------------------------------

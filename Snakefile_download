@@ -278,23 +278,25 @@ rule download_proteins_to_analyse:
     script:
         config["scripts"]["downloads"]["download_protein_sequences"]
 
-# Download bacterial 3D structures and sequences from PDB
-# Searches UniProt for bacterial proteins with available 3D structures, prioritizing by resolution
-# Downloads top 3 structures per gene with concurrent processing and intelligent completion checking
+# Download protein structures using sequence similarity to PDB
+# Uses reference sequences from standard bacteria (E. coli, Bacillus, etc.) to find similar structures
+# Prioritizes experimental structures, includes AlphaFold models if needed
+# Creates organized output directories with metadata and mapping files
 rule download_3d_structures:
     input:
         protein_list=config["paths"]["gene_selection"]["summary"]
     output:
-        sentinel=config["paths"]["protein_structures"]["download_sentinel"]
+        sentinel=config["paths"]["protein_structures"]["download_sentinel"],
+        mapping_file=config["paths"]["protein_structures"]["fasta_structure_mapping"]
     params:
         analysis="{analysis}",
         paramset="{paramset}",
         group="unified",  # No longer gram-specific
-        max_structures=config.get("3d_structures", {}).get("max_structures", 10),
+        max_structures=config.get("3d_structures", {}).get("max_structures", 20),
         include_computed_models=config.get("3d_structures", {}).get("include_computed_models", True),
-        prioritize_extracellular=config.get("3d_structures", {}).get("prioritize_extracellular", True),
-        extracellular_keywords=config.get("3d_structures", {}).get("extracellular_keywords", ["extracellular", "outer membrane", "cell surface", "secreted"]),
-        intracellular_keywords=config.get("3d_structures", {}).get("intracellular_keywords", ["cytoplasm", "cytosol", "intracellular", "ribosome"])
+        identity_cutoff=config.get("3d_structures", {}).get("identity_cutoff", 0.3),
+        evalue_cutoff=config.get("3d_structures", {}).get("evalue_cutoff", 0.1),
+        min_experimental=config.get("3d_structures", {}).get("min_experimental", 5)
     group: "unified_structures_{analysis}_{paramset}"
     script:
         config["scripts"]["downloads"]["download_protein_structures"]
@@ -313,20 +315,6 @@ rule extract_3d_metadata:
     script:
         config["scripts"]["downloads"]["extract_protein_structures_metadata"]
 
-# Extract PDB amino acid numbering from 3D structure files
-# Creates consolidated TSV file mapping genes to PDB structures with numbering information
-rule extract_pdb_numbering:
-    input:
-        metadata_tsv=config["paths"]["protein_structures"]["metadata_tsv"]
-    output:
-        numbering_tsv=config["paths"]["protein_structures"]["pdb_numbering_tsv"],
-        numbering_sentinel=config["paths"]["protein_structures"]["pdb_numbering_sentinel"]
-    params:
-        analysis="{analysis}",
-        paramset="{paramset}",
-        base_dir=config["paths"]["protein_structures"]["base_dir"]
-    script:
-        config["scripts"]["downloads"]["extract_pdb_numbering"]
 
 # Generate comprehensive download report
 # Creates HTML report with species classification stats, gene filtering progress,

@@ -61,21 +61,20 @@ protein_selection:
   # If using top_n mode, specify maximum proteins per group
   max_proteins_per_group: 50
 
-# 3D structure download configuration (Enhanced with PDBML support)
+# 3D structure download configuration - Sequence Similarity Based
 3d_structures:
-  # Maximum number of structures to download per gene (1-20)
-  max_structures: 15
-  # Download computed models if no experimental structures available
+  # Maximum number of structures to download per gene (1-50)
+  max_structures: 20
+  # Download computed models (AlphaFold) if insufficient experimental structures
   include_computed_models: true
-  # Only download bacterial structures (taxonomy ID 2)
+  # Sequence similarity parameters for PDB search
+  identity_cutoff: 0.3  # Minimum sequence identity (0.0-1.0, 30%)
+  evalue_cutoff: 0.1    # Maximum E-value cutoff
+  min_experimental: 5   # Minimum experimental structures before including AlphaFold
+  
+  # Legacy parameters (for backward compatibility)
   bacterial_only: true
-  # Enhanced search: Use protein names from summary.tsv for better UniProt matching
-  use_protein_names: true
-  # Download both PDB (.pdb.gz) and PDBML (.xml.gz) formats for accurate residue mapping
-  download_pdbml: true
-  # Prioritize extracellular/surface proteins
   prioritize_extracellular: true
-  # Preferred localization keywords (highest priority first)
   extracellular_keywords:
     - "extracellular"
     - "outer membrane" 
@@ -85,7 +84,6 @@ protein_selection:
     - "cell wall"
     - "membrane"
     - "surface"
-  # Keywords to deprioritize (intracellular proteins)
   intracellular_keywords:
     - "cytoplasm"
     - "cytosol"
@@ -93,6 +91,16 @@ protein_selection:
     - "ribosome"
     - "nucleus"
     - "nucleoid"
+  
+  # Structure quality filtering (legacy)
+  structure_filters:
+    max_resolution: 3.5
+    min_year: 2000
+    exclude_obsolete: true
+    preferred_methods: ["X-RAY DIFFRACTION", "ELECTRON MICROSCOPY", "SOLUTION NMR"]
+    min_sequence_length: 50
+    max_sequence_length: 2000
+    min_validation_confidence: 0.3
 
 # =============================================================================
 # FILE SYSTEM PATHS
@@ -173,19 +181,22 @@ paths:
   # STAGE 5: 3D Structure Downloads (Enhanced with PDBML support)
   # -------------------------------------------------------------------------
   protein_structures:
-    # Base directory for 3D structure files
+    # Base directory for gene-specific FASTA files
     # Each gene directory contains:
-    #   - .pdb.gz files (legacy PDB format)  
     #   - .fasta files (protein sequences from PDB/UniProt)
     #   - metadata.json (structure metadata)
     base_dir: "data/protein_structures"
+    # Shared directory for 3D structure files (PDB, mmCIF)
+    structures_dir: "data/protein_structures/pdb_files"
     # Completion sentinel files (unified, inside protein_structures folder)
     download_sentinel: "data/protein_structures/{analysis}_{paramset}_structures_complete.sentinel"
+    # Mapping file that links FASTA files to their corresponding 3D structures
+    fasta_structure_mapping: "data/protein_structures/{analysis}_{paramset}_fasta_structure_mapping.tsv"
     # Metadata extraction
     metadata_tsv: "data/protein_structures/{analysis}_{paramset}_downloaded_structures.tsv"
-    # PDB numbering extraction
-    pdb_numbering_sentinel: "data/protein_structures/{analysis}_{paramset}_pdb_numbering_complete.sentinel"
-    pdb_numbering_tsv: "data/protein_structures/{analysis}_{paramset}_pdb_numbering_mapping.tsv"
+    # PDB numbering extraction (in pdb_files directory)
+    pdb_numbering_sentinel: "data/protein_structures/pdb_files/{analysis}_{paramset}_pdb_numbering_complete.sentinel"
+    pdb_numbering_tsv: "data/protein_structures/pdb_files/{analysis}_{paramset}_pdb_numbering_mapping.tsv"
     # Summary file with protein names (used for enhanced UniProt searches)
     summary_file: "results/{analysis}_{paramset}/gene_selection/summary.tsv"
 
@@ -238,7 +249,7 @@ scripts:
   # -------------------------------------------------------------------------
   downloads:
     download_protein_sequences: "scripts/gene_selection/download_protein_sequences.py"
-    download_protein_structures: "scripts/gene_selection/download_protein_structures.py"
+    download_protein_structures: "scripts/gene_selection/download_structures_by_similarity.py"
     extract_protein_structures_metadata: "scripts/gene_selection/extract_protein_structures_metadata.py"
     extract_pdb_numbering: "scripts/gene_selection/extract_pdb_numbering.py"
   
