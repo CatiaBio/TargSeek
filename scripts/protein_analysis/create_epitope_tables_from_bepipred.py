@@ -476,6 +476,96 @@ def process_bepipred_outputs(output_dir, min_epitope_length=6, pdb_numbering_map
     logging.info(f"Failed: {failed} structures")
     logging.info(f"Success rate: {processed/(processed+failed)*100:.1f}%" if (processed+failed) > 0 else "No files processed")
 
+def load_structure_mapping(mapping_file):
+    """Load structure mapping with chain information from final mapping file"""
+    try:
+        import pandas as pd
+        df = pd.read_csv(mapping_file, sep='\t')
+        
+        # Create mapping dictionaries
+        structure_info = {}
+        selected_paths = {}
+        
+        for _, row in df.iterrows():
+            gene_name = row['gene_name']
+            structure_path = row['structure_path']
+            chain_start = row.get('chain_start')
+            chain_end = row.get('chain_end')
+            
+            # Store structure coverage information
+            if chain_start is not None and chain_end is not None:
+                structure_info[structure_path] = {
+                    'start': int(chain_start),
+                    'end': int(chain_end)
+                }
+            
+            # Store selected path for each gene (use the first/primary structure)
+            if gene_name not in selected_paths:
+                selected_paths[gene_name] = structure_path
+        
+        logging.info(f"Loaded structure mapping for {len(selected_paths)} genes")
+        logging.info(f"Structure coverage info for {len(structure_info)} structures")
+        
+        return structure_info, selected_paths
+        
+    except Exception as e:
+        logging.error(f"Error loading structure mapping: {e}")
+        return {}, {}
+
+def process_bepipred_outputs_with_mapping(output_dir, min_epitope_length=6, structure_mapping_file=None):
+    """Process BepiPred outputs using the final structure mapping file"""
+    
+    logging.info(f"Processing BepiPred outputs in: {output_dir}")
+    
+    # Load structure mapping
+    if structure_mapping_file:
+        structure_info, selected_paths = load_structure_mapping(structure_mapping_file)
+    else:
+        logging.warning("No structure mapping file provided")
+        structure_info, selected_paths = {}, {}
+    
+    # Find all CSV files
+    csv_files = find_bepipred_csv_files(output_dir)
+    
+    if not csv_files:
+        logging.error(f"No BepiPred CSV files found in {output_dir}")
+        return
+    
+    logging.info(f"Found {len(csv_files)} BepiPred CSV files")
+    
+    # Initialize table generator
+    generator = BepiPredTableGenerator(
+        min_epitope_length=min_epitope_length, 
+        pdb_mapping=structure_info, 
+        selected_3d_paths=selected_paths
+    )
+    
+    processed = 0
+    failed = 0
+    
+    for csv_file in csv_files:
+        logging.info(f"Processing: {csv_file}")
+        
+        # Extract sequence ID from filename
+        csv_name = csv_file.stem
+        if csv_name.endswith('_raw_output'):
+            sequence_id = csv_name.replace('_raw_output', '')
+        else:
+            sequence_id = csv_name
+        
+        try:
+            # Generate epitope tables
+            generator.process_bepipred_file(csv_file, sequence_id)
+            processed += 1
+            
+        except Exception as e:
+            logging.error(f"Failed to process {csv_file}: {e}")
+            failed += 1
+    
+    logging.info(f"Processed: {processed} structures")
+    logging.info(f"Failed: {failed} structures")
+    logging.info(f"Success rate: {processed/(processed+failed)*100:.1f}%" if (processed+failed) > 0 else "No files processed")
+
 def main():
     """Main function for both command line and Snakemake usage"""
     
@@ -483,7 +573,7 @@ def main():
     if 'snakemake' in globals():
         # Running from Snakemake
         bepipred_sentinel = snakemake.input.bepipred_sentinel
-        pdb_numbering_mapping = snakemake.input.pdb_numbering_mapping
+        structure_mapping = snakemake.input.structure_mapping
         sentinel_file = snakemake.output.epitope_tables_sentinel
         min_length = snakemake.params.get('min_epitope_length', 6)
         analysis = snakemake.params.analysis
@@ -492,19 +582,13 @@ def main():
         # Derive BepiPred directory from sentinel file path
         bepipred_dir = Path(bepipred_sentinel).parent
         
-        # Construct paths to selected 3D paths files
-        selected_3d_paths_positive = f"results/{analysis}_{paramset}/protein_analysis/sequences_with_structure/selected_3d_paths_gram_positive.txt"
-        selected_3d_paths_negative = f"results/{analysis}_{paramset}/protein_analysis/sequences_with_structure/selected_3d_paths_gram_negative.txt"
-        
         logging.info(f"Running epitope table creation for {analysis}_{paramset}")
         logging.info(f"BepiPred directory: {bepipred_dir}")
-        logging.info(f"PDB numbering mapping: {pdb_numbering_mapping}")
-        logging.info(f"Selected 3D paths (positive): {selected_3d_paths_positive}")
-        logging.info(f"Selected 3D paths (negative): {selected_3d_paths_negative}")
+        logging.info(f"Structure mapping file: {structure_mapping}")
         logging.info(f"Sentinel file: {sentinel_file}")
         
-        # Process BepiPred outputs
-        process_bepipred_outputs(bepipred_dir, min_length, pdb_numbering_mapping, selected_3d_paths_positive, selected_3d_paths_negative)
+        # Process BepiPred outputs with new structure mapping
+        process_bepipred_outputs_with_mapping(bepipred_dir, min_length, structure_mapping)
         
         # Create sentinel file
         with open(sentinel_file, 'w') as f:

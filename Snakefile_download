@@ -51,7 +51,9 @@ rule all_download_data:
             [
                 config["paths"]["protein_structures"]["metadata_tsv"],
                 config["paths"]["protein_structures"]["pdb_numbering_sentinel"],
-                config["paths"]["gene_selection"]["download_report"]
+                config["paths"]["gene_selection"]["download_report"],
+                config["paths"]["protein_structures"]["chains_complete_sentinel"],
+                config["paths"]["protein_structures"]["fasta_structure_mapping_final"]
             ],
             analysis=config["species_batches"],
             paramset=config["quickgo_paramsets"]
@@ -338,3 +340,32 @@ rule generate_download_report:
         paramset="{paramset}"
     script:
         config["scripts"]["reports"]["generate_download_report"]
+
+# Extract chain information from PDB and CIF structure files
+# Creates individual TSV files for each structure containing chain ID, start, and end positions
+# Handles both compressed (.gz) and uncompressed structure files in multiple formats
+rule extract_structure_chains:
+    input:
+        structures_sentinel=config["paths"]["protein_structures"]["download_sentinel"]
+    output:
+        sentinel=touch(config["paths"]["protein_structures"]["chains_complete_sentinel"])
+    params:
+        analysis="{analysis}",
+        paramset="{paramset}"
+    script:
+        "scripts/protein_analysis/extract_chain_info.py"
+
+# Update structure mapping file with chain start and end positions
+# Adds chain_start and chain_end columns to the existing FASTA-structure mapping
+# Creates final mapping file with complete structural information for downstream analysis
+rule update_structure_mapping_with_chains:
+    input:
+        mapping_file=config["paths"]["protein_structures"]["fasta_structure_mapping"],
+        chains_complete=config["paths"]["protein_structures"]["chains_complete_sentinel"]
+    output:
+        final_mapping=config["paths"]["protein_structures"]["fasta_structure_mapping_final"]
+    params:
+        analysis="{analysis}",
+        paramset="{paramset}"
+    script:
+        "scripts/protein_analysis/update_structure_mapping_with_chains.py"
