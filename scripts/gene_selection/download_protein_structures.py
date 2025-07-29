@@ -15,6 +15,7 @@ from pathlib import Path
 import logging
 import time
 import json
+import re
 from Bio import SeqIO
 from Bio.SeqRecord import SeqRecord
 from Bio.Seq import Seq
@@ -31,10 +32,10 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 CACHE_DIR = PROJECT_ROOT / "cache" / "protein_structures"
 CACHE_FILE = CACHE_DIR / "protein_3d_structure_cache.json"
-GENE_DOWNLOAD_CACHE_FILE = CACHE_DIR / "gene_downloads_cache.json"
+STRUCTURE_DOWNLOAD_CACHE_FILE = CACHE_DIR / "structure_downloads_cache.json"
 
-class GeneDownloadCache:
-    """Manages caching of gene-level download completion status"""
+class StructureDownloadCache:
+    """Manages caching of individual gene|structure|fasta combinations"""
     
     def __init__(self):
         self.cache = {}
@@ -42,17 +43,17 @@ class GeneDownloadCache:
         self.load_cache()
     
     def load_cache(self):
-        """Load existing gene download cache"""
-        if GENE_DOWNLOAD_CACHE_FILE.exists():
+        """Load existing structure download cache"""
+        if STRUCTURE_DOWNLOAD_CACHE_FILE.exists():
             try:
-                with open(GENE_DOWNLOAD_CACHE_FILE, 'r') as f:
+                with open(STRUCTURE_DOWNLOAD_CACHE_FILE, 'r') as f:
                     self.cache = json.load(f)
-                logging.info(f"✓ Loaded gene download cache with {len(self.cache)} entries")
+                logging.info(f"✓ Loaded structure download cache with {len(self.cache)} entries")
             except Exception as e:
-                logging.warning(f"Could not load gene download cache: {e}")
+                logging.warning(f"Could not load structure download cache: {e}")
                 self.cache = {}
         else:
-            logging.info("Creating new gene download cache")
+            logging.info("Creating new structure download cache")
             self.cache = {}
     
     def save_cache(self):
@@ -60,34 +61,52 @@ class GeneDownloadCache:
         if self.cache_updates > 0:
             try:
                 CACHE_DIR.mkdir(parents=True, exist_ok=True)
-                with open(GENE_DOWNLOAD_CACHE_FILE, 'w') as f:
+                with open(STRUCTURE_DOWNLOAD_CACHE_FILE, 'w') as f:
                     json.dump(self.cache, f, indent=2)
-                logging.info(f"✓ Saved gene download cache with {self.cache_updates} new/updated entries")
+                logging.info(f"✓ Saved structure download cache with {self.cache_updates} new/updated entries")
                 self.cache_updates = 0
             except Exception as e:
-                logging.error(f"Failed to save gene download cache: {e}")
+                logging.error(f"Failed to save structure download cache: {e}")
     
-    def is_gene_completed(self, gene_name):
-        """Check if gene download is already completed"""
-        return self.cache.get(gene_name, {}).get('completed', False)
+    def _make_key(self, gene_name: str, structure_id: str, fasta_type: str = "main") -> str:
+        """Create cache key for gene|structure|fasta combination"""
+        return f"{gene_name}|{structure_id}|{fasta_type}"
     
-    def get_gene_structures(self, gene_name):
-        """Get list of downloaded structures for a gene"""
-        return self.cache.get(gene_name, {}).get('downloaded_structures', [])
+    def is_structure_downloaded(self, gene_name: str, structure_id: str, fasta_type: str = "main") -> bool:
+        """Check if specific gene|structure|fasta combination is downloaded"""
+        key = self._make_key(gene_name, structure_id, fasta_type)
+        entry = self.cache.get(key, {})
+        return entry.get('downloaded', False)
     
-    def mark_gene_completed(self, gene_name, structures_info):
-        """Mark gene as completed with structure information"""
-        self.cache[gene_name] = {
-            'completed': True,
-            'completion_date': datetime.now().isoformat(),
-            'downloaded_structures': structures_info.get('structure_ids', []),
-            'experimental_count': structures_info.get('experimental_count', 0),
-            'computed_count': structures_info.get('computed_count', 0),
-            'sequences_count': structures_info.get('sequences', 0),
-            'structures_count': structures_info.get('structures', 0)
+    def get_downloaded_structures_for_gene(self, gene_name: str) -> set:
+        """Get all downloaded structure IDs for a gene"""
+        structures = set()
+        for key in self.cache:
+            if key.startswith(f"{gene_name}|") and self.cache[key].get('downloaded', False):
+                _, structure_id, _ = key.split('|', 2)
+                structures.add(structure_id)
+        return structures
+    
+    def mark_structure_downloaded(self, gene_name: str, structure_id: str, fasta_type: str = "main", 
+                                structure_file_path: str = None, fasta_file_paths: list = None):
+        """Mark specific gene|structure|fasta combination as downloaded"""
+        key = self._make_key(gene_name, structure_id, fasta_type)
+        self.cache[key] = {
+            'downloaded': True,
+            'download_date': datetime.now().isoformat(),
+            'structure_file': structure_file_path,
+            'fasta_files': fasta_file_paths or [],
+            'gene': gene_name,
+            'structure_id': structure_id,
+            'fasta_type': fasta_type
         }
         self.cache_updates += 1
-        logging.info(f"Marked gene {gene_name} as completed in cache with {len(structures_info.get('structure_ids', []))} structures")
+        logging.info(f"Marked {key} as downloaded in cache")
+    
+    def get_missing_structures_for_gene(self, gene_name: str, required_structures: set) -> set:
+        """Get structure IDs that are missing for a gene"""
+        downloaded = self.get_downloaded_structures_for_gene(gene_name)
+        return required_structures - downloaded
 
 class Protein3DStructureCache:
     """Manages caching of protein 3D structure searches and downloads"""
@@ -191,7 +210,7 @@ def load_gene_aliases(aliases_file):
         logging.warning(f"Could not load gene aliases: {e}")
         return {}
 
-def search_pdb_via_uniprot_bacterial(gene_name, max_structures=10, gene_aliases=None, cache=None, prioritize_extracellular=True, extracellular_keywords=None, intracellular_keywords=None):
+def search_pdb_via_uniprot_bacterial(gene_name, max_structures=10, gene_aliases=None, cache=None, prioritize_extracellular=True, extracellular_keywords=None, intracellular_keywords=None, structure_filters=None, uniprot_protein_info=None):
     """
     Search UniProt for bacterial proteins with PDB structures, with alias fallback
     
@@ -203,7 +222,13 @@ def search_pdb_via_uniprot_bacterial(gene_name, max_structures=10, gene_aliases=
         prioritize_extracellular (bool): Whether to prioritize extracellular proteins
         extracellular_keywords (list): Keywords indicating extracellular localization
         intracellular_keywords (list): Keywords indicating intracellular localization
+        structure_filters (dict): Quality filtering criteria
+        uniprot_protein_info (dict): UniProt protein information for keyword filtering
     """
+    # Load UniProt protein info if not provided
+    if uniprot_protein_info is None:
+        uniprot_protein_info = load_uniprot_protein_info()
+    
     # Check cache first
     if cache:
         cached_result = cache.get_cached_search(gene_name)
@@ -212,7 +237,7 @@ def search_pdb_via_uniprot_bacterial(gene_name, max_structures=10, gene_aliases=
             return cached_result['pdb_ids'][:max_structures]
     
     # Try primary gene name first
-    pdb_ids = _search_uniprot_bacterial_single_gene(gene_name, max_structures, prioritize_extracellular, extracellular_keywords, intracellular_keywords)
+    pdb_ids = _search_uniprot_bacterial_single_gene(gene_name, max_structures, prioritize_extracellular, extracellular_keywords, intracellular_keywords, structure_filters, uniprot_protein_info)
     
     if pdb_ids:
         logging.info(f"Found {len(pdb_ids)} bacterial PDB structures via UniProt for gene {gene_name}")
@@ -225,7 +250,7 @@ def search_pdb_via_uniprot_bacterial(gene_name, max_structures=10, gene_aliases=
         logging.info(f"No bacterial structures found for {gene_name}, trying {len(gene_aliases)} aliases")
         for alias in gene_aliases:
             if alias != gene_name:  # Don't retry the same name
-                alias_pdb_ids = _search_uniprot_bacterial_single_gene(alias, max_structures, prioritize_extracellular, extracellular_keywords, intracellular_keywords)
+                alias_pdb_ids = _search_uniprot_bacterial_single_gene(alias, max_structures, prioritize_extracellular, extracellular_keywords, intracellular_keywords, structure_filters, uniprot_protein_info)
                 if alias_pdb_ids:
                     logging.info(f"Found {len(alias_pdb_ids)} bacterial PDB structures via alias '{alias}'")
                     if cache:
@@ -343,6 +368,89 @@ def get_pdb_release_dates(pdb_ids):
     
     return release_dates
 
+def filter_structures_by_quality(pdb_ids, structure_filters=None):
+    """
+    Filter PDB structures based on quality criteria
+    
+    Args:
+        pdb_ids (list): List of PDB identifiers
+        structure_filters (dict): Quality filtering criteria
+    
+    Returns:
+        list: Filtered list of PDB IDs that pass quality checks
+    """
+    if not structure_filters:
+        return pdb_ids
+    
+    # Default filters if not provided
+    default_filters = {
+        "max_resolution": 3.5,
+        "min_year": 2000,
+        "exclude_obsolete": True,
+        "preferred_methods": ["X-RAY DIFFRACTION", "ELECTRON MICROSCOPY", "SOLUTION NMR"],
+        "min_sequence_length": 50,
+        "max_sequence_length": 2000,
+        "min_validation_confidence": 0.3
+    }
+    
+    filters = {**default_filters, **structure_filters}
+    filtered_pdb_ids = []
+    
+    logging.info(f"Applying quality filters to {len(pdb_ids)} structures:")
+    logging.info(f"  - Max resolution: {filters['max_resolution']}Å")
+    logging.info(f"  - Min year: {filters['min_year']}")
+    logging.info(f"  - Exclude obsolete: {filters['exclude_obsolete']}")
+    logging.info(f"  - Preferred methods: {filters['preferred_methods']}")
+    
+    for pdb_id in pdb_ids:
+        try:
+            metadata = get_pdb_metadata(pdb_id)
+            
+            # Check if structure is obsolete
+            if filters['exclude_obsolete'] and metadata.get('is_obsolete', False):
+                logging.debug(f"Excluding {pdb_id}: obsolete structure")
+                continue
+            
+            # Check resolution
+            resolution = metadata.get('resolution')
+            if resolution and resolution > filters['max_resolution']:
+                logging.debug(f"Excluding {pdb_id}: resolution {resolution}Å > {filters['max_resolution']}Å")
+                continue
+            
+            # Check year
+            year = metadata.get('year')
+            if year and year < filters['min_year']:
+                logging.debug(f"Excluding {pdb_id}: year {year} < {filters['min_year']}")
+                continue
+            
+            # Check experimental method
+            method = metadata.get('method', '').upper()
+            if method != "UNKNOWN" and method not in filters['preferred_methods']:
+                logging.debug(f"Excluding {pdb_id}: method '{method}' not in preferred methods")
+                continue
+            
+            # Check sequence length
+            seq_length = metadata.get('sequence_length')
+            if seq_length:
+                if seq_length < filters['min_sequence_length']:
+                    logging.debug(f"Excluding {pdb_id}: sequence length {seq_length} < {filters['min_sequence_length']}")
+                    continue
+                if seq_length > filters['max_sequence_length']:
+                    logging.debug(f"Excluding {pdb_id}: sequence length {seq_length} > {filters['max_sequence_length']}")
+                    continue
+            
+            # Structure passed all filters
+            filtered_pdb_ids.append(pdb_id)
+            logging.debug(f"Including {pdb_id}: passed quality filters")
+            
+        except Exception as e:
+            logging.warning(f"Error checking quality for {pdb_id}: {e}")
+            # Include structure if we can't check quality (to avoid losing data)
+            filtered_pdb_ids.append(pdb_id)
+    
+    logging.info(f"Quality filtering: {len(filtered_pdb_ids)}/{len(pdb_ids)} structures passed")
+    return filtered_pdb_ids
+
 def filter_unique_pdb_prefixes(pdb_with_dates, max_structures):
     """
     Filter PDB structures to keep only those with unique first digit prefixes
@@ -379,7 +487,218 @@ def filter_unique_pdb_prefixes(pdb_with_dates, max_structures):
     
     return unique_structures
 
-def _search_uniprot_bacterial_single_gene(gene_name, max_structures, prioritize_extracellular=True, extracellular_keywords=None, intracellular_keywords=None):
+def load_gene_annotations_from_data(analysis, paramset, base_dir=None):
+    """
+    Load gene annotations and GO terms from existing pipeline data
+    Returns dict mapping gene_name -> expected keywords/functions
+    """
+    if base_dir is None:
+        base_dir = Path(__file__).parent.parent.parent
+    
+    gene_annotations = {}
+    
+    try:
+        # Load GO validation report with functional annotations
+        go_report_path = Path(base_dir) / "data" / "quickgo" / paramset / "go_validation_report.tsv"
+        if go_report_path.exists():
+            go_df = pd.read_csv(go_report_path, sep='\t')
+            for _, row in go_df.iterrows():
+                gene = row.get('gene_symbol', '').lower()
+                go_terms = row.get('go_terms', '')
+                if gene and go_terms:
+                    # Extract keywords from GO terms
+                    keywords = [gene]  # Always include gene name
+                    go_keywords = re.findall(r'\b\w+\b', go_terms.lower())
+                    keywords.extend([kw for kw in go_keywords if len(kw) > 3])  # Filter short words
+                    gene_annotations[gene] = keywords
+        
+        # Load protein information from UniProt data
+        protein_info_path = Path(base_dir) / "data" / "uniprot" / "protein_info.json"
+        if protein_info_path.exists():
+            with open(protein_info_path, 'r') as f:
+                protein_data = json.load(f)
+            
+            for gene, info in protein_data.items():
+                gene_lower = gene.lower()
+                if gene_lower not in gene_annotations:
+                    gene_annotations[gene_lower] = []
+                
+                # Add gene name and aliases
+                gene_annotations[gene_lower].append(gene_lower)
+                aliases = info.get('aliases', [])
+                gene_annotations[gene_lower].extend([alias.lower() for alias in aliases])
+                
+                # Add protein names and functions if available
+                protein_names = info.get('protein_names', [])
+                gene_annotations[gene_lower].extend([name.lower() for name in protein_names])
+        
+        # Load gene aliases
+        gene_aliases_path = Path(base_dir) / "data" / "quickgo" / paramset / "gene_aliases.json"
+        if gene_aliases_path.exists():
+            with open(gene_aliases_path, 'r') as f:
+                aliases_data = json.load(f)
+            
+            for gene, aliases in aliases_data.items():
+                gene_lower = gene.lower()
+                if gene_lower not in gene_annotations:
+                    gene_annotations[gene_lower] = []
+                gene_annotations[gene_lower].extend([alias.lower() for alias in aliases])
+        
+        logging.info(f"Loaded validation data for {len(gene_annotations)} genes from pipeline data")
+        
+    except Exception as e:
+        logging.warning(f"Could not load gene annotations from pipeline data: {e}")
+        # Fallback to minimal gene name matching
+        return {}
+    
+    return gene_annotations
+
+def load_uniprot_protein_info(base_dir=None):
+    """
+    Load protein information from data/uniprot/protein_info.json
+    Returns dict mapping gene_name -> protein_name and keywords
+    """
+    if base_dir is None:
+        base_dir = Path(__file__).parent.parent.parent
+    
+    protein_info = {}
+    
+    try:
+        protein_info_path = Path(base_dir) / "data" / "uniprot" / "protein_info.json"
+        if protein_info_path.exists():
+            with open(protein_info_path, 'r') as f:
+                uniprot_data = json.load(f)
+            
+            for gene, info in uniprot_data.items():
+                gene_lower = gene.lower()
+                protein_name = info.get('protein_name', '').strip()
+                
+                if protein_name:
+                    # Extract keywords from protein name (split by spaces, remove short words)
+                    protein_keywords = []
+                    words = re.findall(r'\b\w+\b', protein_name.lower())
+                    for word in words:
+                        if len(word) >= 3 and word not in ['the', 'and', 'for', 'with', 'from']:
+                            protein_keywords.append(word)
+                    
+                    protein_info[gene_lower] = {
+                        'protein_name': protein_name,
+                        'keywords': protein_keywords,
+                        'gene_names': [name.lower() for name in info.get('gene_names', [])]
+                    }
+            
+            logging.info(f"Loaded UniProt protein info for {len(protein_info)} genes")
+            
+    except Exception as e:
+        logging.warning(f"Could not load UniProt protein info: {e}")
+    
+    return protein_info
+
+def validate_protein_name_keywords(gene_name, structure_protein_names, uniprot_protein_info):
+    """
+    Validate if structure protein names contain keywords from the expected protein name in UniProt data
+    
+    Args:
+        gene_name (str): Gene name to look up
+        structure_protein_names (list): List of protein names from the structure
+        uniprot_protein_info (dict): UniProt protein information loaded from JSON
+    
+    Returns:
+        tuple: (passes_filter, match_score, matched_keywords)
+    """
+    gene_lower = gene_name.lower()
+    
+    # Get expected keywords from UniProt data
+    if gene_lower not in uniprot_protein_info:
+        logging.debug(f"No UniProt info found for gene {gene_name}, allowing structure")
+        return True, 1.0, []  # Allow if no info available
+    
+    expected_keywords = uniprot_protein_info[gene_lower]['keywords']
+    expected_protein_name = uniprot_protein_info[gene_lower]['protein_name']
+    
+    if not expected_keywords:
+        logging.debug(f"No expected keywords for gene {gene_name}, allowing structure")
+        return True, 1.0, []
+    
+    # Combine all structure protein names into one text
+    combined_text = ' '.join(structure_protein_names).lower()
+    
+    # Count matched keywords
+    matched_keywords = []
+    for keyword in expected_keywords:
+        if keyword in combined_text:
+            matched_keywords.append(keyword)
+    
+    # Special handling for specific genes
+    if gene_lower == 'cls':
+        # For cardiolipin synthase, require "cardiolipin" or "synthase" keywords
+        has_cardiolipin = 'cardiolipin' in combined_text
+        has_synthase = 'synthase' in combined_text
+        if has_cardiolipin or has_synthase:
+            passes_filter = True
+            match_score = 0.8 if (has_cardiolipin and has_synthase) else 0.6
+        else:
+            passes_filter = False
+            match_score = 0.0
+    else:
+        # General case: require at least one keyword match
+        passes_filter = len(matched_keywords) > 0
+        match_score = len(matched_keywords) / len(expected_keywords) if expected_keywords else 0.0
+    
+    if passes_filter:
+        logging.debug(f"✓ {gene_name}: Structure protein names contain expected keywords: {matched_keywords}")
+        logging.debug(f"  Expected: {expected_protein_name}")
+        logging.debug(f"  Found: {structure_protein_names}")
+    else:
+        logging.warning(f"✗ {gene_name}: Structure protein names missing expected keywords")
+        logging.warning(f"  Expected keywords: {expected_keywords}")
+        logging.warning(f"  Expected protein: {expected_protein_name}")
+        logging.warning(f"  Found: {structure_protein_names}")
+    
+    return passes_filter, match_score, matched_keywords
+
+def validate_protein_match(gene_name, protein_name, protein_function="", analysis="", paramset=""):
+    """
+    Validate if a protein matches the expected gene function using pipeline data
+    Returns confidence score (0-1) and warnings
+    """
+    # Load expected functions from pipeline data
+    gene_annotations = load_gene_annotations_from_data(analysis, paramset)
+    
+    expected_keywords = gene_annotations.get(gene_name.lower(), [])
+    if not expected_keywords:
+        # Fallback: use gene name itself
+        expected_keywords = [gene_name.lower()]
+    
+    combined_text = f"{protein_name} {protein_function}".lower()
+    warnings = []
+    matches = 0
+    
+    # Check for expected keywords
+    for keyword in expected_keywords:
+        if keyword in combined_text:
+            matches += 1
+    
+    # Special validation for known problematic patterns
+    if gene_name.lower() == 'cls':
+        if 'lsrb' in combined_text or 'lsr' in combined_text:
+            return 0.1, ['LsrB protein found for CLS gene - likely wrong protein']
+        if 'cardiolipin' not in combined_text and 'synthase' not in combined_text:
+            warnings.append('CLS gene but no cardiolipin synthase keywords found')
+    
+    # Calculate confidence
+    confidence = min(matches / max(len(expected_keywords), 1), 1.0) if expected_keywords else 0.5
+    
+    # Boost confidence if gene name appears in protein description
+    if gene_name.lower() in combined_text:
+        confidence = min(confidence + 0.3, 1.0)
+    
+    if confidence < 0.3:
+        warnings.append(f'Low confidence match for {gene_name}: {matches}/{len(expected_keywords)} keywords found')
+    
+    return confidence, warnings
+
+def _search_uniprot_bacterial_single_gene(gene_name, max_structures, prioritize_extracellular=True, extracellular_keywords=None, intracellular_keywords=None, structure_filters=None, uniprot_protein_info=None):
     """Helper function to search UniProt for bacterial proteins with structures for a single gene name"""
     
     # Default keywords if not provided
@@ -387,6 +706,10 @@ def _search_uniprot_bacterial_single_gene(gene_name, max_structures, prioritize_
         extracellular_keywords = ["extracellular", "outer membrane", "cell surface", "secreted", "periplasm", "cell wall", "membrane", "surface"]
     if intracellular_keywords is None:
         intracellular_keywords = ["cytoplasm", "cytosol", "intracellular", "ribosome", "nucleus", "nucleoid"]
+    
+    # Load UniProt protein info if not provided
+    if uniprot_protein_info is None:
+        uniprot_protein_info = load_uniprot_protein_info()
     
     try:
         uniprot_url = f"https://rest.uniprot.org/uniprotkb/search"
@@ -440,12 +763,48 @@ def _search_uniprot_bacterial_single_gene(gene_name, max_structures, prioritize_
                 if prioritize_extracellular:
                     localization_score = score_protein_localization(entry, extracellular_keywords, intracellular_keywords)
                 
+                # Validate protein match
+                protein_name = entry.get('proteinDescription', {}).get('recommendedName', {}).get('fullName', {}).get('value', '')
+                protein_function = entry.get('comments', [{}])[0].get('texts', [{}])[0].get('value', '') if entry.get('comments') else ''
+                # Note: analysis and paramset would need to be passed from the calling function
+                confidence, warnings = validate_protein_match(gene_name, protein_name, protein_function)
+                
+                # Validate protein name keywords from UniProt data
+                structure_protein_names = [protein_name] if protein_name else []
+                # Also get alternative names if available
+                alt_names = entry.get('proteinDescription', {}).get('alternativeName', [])
+                if isinstance(alt_names, list):
+                    for alt_name in alt_names:
+                        if isinstance(alt_name, dict) and 'fullName' in alt_name:
+                            alt_name_value = alt_name['fullName'].get('value', '')
+                            if alt_name_value:
+                                structure_protein_names.append(alt_name_value)
+                elif isinstance(alt_names, dict) and 'fullName' in alt_names:
+                    alt_name_value = alt_names['fullName'].get('value', '')
+                    if alt_name_value:
+                        structure_protein_names.append(alt_name_value)
+                
+                passes_keyword_filter, keyword_match_score, matched_keywords = validate_protein_name_keywords(
+                    gene_name, structure_protein_names, uniprot_protein_info
+                )
+                
+                # Log validation warnings
+                if warnings:
+                    for warning in warnings:
+                        logging.warning(f"  {gene_name}/{pdb_refs[0]}: {warning}")
+                
                 entry_info = {
                     'entry': entry,
                     'pdb_ids': pdb_refs,
                     'organism': organism,
                     'is_bacterial': is_bacterial,
-                    'localization_score': localization_score
+                    'localization_score': localization_score,
+                    'validation_confidence': confidence,
+                    'validation_warnings': warnings,
+                    'passes_keyword_filter': passes_keyword_filter,
+                    'keyword_match_score': keyword_match_score,
+                    'matched_keywords': matched_keywords,
+                    'structure_protein_names': structure_protein_names
                 }
                 
                 if is_bacterial:
@@ -457,12 +816,54 @@ def _search_uniprot_bacterial_single_gene(gene_name, max_structures, prioritize_
         
         # Sort and select bacterial structures
         if bacterial_entries:
+            # Filter out very low confidence matches (< 0.3) for critical genes
+            critical_genes = ['cls', 'cls2']  # Genes where accuracy is crucial
+            if gene_name.lower() in critical_genes:
+                high_confidence_entries = [e for e in bacterial_entries if e['validation_confidence'] >= 0.3]
+                if high_confidence_entries:
+                    bacterial_entries = high_confidence_entries
+                    logging.info(f"Filtered to {len(bacterial_entries)} high-confidence matches for critical gene {gene_name}")
+                else:
+                    logging.warning(f"No high-confidence matches found for critical gene {gene_name}, using all matches")
+            
+            # Apply protein name keyword filtering
+            original_count = len(bacterial_entries)
+            keyword_filtered_entries = [e for e in bacterial_entries if e['passes_keyword_filter']]
+            
+            if keyword_filtered_entries:
+                bacterial_entries = keyword_filtered_entries
+                logging.info(f"Protein name keyword filtering: {len(bacterial_entries)}/{original_count} structures passed for {gene_name}")
+                
+                # Log filtered entries for debugging
+                for entry_info in bacterial_entries:
+                    logging.debug(f"  ✓ Kept: {entry_info['pdb_ids'][0]} - {entry_info['structure_protein_names']} (matched: {entry_info['matched_keywords']})")
+                
+                # Log rejected entries
+                rejected_entries = [e for e in bacterial_entries if not e['passes_keyword_filter']]
+                for entry_info in rejected_entries:
+                    logging.debug(f"  ✗ Rejected: {entry_info['pdb_ids'][0]} - {entry_info['structure_protein_names']} (no keyword match)")
+            else:
+                logging.warning(f"No structures passed protein name keyword filter for {gene_name}, keeping all {original_count} structures")
+                # Keep all entries if none pass the filter to avoid losing all data
+                # This is a fallback to prevent empty results due to overly strict filtering
+            
+            # Sort by keyword match score first, then validation confidence, then localization score
+            bacterial_entries.sort(key=lambda x: (-x['keyword_match_score'], -x['validation_confidence'], -x['localization_score']))
+            
             # Extract all PDB IDs first
             all_bacterial_pdb_ids = []
             for entry_info in bacterial_entries:
                 for pdb_id in entry_info['pdb_ids']:
                     if pdb_id not in all_bacterial_pdb_ids:
                         all_bacterial_pdb_ids.append(pdb_id)
+            
+            # Apply quality filtering first if enabled
+            if structure_filters:
+                logging.info(f"Applying quality filters to {len(all_bacterial_pdb_ids)} bacterial structures for {gene_name}")
+                all_bacterial_pdb_ids = filter_structures_by_quality(all_bacterial_pdb_ids, structure_filters)
+                if not all_bacterial_pdb_ids:
+                    logging.info(f"No bacterial structures passed quality filters for {gene_name}")
+                    return []
             
             # Get release dates for all PDB IDs
             logging.info(f"Getting release dates for {len(all_bacterial_pdb_ids)} bacterial structures for {gene_name}")
@@ -929,101 +1330,130 @@ def download_mmcif_structure(pdb_id, output_dir, cache=None):
             cache.cache_pdb_result(pdb_id, False)
         return False
 
-def download_3d_structures_for_gene(gene_name, structures_base_dir, organisms=None, max_structures=10, gene_aliases=None, cache=None, gene_cache=None, include_computed_models=True, prioritize_extracellular=True, extracellular_keywords=None, intracellular_keywords=None):
+def download_3d_structures_for_gene(gene_name, structures_base_dir, shared_structures_dir, organisms=None, max_structures=10, gene_aliases=None, cache=None, structure_cache=None, include_computed_models=True, prioritize_extracellular=True, extracellular_keywords=None, intracellular_keywords=None, structure_filters=None):
     """
     Download 3D structures and sequences for a specific bacterial gene (up to max_structures)
     
     Args:
         gene_name (str): Gene name to search for
-        structures_base_dir (Path): Base directory for 3D structures
+        structures_base_dir (Path): Base directory for gene-specific FASTA files
+        shared_structures_dir (Path): Shared directory for 3D structure files
         organisms (list): Optional list of organism names to filter by (ignored for bacterial search)
         max_structures (int): Maximum number of structures to download (default: 10)
         gene_aliases (list): Alternative gene names to try if primary search fails
         cache (Protein3DStructureCache): Cache instance to use
-        gene_cache (GeneDownloadCache): Gene-level cache to track completed downloads
+        structure_cache (StructureDownloadCache): Structure-level cache to track individual downloads
         include_computed_models (bool): Include AlphaFold models if no experimental structures
     
     Returns:
-        dict: Summary of downloads (sequences, structures, found)
+        dict: Summary of downloads (sequences, structures, found, fasta_structure_mapping)
     """
     
-    # Create gene-specific directory in 3d_structures
+    # Create gene-specific directory for FASTA files
     gene_dir = structures_base_dir / gene_name
     gene_dir.mkdir(parents=True, exist_ok=True)
     
-    # Check gene cache first for completion status
-    if gene_cache and gene_cache.is_gene_completed(gene_name):
-        cached_structures = gene_cache.get_gene_structures(gene_name)
-        logging.info(f"Gene {gene_name} already completed in cache with {len(cached_structures)} structures - SKIPPING")
+    # Create shared directory for 3D structure files
+    shared_structures_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Check existing files to identify what FASTA files need structure files
+    existing_fasta_files = list(gene_dir.glob("*.fasta"))
+    has_no_structures_marker = (gene_dir / "no_structures_found.txt").exists()
+    
+    # Check existing structures in shared directory
+    existing_pdb_files = list(shared_structures_dir.glob("*.pdb.gz"))
+    existing_mmcif_files = list(shared_structures_dir.glob("*.cif.gz"))
+    existing_structure_files = existing_pdb_files + existing_mmcif_files
+    
+    # Extract structure IDs from existing FASTA files - these are our requirements
+    required_structure_ids = set()
+    for fasta_file in existing_fasta_files:
+        filename = fasta_file.stem
+        if '_chain_' in filename:
+            structure_id = filename.split('_chain_')[0]
+        elif '_' in filename and filename.split('_')[-1].isdigit():
+            structure_id = '_'.join(filename.split('_')[:-1])
+        else:
+            structure_id = filename
+        required_structure_ids.add(structure_id)
+    
+    # If no FASTA files exist, we need to search for new structures
+    if not existing_fasta_files and not has_no_structures_marker:
+        logging.info(f"No existing FASTA files for {gene_name}, will search for new structures")
+        search_needed = True
+        structures_to_download = set()
+    else:
+        # Check which structures are missing using the new cache system
+        if structure_cache:
+            missing_structures = structure_cache.get_missing_structures_for_gene(gene_name, required_structure_ids)
+        else:
+            # Fallback: check filesystem directly
+            existing_structure_ids = set()
+            for struct_file in existing_structure_files:
+                filename = struct_file.name
+                if filename.endswith('.pdb.gz'):
+                    structure_id = filename[:-7]
+                elif filename.endswith('.cif.gz'):
+                    structure_id = filename[:-7]
+                elif filename.endswith('.pdb'):
+                    structure_id = filename[:-4]
+                elif filename.endswith('.cif'):
+                    structure_id = filename[:-4]
+                else:
+                    structure_id = filename.split('.')[0]
+                existing_structure_ids.add(structure_id)
+            missing_structures = required_structure_ids - existing_structure_ids
         
-        # Verify files still exist (both PDB and mmCIF formats)
-        existing_pdb_files = list(gene_dir.glob("*.pdb.gz"))
-        existing_mmcif_files = list(gene_dir.glob("*.cif.gz"))
-        existing_fasta_files = list(gene_dir.glob("*.fasta"))
-        existing_structure_files = existing_pdb_files + existing_mmcif_files
-        
-        if existing_structure_files or existing_fasta_files:
+        if not missing_structures:
+            logging.info(f"Gene {gene_name} already has all required structures: {len(existing_structure_files)} files for {len(required_structure_ids)} structure IDs - SKIPPING")
             return {
                 "sequences": len(existing_fasta_files),
                 "structures": len(existing_structure_files), 
                 "found": True,
                 "skipped": True,
-                "pdb_ids": cached_structures
+                "pdb_ids": list(required_structure_ids)
             }
         else:
-            logging.warning(f"Gene {gene_name} marked as completed in cache but files missing - will retry download")
+            logging.info(f"Gene {gene_name} missing structures: {missing_structures}")
+            search_needed = False
+            structures_to_download = missing_structures
     
-    # Fallback to file-based completion checking if cache doesn't have info
-    existing_pdb_files = list(gene_dir.glob("*.pdb.gz"))
-    existing_mmcif_files = list(gene_dir.glob("*.cif.gz"))
-    existing_fasta_files = list(gene_dir.glob("*.fasta"))
-    existing_structure_files = existing_pdb_files + existing_mmcif_files
-    has_no_structures_marker = (gene_dir / "no_structures_found.txt").exists()
-    
-    # If directory has any structure files (PDB or mmCIF or FASTA), consider it complete
-    if existing_structure_files or existing_fasta_files:
-        logging.info(f"Gene {gene_name} already has structures: {len(existing_pdb_files)} PDB files, {len(existing_mmcif_files)} mmCIF files, {len(existing_fasta_files)} FASTA files - SKIPPING")
-        
-        # Update cache with existing structures
-        if gene_cache:
-            existing_structure_ids = ([f.stem.replace('.pdb', '') for f in existing_pdb_files] + 
-                                      [f.stem.replace('.cif', '') for f in existing_mmcif_files])
-            structures_info = {
-                "sequences": len(existing_fasta_files),
-                "structures": len(existing_structure_files),
-                "structure_ids": existing_structure_ids,
-                "experimental_count": len([sid for sid in existing_structure_ids if not sid.startswith('AF-')]),
-                "computed_count": len([sid for sid in existing_structure_ids if sid.startswith('AF-')])
-            }
-            gene_cache.mark_gene_completed(gene_name, structures_info)
-        
-        return {
-            "sequences": len(existing_fasta_files),
-            "structures": len(existing_structure_files), 
-            "found": True,
-            "skipped": True,
-            "pdb_ids": ([f.stem.replace('.pdb', '') for f in existing_pdb_files] + 
-                       [f.stem.replace('.cif', '') for f in existing_mmcif_files])
-        }
-    
-    # Check if marked as no structures found (and directory is still empty)
-    if has_no_structures_marker:
+    # Check if marked as no structures found (only if we need new structures)
+    if has_no_structures_marker and search_needed:
         logging.info(f"Gene {gene_name} already marked as no structures found - SKIPPING")
         return {"sequences": 0, "structures": 0, "found": False, "skipped": True, "completed": True, "pdb_ids": []}
     
     logging.info(f"Processing bacterial 3D structures for gene: {gene_name}")
     
-    # Search for bacterial PDB structures via UniProt
-    pdb_ids = search_pdb_via_uniprot_bacterial(gene_name, max_structures, gene_aliases, cache, prioritize_extracellular, extracellular_keywords, intracellular_keywords)
-    alphafold_ids = []
-    
-    # If no experimental structures found and computed models are enabled, search AlphaFold
-    if not pdb_ids and include_computed_models:
-        logging.info(f"No experimental structures found for {gene_name}, searching AlphaFold models...")
-        alphafold_ids = search_alphafold_models(gene_name, gene_aliases, cache)
-    
-    # Combine structure IDs
-    all_structure_ids = pdb_ids + alphafold_ids
+    # Determine which structures we need to find/download
+    if search_needed:
+        # Search for new bacterial PDB structures via UniProt
+        # Load UniProt protein info for filtering
+        uniprot_protein_info = load_uniprot_protein_info()
+        pdb_ids = search_pdb_via_uniprot_bacterial(gene_name, max_structures, gene_aliases, cache, prioritize_extracellular, extracellular_keywords, intracellular_keywords, structure_filters, uniprot_protein_info)
+        alphafold_ids = []
+        
+        # If no experimental structures found and computed models are enabled, search AlphaFold
+        if not pdb_ids and include_computed_models:
+            logging.info(f"No experimental structures found for {gene_name}, searching AlphaFold models...")
+            alphafold_ids = search_alphafold_models(gene_name, gene_aliases, cache)
+        
+        # Combine structure IDs
+        all_structure_ids = pdb_ids + alphafold_ids
+        structures_to_download = set(all_structure_ids)
+    else:
+        # We only need to download the missing structures
+        pdb_ids = []
+        alphafold_ids = []
+        all_structure_ids = list(structures_to_download)
+        logging.info(f"Downloading missing structures: {structures_to_download}")
+        
+        # Split existing structure_to_download into PDB and AlphaFold based on naming
+        for structure_id in structures_to_download:
+            if structure_id.startswith('AF-'):
+                alphafold_ids.append(structure_id)
+            else:
+                pdb_ids.append(structure_id)
     
     if not all_structure_ids:
         logging.info(f"No 3D structures or computed models found for {gene_name}")
@@ -1100,25 +1530,51 @@ def download_3d_structures_for_gene(gene_name, structures_base_dir, organisms=No
         else:
             logging.warning(f"No sequences found for AlphaFold model {alphafold_id}")
     
-    # Download structures concurrently
+    # Download structures concurrently (only missing ones)
     if structures_with_sequences:
-        structures_to_download = [(struct_id, struct_type) for struct_id, _, struct_type in structures_with_sequences]
-        logging.info(f"Downloading {len(structures_to_download)} structures concurrently...")
-        
-        # Use ThreadPoolExecutor for concurrent downloads (limited by max_structures or available structures)
-        with concurrent.futures.ThreadPoolExecutor(max_workers=min(max_structures, len(structures_to_download))) as executor:
-            future_to_structure = {}
+        # Filter structures to download only missing ones
+        structures_to_download = []
+        for struct_id, _, struct_type in structures_with_sequences:
+            # Check if structure file already exists in shared directory
+            pdb_file = shared_structures_dir / f"{struct_id}.pdb.gz"
+            mmcif_file = shared_structures_dir / f"{struct_id}.cif.gz"
+            pdb_exists = pdb_file.exists() and pdb_file.stat().st_size > 0
+            mmcif_exists = mmcif_file.exists() and mmcif_file.stat().st_size > 0
             
-            # Submit download tasks for each structure type
-            for struct_id, struct_type in structures_to_download:
-                if struct_type == 'experimental':
-                    download_func = partial(download_pdb_structure, output_dir=gene_dir, cache=cache)
-                    future = executor.submit(download_func, struct_id)
-                else:  # computed model
-                    download_func = partial(download_alphafold_model, output_dir=gene_dir, cache=cache)
-                    future = executor.submit(download_func, struct_id)
+            if not (pdb_exists or mmcif_exists):
+                structures_to_download.append((struct_id, struct_type))
+                logging.info(f"Will download missing structure: {struct_id}")
+            else:
+                logging.info(f"Structure {struct_id} already exists in shared directory - skipping download")
+    
+    # Convert structures_to_download to the format expected by download logic
+    download_candidates = []
+    if not search_needed and structures_to_download:
+        # These are missing structures we need to download
+        logging.info(f"Preparing to download missing structures: {structures_to_download}")
+        download_candidates = [(sid, 'experimental') for sid in structures_to_download]
+    
+    if structures_with_sequences or download_candidates:
+        # Combine both types of structures to download
+        all_downloads = structures_to_download + download_candidates
+        
+        if all_downloads:
+            logging.info(f"Downloading {len(all_downloads)} structures concurrently...")
+            
+            # Use ThreadPoolExecutor for concurrent downloads
+            with concurrent.futures.ThreadPoolExecutor(max_workers=min(max_structures, len(all_downloads))) as executor:
+                future_to_structure = {}
                 
-                future_to_structure[future] = (struct_id, struct_type)
+                # Submit download tasks for each structure type
+                for struct_id, struct_type in all_downloads:
+                    if struct_type == 'experimental':
+                        download_func = partial(download_pdb_structure, output_dir=shared_structures_dir, cache=cache)
+                        future = executor.submit(download_func, struct_id)
+                    else:  # computed model
+                        download_func = partial(download_alphafold_model, output_dir=shared_structures_dir, cache=cache)
+                        future = executor.submit(download_func, struct_id)
+                    
+                    future_to_structure[future] = (struct_id, struct_type)
             
             # Collect results
             for future in concurrent.futures.as_completed(future_to_structure):
@@ -1130,22 +1586,54 @@ def download_3d_structures_for_gene(gene_name, structures_base_dir, organisms=No
                         downloaded_pdb_ids.append(struct_id)
                         structure_type_name = "experimental structure" if struct_type == 'experimental' else "computed model"
                         logging.info(f"✓ Downloaded {structure_type_name}: {struct_id}")
+                        
+                        # Mark structure as downloaded in new cache system
+                        if structure_cache:
+                            # Find structure file path in shared directory
+                            pdb_file = shared_structures_dir / f"{struct_id}.pdb.gz"
+                            mmcif_file = shared_structures_dir / f"{struct_id}.cif.gz"
+                            structure_file_path = pdb_file if pdb_file.exists() else mmcif_file
+                            
+                            # Find FASTA files for this structure in gene directory
+                            fasta_files = list(gene_dir.glob(f"{struct_id}*.fasta"))
+                            fasta_file_paths = [str(f) for f in fasta_files]
+                            
+                            structure_cache.mark_structure_downloaded(
+                                gene_name, struct_id, "main", 
+                                str(structure_file_path), fasta_file_paths
+                            )
                     else:
                         structure_type_name = "experimental structure" if struct_type == 'experimental' else "computed model"
                         logging.warning(f"✗ Failed to download {structure_type_name}: {struct_id}")
                 except Exception as e:
                     logging.error(f"Error downloading {struct_id}: {e}")
     
-    # Mark gene as completed in cache if we successfully processed it
-    if total_structures > 0 and gene_cache:
-        structures_info = {
-            "sequences": total_sequences,
-            "structures": total_structures,
-            "structure_ids": downloaded_pdb_ids,
-            "experimental_count": len([sid for sid in downloaded_pdb_ids if not sid.startswith('AF-')]),
-            "computed_count": len([sid for sid in downloaded_pdb_ids if sid.startswith('AF-')])
-        }
-        gene_cache.mark_gene_completed(gene_name, structures_info)
+    # Save any structures that already existed but weren't tracked in cache
+    if structure_cache:
+        # Check for any existing structures not yet in cache in shared directory
+        existing_structure_files = list(shared_structures_dir.glob("*.pdb.gz")) + list(shared_structures_dir.glob("*.cif.gz"))
+        for struct_file in existing_structure_files:
+            # Extract structure ID
+            filename = struct_file.name
+            if filename.endswith('.pdb.gz'):
+                structure_id = filename[:-7]
+            elif filename.endswith('.cif.gz'):
+                structure_id = filename[:-7]
+            else:
+                structure_id = filename.split('.')[0]
+            
+            # Check if already tracked for this gene
+            if not structure_cache.is_structure_downloaded(gene_name, structure_id):
+                # Find FASTA files for this structure in gene directory
+                fasta_files = list(gene_dir.glob(f"{structure_id}*.fasta"))
+                fasta_file_paths = [str(f) for f in fasta_files]
+                
+                # Only mark if this gene has FASTA files for this structure
+                if fasta_file_paths:
+                    structure_cache.mark_structure_downloaded(
+                        gene_name, structure_id, "main", 
+                        str(struct_file), fasta_file_paths
+                    )
     
     # Create completion marker file for backward compatibility
     if total_structures > 0:
@@ -1267,6 +1755,9 @@ def get_pdb_metadata(pdb_id):
             "method": "Unknown",
             "organism": "Unknown",
             "deposit_date": data.get("rcsb_accession_info", {}).get("deposit_date", "Unknown"),
+            "year": None,
+            "sequence_length": None,
+            "is_obsolete": False,
             "authors": [],
             "journal": "Unknown"
         }
@@ -1282,6 +1773,30 @@ def get_pdb_metadata(pdb_id):
             resolution = refine_info[0].get("ls_d_res_high")
             if resolution:
                 metadata["resolution"] = float(resolution)
+        
+        # Extract year from deposit date
+        deposit_date = metadata.get("deposit_date", "")
+        if deposit_date and deposit_date != "Unknown":
+            try:
+                year = int(deposit_date.split('-')[0])
+                metadata["year"] = year
+            except (ValueError, IndexError):
+                pass
+        
+        # Get sequence length
+        try:
+            entity_info = data.get("entity", [])
+            if entity_info:
+                seq_length = entity_info[0].get("pdbx_number_of_molecules")
+                if seq_length:
+                    metadata["sequence_length"] = int(seq_length)
+        except (ValueError, IndexError, TypeError):
+            pass
+        
+        # Check if structure is obsolete
+        pdbx_database_status = data.get("pdbx_database_status", {})
+        status_code = pdbx_database_status.get("status_code", "")
+        metadata["is_obsolete"] = status_code.upper() in ["OBS", "WDRN"]
         
         # Get organism information
         entity_src_gen = data.get("entity_src_gen", [])
@@ -1316,6 +1831,9 @@ def get_pdb_metadata(pdb_id):
             "method": "Unknown",
             "organism": "Unknown",
             "deposit_date": "Unknown",
+            "year": None,
+            "sequence_length": None,
+            "is_obsolete": False,
             "authors": [],
             "journal": "Unknown",
             "error": str(e)
@@ -1351,10 +1869,13 @@ def main():
         prioritize_extracellular = snakemake.params.prioritize_extracellular  # Get from config
         extracellular_keywords = snakemake.params.extracellular_keywords  # Get from config
         intracellular_keywords = snakemake.params.intracellular_keywords  # Get from config
+        structure_filters = snakemake.params.structure_filters  # Get from config
         
-        # Create sentinel file path and derive structures directory from it
+        # Get output files from Snakemake
         sentinel_file = Path(snakemake.output.sentinel)
+        mapping_file = Path(snakemake.output.mapping_file)
         structures_dir = sentinel_file.parent
+        shared_structures_dir = Path(snakemake.config["paths"]["protein_structures"]["structures_dir"])
         aliases_file = Path(f"data/quickgo/{paramset}/gene_aliases.json")
         
         # Look for summary file with protein names
@@ -1370,10 +1891,13 @@ def main():
         prioritize_extracellular = True  # Default value
         extracellular_keywords = ["extracellular", "outer membrane", "cell surface", "secreted", "periplasm", "cell wall", "membrane", "surface"]
         intracellular_keywords = ["cytoplasm", "cytosol", "intracellular", "ribosome", "nucleus", "nucleoid"]
+        structure_filters = {}  # Default empty filters
         proteins_file = Path(f"results/proteins_to_study/{analysis}_{paramset}_gram_{group}.tsv")
         structures_dir = Path("data/protein_structures")
+        shared_structures_dir = Path("data/protein_structures/pdb_files")
         aliases_file = Path(f"data/quickgo/{paramset}/gene_aliases.json")
         sentinel_file = Path(f"data/protein_structures/.{analysis}_{paramset}_{group}_structures_complete")
+        mapping_file = Path(f"data/protein_structures/{analysis}_{paramset}_fasta_structure_mapping.tsv")
         summary_file = Path(f"results/{analysis}_{paramset}/gene_selection/summary.tsv")
     
     logging.info(f"Downloading bacterial 3D structures for {analysis}_{paramset} (unified Gram-independent)")
@@ -1389,9 +1913,9 @@ def main():
     
     # Initialize caches
     cache = Protein3DStructureCache()
-    gene_cache = GeneDownloadCache()
+    structure_cache = StructureDownloadCache()
     logging.info(f"Structure cache initialized with {len(cache.cache)} entries from {CACHE_FILE}")
-    logging.info(f"Gene download cache initialized with {len(gene_cache.cache)} entries from {GENE_DOWNLOAD_CACHE_FILE}")
+    logging.info(f"Structure download cache initialized with {len(structure_cache.cache)} entries from {STRUCTURE_DOWNLOAD_CACHE_FILE}")
     
     # Ensure output directories exist
     structures_dir.mkdir(parents=True, exist_ok=True)
@@ -1401,7 +1925,7 @@ def main():
     logging.info(f"Using max_structures = {max_structures}, include_computed_models = {include_computed_models}")
     
     # Process all unique genes from summary.tsv regardless of Gram classification
-    def process_proteins_with_config(proteins_file, structures_base_dir, gene_aliases=None, cache=None):
+    def process_proteins_with_config(proteins_file, structures_base_dir, shared_structures_dir, gene_aliases=None, cache=None):
         """Process proteins list with max_structures from config"""
         # Load all unique genes from summary.tsv instead of gram-specific file
         if not summary_file.exists():
@@ -1430,16 +1954,18 @@ def main():
             # Download bacterial 3D structures for this gene (without protein name)
             gene_summary = download_3d_structures_for_gene(
                 gene_name, 
-                structures_base_dir, 
+                structures_base_dir,
+                shared_structures_dir,
                 organisms=None,  # Ignored for bacterial search
                 max_structures=max_structures,
                 gene_aliases=aliases,
                 cache=cache,
-                gene_cache=gene_cache,
+                structure_cache=structure_cache,
                 include_computed_models=include_computed_models,
                 prioritize_extracellular=prioritize_extracellular,
                 extracellular_keywords=extracellular_keywords,
-                intracellular_keywords=intracellular_keywords
+                intracellular_keywords=intracellular_keywords,
+                structure_filters=structure_filters
             )
             
             # Collect metadata for all downloaded structures
@@ -1480,7 +2006,7 @@ def main():
         logging.info(f"Final processing summary: {genes_processed} processed, {genes_skipped} skipped out of {total_genes} total genes")
         return summary
     
-    summary = process_proteins_with_config(proteins_file, structures_dir, gene_aliases, cache)
+    summary = process_proteins_with_config(proteins_file, structures_dir, shared_structures_dir, gene_aliases, cache)
     
     # Calculate summary statistics
     total_sequences = sum(gene_data.get("sequences", 0) for gene_data in summary.values())
@@ -1519,9 +2045,61 @@ def main():
     with open(summary_file, 'w') as f:
         json.dump(summary_data, f, indent=2)
     
+    # Create FASTA to structure mapping file
+    logging.info("Creating FASTA to structure mapping file...")
+    mapping_entries = []
+    
+    # Iterate through all genes and their FASTA files
+    for gene_name in summary.keys():
+        gene_dir = structures_dir / gene_name
+        if gene_dir.exists():
+            fasta_files = list(gene_dir.glob("*.fasta"))
+            for fasta_file in fasta_files:
+                # Extract structure ID from FASTA filename
+                filename = fasta_file.stem
+                if '_chain_' in filename:
+                    structure_id = filename.split('_chain_')[0]
+                elif '_' in filename and filename.split('_')[-1].isdigit():
+                    structure_id = '_'.join(filename.split('_')[:-1])
+                else:
+                    structure_id = filename
+                
+                # Look for corresponding structure file in shared directory
+                structure_file = None
+                pdb_file = shared_structures_dir / f"{structure_id}.pdb.gz"
+                mmcif_file = shared_structures_dir / f"{structure_id}.cif.gz"
+                alphafold_file = shared_structures_dir / f"{structure_id}.pdb"  # AlphaFold files are uncompressed
+                
+                if pdb_file.exists():
+                    structure_file = pdb_file
+                elif mmcif_file.exists():
+                    structure_file = mmcif_file
+                elif alphafold_file.exists():
+                    structure_file = alphafold_file
+                
+                if structure_file:
+                    mapping_entries.append({
+                        'fasta_path': str(fasta_file),
+                        'structure_path': str(structure_file),
+                        'gene_name': gene_name,
+                        'structure_id': structure_id,
+                        'structure_type': 'computed' if structure_id.startswith('AF-') else 'experimental'
+                    })
+    
+    # Write mapping file
+    if mapping_entries:
+        mapping_df = pd.DataFrame(mapping_entries)
+        mapping_df.to_csv(mapping_file, sep='\t', index=False)
+        logging.info(f"Created mapping file with {len(mapping_entries)} entries: {mapping_file}")
+    else:
+        # Create empty mapping file
+        with open(mapping_file, 'w') as f:
+            f.write("fasta_path\tstructure_path\tgene_name\tstructure_id\tstructure_type\n")
+        logging.info(f"Created empty mapping file: {mapping_file}")
+    
     # Save caches
     cache.save_cache()
-    gene_cache.save_cache()
+    structure_cache.save_cache()
     
     # Create sentinel file to indicate completion
     sentinel_file.touch()
