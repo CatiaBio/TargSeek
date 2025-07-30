@@ -45,19 +45,24 @@ def collect_analysis_results(output_dir):
 def generate_comprehensive_report(results, output_file, analysis, paramset):
     """Generate comprehensive HTML report with download report styling"""
     
-    # Calculate summary statistics
-    total_genes = len(results)
-    total_epitopes = sum(len(data.get('epitope_analyses', [])) for data in results.values())
+    # Calculate summary statistics (only for genes with epitopes)
+    genes_with_epitopes = [gene for gene, data in results.items() 
+                          if data.get('summary_statistics', {}).get('total_epitopes', 0) > 0]
+    
+    total_genes = len(genes_with_epitopes)
+    total_epitopes = sum(len(data.get('epitope_analyses', [])) 
+                        for gene, data in results.items() 
+                        if gene in genes_with_epitopes)
     
     if total_genes > 0:
         mean_conservation = sum(
             data.get('summary_statistics', {}).get('conservation_statistics', {}).get('mean_conservation', 0)
-            for data in results.values()
+            for gene, data in results.items() if gene in genes_with_epitopes
         ) / total_genes
         
         mean_variants = sum(
             data.get('summary_statistics', {}).get('diversity_statistics', {}).get('mean_variants', 0)
-            for data in results.values()
+            for gene, data in results.items() if gene in genes_with_epitopes
         ) / total_genes
     else:
         mean_conservation = 0
@@ -403,6 +408,7 @@ def generate_comprehensive_report(results, output_file, analysis, paramset):
             <p><strong>Analysis:</strong> {analysis}_{paramset}</p>
             <p><strong>Generated:</strong> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
             <p><strong>Pipeline:</strong> TargSeek Epitope Conservation Analysis</p>
+            <p><strong>Note:</strong> This report only includes genes with predicted epitopes. Genes without epitopes are excluded from all analyses and visualizations.</p>
         </div>
         
         <div class="summary-stats">
@@ -443,16 +449,21 @@ def generate_comprehensive_report(results, output_file, analysis, paramset):
                 <tbody>
 """
     
-    # Add gene-level data
+    # Add gene-level data (only for genes with epitopes)
     for gene, data in sorted(results.items()):
         summary_stats = data.get('summary_statistics', {})
         conservation_stats = summary_stats.get('conservation_statistics', {})
         diversity_stats = summary_stats.get('diversity_statistics', {})
         
+        num_epitopes = summary_stats.get('total_epitopes', 0)
+        
+        # Skip genes without epitopes
+        if num_epitopes == 0:
+            continue
+        
         mean_cons = conservation_stats.get('mean_conservation', 0)
         min_cons = conservation_stats.get('min_conservation', 0)
         max_cons = conservation_stats.get('max_conservation', 0)
-        num_epitopes = summary_stats.get('total_epitopes', 0)
         num_sequences = summary_stats.get('total_msa_sequences', 0)
         mean_vars = diversity_stats.get('mean_variants', 0)
         structure_id = summary_stats.get('structure_id', 'Unknown')
@@ -488,10 +499,13 @@ def generate_comprehensive_report(results, output_file, analysis, paramset):
         <h2>🔍 Detailed Epitope Analysis</h2>
 """
     
-    # Add detailed epitope information
+    # Add detailed epitope information (only for genes with epitopes)
     for gene, data in sorted(results.items()):
         epitope_analyses = data.get('epitope_analyses', [])
-        if not epitope_analyses:
+        num_epitopes = data.get('summary_statistics', {}).get('total_epitopes', 0)
+        
+        # Skip genes without epitopes
+        if not epitope_analyses or num_epitopes == 0:
             continue
             
         structure_id = data.get('summary_statistics', {}).get('structure_id', 'Unknown')

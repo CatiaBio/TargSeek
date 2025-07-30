@@ -218,110 +218,80 @@ class EpitopeVisualizer:
             
             # Load structure
             cmd.load(str(pdb_file), structure_id)
-            
-            # Set up consistent visualization for all structures
-            cmd.hide("all")
-            
-            # Always show cartoon representation first for the entire structure
-            cmd.show("cartoon", structure_id)
-            cmd.color("gray80", structure_id)
-            
-            # Create chain selection if available
+            cmd.hide("everything", "all")  # Hide everything initially
+
+            # Extract only the desired chain
             if chain and len(chain) > 0:
                 chain_selection = f"{structure_id} and chain {chain}"
-                cmd.select("target_chain", chain_selection)
-                
-                # Ensure the target chain is properly colored
-                cmd.color("gray80", "target_chain")
-                
-                # If we have chain range information, focus on that region
-                if chain_start is not None and chain_end is not None:
-                    chain_range_selection = f"target_chain and resi {chain_start}-{chain_end}"
-                    cmd.select("chain_range", chain_range_selection)
-                    # Keep the chain range the same color as the rest for consistency
-                    cmd.color("gray80", "chain_range")
-                    logging.info(f"Focusing on chain {chain} residues {chain_start}-{chain_end}")
-                else:
-                    logging.info(f"Focusing on chain {chain} ({structure_type} structure)")
+                cmd.extract("chain_obj", chain_selection)
+                cmd.delete(structure_id)  # Delete original multi-chain structure
+                structure_id = "chain_obj"  # Replace reference
             else:
-                # Select entire structure as target for consistency
-                cmd.select("target_chain", structure_id)
-                logging.warning(f"No chain information available for {gene_structure_key} - using entire structure")
+                logging.warning(f"No chain information for {gene_structure_key}, using full structure")
+                structure_id = structure_id  # fallback (should rarely happen)
+
+            # Show cartoon for the structure (only the selected chain is now loaded)
+            cmd.show("cartoon", structure_id)
+            cmd.color("gray80", structure_id)
+
+            # Select range if available
+            if chain_start is not None and chain_end is not None:
+                cmd.select("chain_range", f"{structure_id} and resi {chain_start}-{chain_end}")
+                cmd.color("gray80", "chain_range")
+                logging.info(f"Focusing on chain {chain} residues {chain_start}-{chain_end}")
+
+            # Create output file names first
+            output_prefix = self.output_dir / f"{gene}_{structure_id}"
+            png_file = f"{output_prefix}_epitopes.png"
+            pse_file = f"{output_prefix}_epitopes.pse"
             
-            # Create epitope selections and color them
+            # Create epitope info for legend
             epitope_info = []
             
+            # Epitope coloring - updated to use only chain_obj
             for i, (_, epitope) in enumerate(epitopes.iterrows()):
                 if i >= len(self.epitope_colors):
-                    logging.warning(f"More epitopes than available colors for {gene_structure_key}")
                     break
-                
                 start = int(epitope['Start'])
                 end = int(epitope['End'])
-                peptide = epitope['Peptide']
-                score = float(epitope['Score'])
                 color = self.epitope_colors[i]
-                
-                # Create selection for this epitope - ensure it's on the correct chain
                 selection_name = f"epitope_{i+1}"
-                if chain and len(chain) > 0:
-                    # Use the specific chain from the mapping
-                    selection = f"{structure_id} and chain {chain} and resi {start}-{end}"
-                    
-                    # Additional validation: check if epitope is within chain range
-                    if chain_start is not None and chain_end is not None:
-                        # Adjust epitope positions if they're outside the chain range
-                        epitope_start = max(start, chain_start)
-                        epitope_end = min(end, chain_end)
-                        
-                        if epitope_start <= epitope_end:
-                            selection = f"{structure_id} and chain {chain} and resi {epitope_start}-{epitope_end}"
-                            if epitope_start != start or epitope_end != end:
-                                logging.info(f"Adjusted epitope {i+1} from {start}-{end} to {epitope_start}-{epitope_end} to fit chain range {chain_start}-{chain_end}")
-                        else:
-                            logging.warning(f"Epitope {i+1} ({start}-{end}) is outside chain range ({chain_start}-{chain_end}), skipping")
-                            continue
+
+                # Adjust if within range
+                if chain_start is not None and chain_end is not None:
+                    epitope_start = max(start, chain_start)
+                    epitope_end = min(end, chain_end)
+                    if epitope_start > epitope_end:
+                        continue
+                    selection = f"{structure_id} and resi {epitope_start}-{epitope_end}"
                 else:
-                    # Fallback if no chain information
                     selection = f"{structure_id} and resi {start}-{end}"
-                
+
                 cmd.select(selection_name, selection)
-                
-                # Color cartoon representation only
                 cmd.color(color, selection_name)
                 
+                # Add to epitope info for legend
                 epitope_info.append({
                     'number': i + 1,
                     'start': start,
                     'end': end,
-                    'peptide': peptide,
-                    'score': score,
+                    'peptide': epitope['Peptide'],
+                    'score': float(epitope['Score']),
                     'color': color
                 })
-                
-                logging.info(f"Created epitope {i+1}: {peptide} ({start}-{end}) in {color}")
-            
-            # Set up consistent view - always use target_chain selection
-            cmd.orient("target_chain")
-            cmd.zoom("target_chain")
-            
-            # Set rendering options for better PNG generation
+
+            # Orientation and export
+            cmd.orient(structure_id)
+            cmd.zoom(structure_id)
             cmd.set("ray_opaque_background", "off")
             cmd.set("ray_shadows", "on")
             cmd.set("antialias", 2)
             cmd.set("orthoscopic", "on")
             cmd.bg_color("white")
-            
-            # Save images
-            output_prefix = self.output_dir / f"{gene}_{structure_id}"
-            
-            # PNG image with improved settings
-            png_file = f"{output_prefix}_epitopes.png"
-            cmd.ray(1200, 900)  # Set ray tracing resolution
+
+            # Save output files
+            cmd.ray(1200, 900)
             cmd.png(str(png_file), dpi=300)
-            
-            # PyMOL session file
-            pse_file = f"{output_prefix}_epitopes.pse"
             cmd.save(str(pse_file))
             
             # Create legend/summary file
