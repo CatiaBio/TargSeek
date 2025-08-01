@@ -107,7 +107,7 @@ results/{analysis}_{paramset}/
 
 ```bibtex
 @software{baptista2024targseek,
-  title={TargSeek: Protein Discovery and Epitope Prediction Pipeline},
+  title={TargSeek: Surface Protein Discovery and Epitope Prediction Pipeline},
   author={Cátia Baptista},
   year={2024},
   url={https://github.com/CatiaBio/TargSeek}
