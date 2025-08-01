@@ -1,4 +1,4 @@
-# 🎯 TargSeek: Protein Discovery & Epitope Prediction Pipeline
+# 🎯 TargSeek: Surface Protein Discovery & Epitope Prediction Pipeline
 
 [![Snakemake](https://img.shields.io/badge/snakemake-≥6.0-brightgreen.svg)](https://snakemake.github.io)
 [![Python](https://img.shields.io/badge/python-3.10+-blue.svg)](https://python.org)
