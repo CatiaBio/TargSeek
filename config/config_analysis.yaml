@@ -147,6 +147,15 @@ bepipred:
   # Raw only mode: skip HTML visualizations and extra files for faster processing
   raw_only: true
 
+# Topology prediction configuration
+topology:
+  # Topology prediction method: "deeptmhmm" (recommended) or "topcons"
+  method: "deeptmhmm"
+  # Minimum extracellular coverage required for epitope inclusion (0.0-1.0)
+  min_extracellular_coverage: 0.5
+  # Enable structure-based topology validation
+  use_structure_validation: true
+
 
 # Quality control thresholds
 quality_control:
@@ -257,7 +266,23 @@ paths:
     conservation_report: "results/{analysis}_{paramset}/protein_analysis_report.html"
 
   # -------------------------------------------------------------------------
-  # STAGE 6: Summaries and Reports  
+  # STAGE 7: Topology Analysis and Epitope Filtering
+  # -------------------------------------------------------------------------
+  topology:
+    # Base directory for topology analysis
+    topology_dir: "results/{analysis}_{paramset}/protein_analysis/topology_analysis"
+    # Topology prediction results
+    topology_predictions: "results/{analysis}_{paramset}/protein_analysis/topology_analysis/topology_predictions.json"
+    topology_summary: "results/{analysis}_{paramset}/protein_analysis/topology_analysis/topology_summary.json"
+    # Extracellular region mapping
+    extracellular_mapping: "results/{analysis}_{paramset}/protein_analysis/topology_analysis/extracellular_mapping.json"
+    extracellular_summary: "results/{analysis}_{paramset}/protein_analysis/topology_analysis/extracellular_summary.json"
+    # Filtered epitope results (only extracellular epitopes)
+    filtered_epitopes_sentinel: "results/{analysis}_{paramset}/protein_analysis/topology_analysis/filtered_epitopes_complete.sentinel"
+    topology_filter_report: "results/{analysis}_{paramset}/protein_analysis/topology_analysis/epitope_filter_report.json"
+
+  # -------------------------------------------------------------------------
+  # STAGE 8: Summaries and Reports  
   # -------------------------------------------------------------------------
   # reports:
     # Final integrated reports (EXCLUDED from this pipeline)
@@ -314,7 +339,15 @@ scripts:
     analyze_epitope_conservation: "scripts/protein_analysis/analyze_epitope_conservation.py"
   
   # -------------------------------------------------------------------------
-  # STAGE 6: Summary and Report Scripts
+  # STAGE 7: Topology Analysis Scripts
+  # -------------------------------------------------------------------------
+  topology:
+    predict_topology: "scripts/protein_analysis/predict_topology.py"
+    map_extracellular_regions: "scripts/protein_analysis/map_extracellular_regions.py"
+    filter_epitopes_topology: "scripts/protein_analysis/filter_epitopes_topology.py"
+  
+  # -------------------------------------------------------------------------
+  # STAGE 8: Summary and Report Scripts
   # -------------------------------------------------------------------------
   # reports:
     # generate_final_report: "scripts/protein_analysis/generate_final_report.py"  # EXCLUDED
