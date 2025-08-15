@@ -39,13 +39,33 @@ def run_mafft(input_fasta: Path, output_fasta: Path, threads: int = 8):
 
 def main():
     try:
-        msa_main = Path(snakemake.input.msa_main)
-        msa_structure = Path(snakemake.input.msa_structure)
-        output_main = Path(snakemake.output.main)
-        output_structure = Path(snakemake.output.structure)
+        # Handle different input scenarios based on what Snakemake provides
+        if hasattr(snakemake.input, 'msa_main'):
+            msa_main = Path(snakemake.input.msa_main)
+        else:
+            msa_main = None
+            
+        if hasattr(snakemake.input, 'msa_structure'):
+            msa_structure = Path(snakemake.input.msa_structure)
+        else:
+            msa_structure = None
+        
+        # Handle different output scenarios
+        if hasattr(snakemake.output, 'main'):
+            output_main = Path(snakemake.output.main)
+        else:
+            output_main = None
+            
+        if hasattr(snakemake.output, 'structure'):
+            output_structure = Path(snakemake.output.structure)
+        else:
+            output_structure = None
+            
         threads = snakemake.params.threads
-        enable_no_3d = snakemake.params.enable_no_3d
-        enable_with_3d = snakemake.params.enable_with_3d
+        
+        # Get processing options (with defaults)
+        enable_no_3d = getattr(snakemake.params, 'enable_no_3d', True)
+        enable_with_3d = getattr(snakemake.params, 'enable_with_3d', True)
     except NameError:
         msa_main = Path(sys.argv[1])
         msa_structure = Path(sys.argv[2])
@@ -55,8 +75,11 @@ def main():
         enable_no_3d = True
         enable_with_3d = True
 
-    output_main.mkdir(parents=True, exist_ok=True)
-    output_structure.mkdir(parents=True, exist_ok=True)
+    # Create output directories if they exist
+    if output_main:
+        output_main.mkdir(parents=True, exist_ok=True)
+    if output_structure:
+        output_structure.mkdir(parents=True, exist_ok=True)
 
     logging.info("=== MAFFT Multiple Sequence Alignment ===")
     logging.info(f"Main MSA input: {msa_main}")
@@ -69,14 +92,21 @@ def main():
     successful_main = 0
     successful_structure = 0
 
-    # Get all FASTA files from structure MSA (this should be the complete set)
-    fasta_files = list(msa_structure.glob("*.fasta"))
-    total_genes = len(fasta_files)
+    # Get all FASTA files from the available input directory
+    if msa_structure and msa_structure.exists():
+        fasta_files = list(msa_structure.glob("*.fasta"))
+        total_genes = len(fasta_files)
+    elif msa_main and msa_main.exists():
+        fasta_files = list(msa_main.glob("*.fasta"))
+        total_genes = len(fasta_files)
+    else:
+        logging.error("No input sequence directories found!")
+        return
     
     logging.info(f"Found {total_genes} genes to align")
 
-    # Align main sequences (if enabled)
-    if enable_no_3d and msa_main.exists():
+    # Align main sequences (if enabled and available)
+    if enable_no_3d and msa_main and msa_main.exists() and output_main:
         logging.info("\n--- Aligning Main MSA Sequences ---")
         for fasta_path in sorted(msa_main.glob("*.fasta")):
             gene = fasta_path.stem
@@ -86,8 +116,8 @@ def main():
     else:
         logging.info("--- Skipping Main MSA Alignment (disabled or missing) ---")
 
-    # Align structure sequences (if enabled)
-    if enable_with_3d and msa_structure.exists():
+    # Align structure sequences (if enabled and available)
+    if enable_with_3d and msa_structure and msa_structure.exists() and output_structure:
         logging.info("\n--- Aligning Structure MSA Sequences ---")
         for fasta_path in sorted(msa_structure.glob("*.fasta")):
             gene = fasta_path.stem

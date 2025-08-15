@@ -109,11 +109,28 @@ def main():
     """Main function for Snakemake integration"""
     
     try:
-        # Get inputs from Snakemake
-        input_main = Path(snakemake.input.main)
-        input_structure = Path(snakemake.input.structure)
-        output_main = Path(snakemake.output.trim_main)
-        output_structure = Path(snakemake.output.trim_structure)
+        # Get inputs from Snakemake - handle flexible input/output structure
+        if hasattr(snakemake.input, 'main'):
+            input_main = Path(snakemake.input.main)
+        else:
+            input_main = None
+            
+        if hasattr(snakemake.input, 'structure'):
+            input_structure = Path(snakemake.input.structure)
+        else:
+            # Fallback: use the first input attribute
+            input_structure = Path(list(snakemake.input)[0])
+        
+        if hasattr(snakemake.output, 'trim_main'):
+            output_main = Path(snakemake.output.trim_main)
+        else:
+            output_main = None
+            
+        if hasattr(snakemake.output, 'trim_structure'):
+            output_structure = Path(snakemake.output.trim_structure)
+        else:
+            # Fallback: use the first output attribute  
+            output_structure = Path(list(snakemake.output)[0])
         
         analysis = snakemake.params.analysis
         paramset = snakemake.params.paramset
@@ -143,15 +160,21 @@ def main():
     total_successful = 0
     total_failed = 0
     
-    # Process main alignments
-    successful, failed = process_alignment_directory(input_main, output_main, "main")
-    total_successful += successful
-    total_failed += failed
+    # Process main alignments (if available)
+    if input_main and output_main and input_main.exists():
+        successful, failed = process_alignment_directory(input_main, output_main, "main")
+        total_successful += successful
+        total_failed += failed
+    else:
+        logging.info("Skipping main alignments (not available or configured)")
     
-    # Process structure alignments
-    successful, failed = process_alignment_directory(input_structure, output_structure, "structure")
-    total_successful += successful
-    total_failed += failed
+    # Process structure alignments (if available)
+    if input_structure and output_structure and input_structure.exists():
+        successful, failed = process_alignment_directory(input_structure, output_structure, "structure")
+        total_successful += successful
+        total_failed += failed
+    else:
+        logging.info("Skipping structure alignments (not available or configured)")
     
     # Summary
     logging.info(f"\nClipKIT processing complete:")

@@ -116,6 +116,12 @@ trimming:
 
 # Conservation analysis settings
 conservation:
+  # Conservation scoring method: "shannon", "blosum62", "hybrid"
+  # - shannon: Original entropy-based method (treats all AA substitutions equally)
+  # - blosum62: BLOSUM62 substitution matrix-based scoring (biochemically aware)
+  # - hybrid: Use BLOSUM62 for main analysis, ConSurf for top candidates
+  scoring_method: "blosum62"
+  
   # Minimum conservation score (0.0-1.0)
   min_conservation_score: 0.7
   # Window size for conservation analysis
@@ -124,6 +130,17 @@ conservation:
   min_sequences: 3
   # Create sequence logos
   create_logos: false
+  
+  # Hybrid approach settings (when scoring_method = "hybrid")
+  hybrid:
+    # Use ConSurf for top N genes ranked by BLOSUM62 conservation
+    consurf_top_genes: 10
+    # Minimum mean conservation score to qualify for ConSurf analysis
+    consurf_min_conservation: 0.6
+    # ConSurf analysis timeout (seconds)
+    consurf_timeout: 3600
+    # Enable ConSurf for high-priority conserved regions only
+    consurf_conserved_regions_only: true
 
 # Conserved sequence extraction configuration
 conserved:

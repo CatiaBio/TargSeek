@@ -290,14 +290,40 @@ def main():
     """Main function for Snakemake integration"""
     
     try:
-        # Get parameters from Snakemake - handle 4 directory inputs
-        raw_main = Path(snakemake.input.main)
-        raw_structure = Path(snakemake.input.structure)
-        trimmed_main = Path(snakemake.input.trim_main)
-        trimmed_structure = Path(snakemake.input.trim_structure)
+        # Handle flexible input structure from Snakemake
+        if hasattr(snakemake.input, 'main'):
+            raw_main = Path(snakemake.input.main)
+        else:
+            raw_main = None
+            
+        if hasattr(snakemake.input, 'structure'):
+            raw_structure = Path(snakemake.input.structure)
+        else:
+            # Fallback: use first input
+            raw_structure = Path(list(snakemake.input)[0])
+            
+        if hasattr(snakemake.input, 'trim_main'):
+            trimmed_main = Path(snakemake.input.trim_main)
+        else:
+            trimmed_main = None
+            
+        if hasattr(snakemake.input, 'trim_structure'):
+            trimmed_structure = Path(snakemake.input.trim_structure)
+        else:
+            # Fallback: use second input if available
+            inputs = list(snakemake.input)
+            trimmed_structure = Path(inputs[1]) if len(inputs) > 1 else None
         
-        output_main = Path(snakemake.output.main)
-        output_structure = Path(snakemake.output.structure)
+        if hasattr(snakemake.output, 'main'):
+            output_main = Path(snakemake.output.main)
+        else:
+            output_main = None
+            
+        if hasattr(snakemake.output, 'structure'):
+            output_structure = Path(snakemake.output.structure)
+        else:
+            # Fallback: use first output
+            output_structure = Path(list(snakemake.output)[0])
         
         analysis = snakemake.params.analysis
         paramset = snakemake.params.paramset
@@ -330,20 +356,31 @@ def main():
     logging.info(f"Group: {group}")
     
     # Create output directories
-    output_main.mkdir(parents=True, exist_ok=True)
-    output_structure.mkdir(parents=True, exist_ok=True)
+    if output_main:
+        output_main.mkdir(parents=True, exist_ok=True)
+    if output_structure:
+        output_structure.mkdir(parents=True, exist_ok=True)
     
-    # Process main alignments
-    main_results, main_files = process_alignment_set(raw_main, trimmed_main, output_main, "main")
+    # Process main alignments (if available)
+    if raw_main and trimmed_main and output_main:
+        main_results, main_files = process_alignment_set(raw_main, trimmed_main, output_main, "main")
+    else:
+        logging.info("Skipping main alignment quality assessment (not available)")
+        main_results, main_files = [], []
     
-    # Process structure alignments
-    structure_results, structure_files = process_alignment_set(raw_structure, trimmed_structure, output_structure, "structure")
+    # Process structure alignments (if available)
+    if raw_structure and trimmed_structure and output_structure:
+        structure_results, structure_files = process_alignment_set(raw_structure, trimmed_structure, output_structure, "structure")
+    else:
+        logging.warning("Structure alignments not available for quality assessment")
+        structure_results, structure_files = [], []
     
     # Generate reports for each set separately
-    all_sets = [
-        (main_results, output_main, "main"),
-        (structure_results, output_structure, "structure")
-    ]
+    all_sets = []
+    if main_results and output_main:
+        all_sets.append((main_results, output_main, "main"))
+    if structure_results and output_structure:
+        all_sets.append((structure_results, output_structure, "structure"))
     
     for results, output_dir, set_name in all_sets:
         if not results:
