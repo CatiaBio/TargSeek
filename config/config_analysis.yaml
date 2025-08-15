@@ -5,7 +5,7 @@
 # Defines all paths, thresholds, and settings for protein sequence
 # analysis, multiple sequence alignment, conservation analysis,
 # and epitope prediction.
-# 
+#
 # Only this file needs to be edited to adjust analysis parameters,
 # thresholds, or update paths without modifying the Snakefile_analysis.
 # ------------------------------------------------------
@@ -66,16 +66,16 @@ structure_selection:
   similarity_method: "local_alignment"
   # Random seed for deterministic structure selection (set to null for random behavior)
   random_seed: 42
-  
+
   # Combined scoring weights (must sum to 1.0)
   scoring_weights:
     # Weight for length similarity (how close structure length is to MSA average)
     length: 0.5
     # Weight for sequence similarity (amino acid identity in alignment)
     similarity: 0.3
-    # Weight for coverage (how well structure aligns with MSA sequences)  
+    # Weight for coverage (how well structure aligns with MSA sequences)
     coverage: 0.2
-  
+
   # Length-based filtering options
   length_filtering:
     # Enable length-based pre-filtering before alignment
@@ -95,7 +95,7 @@ processing:
 epitope_analysis:
   # Minimum length for linear epitopes (residues)
   min_epitope_length: 6
-  
+
 # PyMOL 3D visualization settings
 pymol_visualization:
   # Enable PyMOL epitope visualizations (requires PyMOL installation)
@@ -106,7 +106,7 @@ pymol_visualization:
   image_dpi: 300
   # Enable ray tracing for high-quality images (slower)
   ray_tracing: true
-  
+
 # MSA Trimming settings - ClipKIT
 trimming:
   # ClipKIT settings
@@ -121,7 +121,7 @@ conservation:
   # - blosum62: BLOSUM62 substitution matrix-based scoring (biochemically aware)
   # - hybrid: Use BLOSUM62 for main analysis, ConSurf for top candidates
   scoring_method: "blosum62"
-  
+
   # Minimum conservation score (0.0-1.0)
   min_conservation_score: 0.7
   # Window size for conservation analysis
@@ -130,7 +130,7 @@ conservation:
   min_sequences: 3
   # Create sequence logos
   create_logos: false
-  
+
   # Hybrid approach settings (when scoring_method = "hybrid")
   hybrid:
     # Use ConSurf for top N genes ranked by BLOSUM62 conservation
@@ -198,8 +198,8 @@ output:
 
 # Path templates - organized by analysis workflow stage
 paths:
-  
-  # -------------------------------------------------------------------------  
+
+  # -------------------------------------------------------------------------
   # INPUT DATA (from download pipeline)
   # -------------------------------------------------------------------------
   input:
@@ -217,8 +217,8 @@ paths:
   sequence_prep:
     # Base directory for all analysis outputs
     base_dir: "results/{analysis}_{paramset}/protein_analysis"
-    # MSA sequence references  
-    msa_sequence_refs: "results/{analysis}_{paramset}/protein_analysis/msa_sequence_refs/gram_{group}"
+    # MSA sequence references
+    msa_sequence_refs: "results/{analysis}_{paramset}/protein_analysis/msa_fasta/gram_{group}"
     # Selected 3D structure paths
     selected_3d_paths: "results/{analysis}_{paramset}/protein_analysis/selected_3d_paths_gram_{group}.txt"
     selected_3d_tsv: "results/{analysis}_{paramset}/protein_analysis/selected_3d_fasta_gram_{group}.tsv"
@@ -227,47 +227,43 @@ paths:
   # STAGE 2: Multiple Sequence Alignment
   # -------------------------------------------------------------------------
   msa:
-    # MSA sequences (foundation for both no_3d and with_3d)
+    # MSA sequences
     sequences: "results/{analysis}_{paramset}/protein_analysis/sequences/gram_{group}"
-    
+
     # Final MSA input sequences (FASTA files by gene)
-    sequences_main: "results/{analysis}_{paramset}/protein_analysis/sequences/gram_{group}"
-    sequences_structure: "results/{analysis}_{paramset}/protein_analysis/sequences_with_structure/gram_{group}"
-    
+    sequences_main: "results/{analysis}_{paramset}/protein_analysis/msa_fasta/gram_{group}"
+
     # MAFFT alignment results
-    alignments_main: "results/{analysis}_{paramset}/protein_analysis/sequences/alignments/gram_{group}"
-    alignments_structure: "results/{analysis}_{paramset}/protein_analysis/sequences_with_structure/alignments/gram_{group}"
-    
+    alignments_main: "results/{analysis}_{paramset}/protein_analysis/mafft_alignment/gram_{group}"
+    alignments_structure: "results/{analysis}_{paramset}/protein_analysis/mafft_alignment_with_3d/gram_{group}"
+
     # ClipKIT trimmed alignments
-    trimmed_main: "results/{analysis}_{paramset}/protein_analysis/sequences/trimmed/gram_{group}"
-    trimmed_structure: "results/{analysis}_{paramset}/protein_analysis/sequences_with_structure/trimmed/gram_{group}"
+    trimmed_structure: "results/{analysis}_{paramset}/protein_analysis/mafft_alignment_with_3d/trimmed/gram_{group}"
 
   # -------------------------------------------------------------------------
   # STAGE 3: Quality Assessment
   # -------------------------------------------------------------------------
   quality:
     # Alignment quality metrics
-    assessment_main: "results/{analysis}_{paramset}/protein_analysis/sequences/quality/gram_{group}"
-    assessment_structure: "results/{analysis}_{paramset}/protein_analysis/sequences_with_structure/quality/gram_{group}"
+    assessment_structure: "results/{analysis}_{paramset}/protein_analysis/mafft_alignment_with_3d/quality/gram_{group}"
 
   # -------------------------------------------------------------------------
   # STAGE 4: Conservation Analysis
   # -------------------------------------------------------------------------
   conservation:
     # Conservation analysis results
-    results_main: "results/{analysis}_{paramset}/protein_analysis/sequences/conservation/gram_{group}"
-    results_structure: "results/{analysis}_{paramset}/protein_analysis/sequences_with_structure/conservation/gram_{group}"
+    results_structure: "results/{analysis}_{paramset}/protein_analysis/mafft_alignment_with_3d/conservation/gram_{group}"
 
-  # -------------------------------------------------------------------------
-  # STAGE 5: Conserved Sequence Extraction
-  # -------------------------------------------------------------------------
-  conserved:
-    # Conserved sequences from raw alignments
-    raw_sequences_main: "results/{analysis}_{paramset}/protein_analysis/sequences/conserved_sequences_raw_gram_{group}.tsv"
-    raw_sequences_structure: "results/{analysis}_{paramset}/protein_analysis/sequences_with_structure/conserved_sequences_raw_gram_{group}.tsv"
-    # Conserved sequences from trimmed alignments
-    trimmed_sequences_main: "results/{analysis}_{paramset}/protein_analysis/sequences/conserved_sequences_trimmed_gram_{group}.tsv"
-    trimmed_sequences_structure: "results/{analysis}_{paramset}/protein_analysis/sequences_with_structure/conserved_sequences_trimmed_gram_{group}.tsv"
+  # # -------------------------------------------------------------------------
+  # # STAGE 5: Conserved Sequence Extraction
+  # # -------------------------------------------------------------------------
+  # conserved:
+  #   # Conserved sequences from raw alignments
+  #   raw_sequences_main: "results/{analysis}_{paramset}/protein_analysis/sequences/conserved_sequences_raw_gram_{group}.tsv"
+  #   raw_sequences_structure: "results/{analysis}_{paramset}/protein_analysis/sequences_with_structure/conserved_sequences_raw_gram_{group}.tsv"
+  #   # Conserved sequences from trimmed alignments
+  #   trimmed_sequences_main: "results/{analysis}_{paramset}/protein_analysis/sequences/conserved_sequences_trimmed_gram_{group}.tsv"
+  #   trimmed_sequences_structure: "results/{analysis}_{paramset}/protein_analysis/sequences_with_structure/conserved_sequences_trimmed_gram_{group}.tsv"
 
   # -------------------------------------------------------------------------
   # STAGE 6: Epitope Prediction
@@ -299,7 +295,7 @@ paths:
     topology_filter_report: "results/{analysis}_{paramset}/protein_analysis/topology_analysis/epitope_filter_report.json"
 
   # -------------------------------------------------------------------------
-  # STAGE 8: Summaries and Reports  
+  # STAGE 8: Summaries and Reports
   # -------------------------------------------------------------------------
   # reports:
     # Final integrated reports (EXCLUDED from this pipeline)
@@ -311,41 +307,40 @@ paths:
 
 # Script paths - organized by analysis stage
 scripts:
-  
+
   # -------------------------------------------------------------------------
   # STAGE 1: Sequence Preparation Scripts
   # -------------------------------------------------------------------------
   sequence_prep:
-    create_sequence_references: "scripts/protein_analysis/create_sequence_references.py"
     create_sequences: "scripts/protein_analysis/create_main_msa_sequences.py"
     select_3d_from_sequences: "scripts/protein_analysis/select_3d_from_main_msa.py"
     create_final_msa: "scripts/protein_analysis/create_final_msa_files.py"
-  
+
   # -------------------------------------------------------------------------
-  # STAGE 2: Multiple Sequence Alignment Scripts  
+  # STAGE 2: Multiple Sequence Alignment Scripts
   # -------------------------------------------------------------------------
   msa:
     run_mafft_alignments: "scripts/protein_analysis/run_mafft_alignments.py"
     trim_alignments: "scripts/protein_analysis/trim_alignments.py"
-  
+
   # -------------------------------------------------------------------------
   # STAGE 3: Quality Assessment Scripts
   # -------------------------------------------------------------------------
   quality:
     assess_alignment_quality: "scripts/protein_analysis/assess_alignment_quality_comparison.py"
-  
+
   # -------------------------------------------------------------------------
   # STAGE 4: Conservation Analysis Scripts
   # -------------------------------------------------------------------------
   conservation:
     analyze_conservation: "scripts/protein_analysis/analyze_conservation_adaptive.py"
-  
+
   # -------------------------------------------------------------------------
   # STAGE 5: Conserved Sequence Extraction Scripts
   # -------------------------------------------------------------------------
   conserved:
     extract_sequences: "scripts/protein_analysis/extract_conserved_sequences.py"
-  
+
   # -------------------------------------------------------------------------
   # STAGE 6: Epitope Prediction Scripts
   # -------------------------------------------------------------------------
@@ -354,7 +349,7 @@ scripts:
     create_epitope_tables: "scripts/protein_analysis/create_epitope_tables_from_bepipred.py"
     visualize_epitopes_pymol: "scripts/protein_analysis/visualize_epitopes_pymol.py"
     analyze_epitope_conservation: "scripts/protein_analysis/analyze_epitope_conservation.py"
-  
+
   # -------------------------------------------------------------------------
   # STAGE 7: Topology Analysis Scripts
   # -------------------------------------------------------------------------
@@ -362,7 +357,7 @@ scripts:
     predict_topology: "scripts/protein_analysis/predict_topology.py"
     map_extracellular_regions: "scripts/protein_analysis/map_extracellular_regions.py"
     filter_epitopes_topology: "scripts/protein_analysis/filter_epitopes_topology.py"
-  
+
   # -------------------------------------------------------------------------
   # STAGE 8: Summary and Report Scripts
   # -------------------------------------------------------------------------

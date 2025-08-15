@@ -88,6 +88,23 @@ snakemake -s Snakefile_analysis all_predictions_and_reports --cores 4
 snakemake -s Snakefile_analysis results/analysis1_params1/protein_analysis/epitope_predictions_bepipred/gram_positive --cores 4
 ```
 
+#### IEDB Validation Pipeline
+```bash
+# Run IEDB validation for both Gram-positive and Gram-negative epitopes
+snakemake -s Snakefile_analysis all_iedb_validation --cores 4
+
+# Run IEDB validation for specific Gram type
+snakemake -s Snakefile_analysis iedb_validation_negative --cores 4
+snakemake -s Snakefile_analysis iedb_validation_positive --cores 4
+
+# Generate combined IEDB validation report
+snakemake -s Snakefile_analysis iedb_validation_all --cores 4
+
+# Run standalone IEDB analysis with custom parameters
+cd scripts/protein_analysis
+python iedb_pipeline_integration.py --analysis analysis1 --paramset params1 --gram-type negative
+```
+
 ### BepiPred 3.0 Setup (Ubuntu/Linux)
 ```bash
 # 1. Run the setup script (on Ubuntu)
@@ -129,6 +146,10 @@ snakemake all_epitope_predictions_bepipred --cores 4
 - `create_used_structures_mapping.py`: Map used 3D structures for epitope analysis
 - `predict_epitopes_bepipred_3d_only.py`: BepiPred 3.0 epitope prediction
 - `create_epitope_tables_from_bepipred.py`: Generate epitope tables from BepiPred output
+- `analyze_epitope_conservation.py`: Advanced epitope conservation analysis (Jalview, BLOSUM62, Identity)
+- `iedb_conservancy_analysis.py`: IEDB-style epitope conservancy analysis tool
+- `iedb_pipeline_integration.py`: Integrated IEDB validation pipeline
+- `generate_iedb_combined_report.py`: Combined IEDB validation report generator
 
 ## Cache Management
 
