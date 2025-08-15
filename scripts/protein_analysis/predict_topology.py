@@ -5,6 +5,11 @@ Predict membrane protein topology using DeepTMHMM.
 This script runs topology prediction on protein sequences from selected 3D structures
 to identify transmembrane regions, signal peptides, and extracellular/intracellular domains.
 
+Fixed version that:
+1. Extracts the correct 3D structure sequences from MSA files
+2. Uses real DeepTMHMM via biolib
+3. Properly handles DeepTMHMM output formats
+
 Input:
 - Selected 3D structure paths for positive and negative groups
 - Protein sequences from MSA files
@@ -26,6 +31,7 @@ import subprocess
 import tempfile
 import logging
 from typing import Dict, List, Tuple, Any
+import re
 
 # Set up logging
 logging.basicConfig(
@@ -34,57 +40,58 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-def parse_selected_3d_paths(file_path: str) -> Dict[str, str]:
-    """Parse selected 3D paths file to get gene -> structure mapping."""
-    gene_structure_map = {}
+def parse_selected_3d_paths(paths_file: str) -> Dict[str, str]:
+    """Parse the selected 3D paths file to get gene -> FASTA file path mapping."""
+    gene_fasta_map = {}
     
-    if not os.path.exists(file_path):
-        logger.warning(f"Selected 3D paths file not found: {file_path}")
-        return gene_structure_map
+    if not os.path.exists(paths_file):
+        logger.warning(f"Selected 3D paths file not found: {paths_file}")
+        return gene_fasta_map
     
-    with open(file_path, 'r') as f:
+    with open(paths_file, 'r') as f:
         for line in f:
             line = line.strip()
             if line and not line.startswith('#'):
-                # Handle file path format: data/protein_structures/gene/structure.fasta
-                if '/' in line and line.endswith('.fasta'):
-                    path_parts = line.split('/')
-                    if len(path_parts) >= 3:
-                        gene = path_parts[-2]  # gene name is second to last part
-                        structure = path_parts[-1].replace('.fasta', '')  # structure ID without extension
-                        gene_structure_map[gene] = structure
-                # Legacy format: gene_name:structure_id
-                elif ':' in line:
-                    gene, structure = line.split(':', 1)
-                    gene_structure_map[gene.strip()] = structure.strip()
+                # Extract gene name from path: data/protein_structures/bamA/5OR1_1.fasta -> bamA
+                path_parts = line.split('/')
+                if len(path_parts) >= 3:
+                    gene = path_parts[-2]  # Gene name is second to last part
+                    gene_fasta_map[gene] = line
     
-    logger.info(f"Loaded {len(gene_structure_map)} gene-structure mappings from {file_path}")
-    return gene_structure_map
+    logger.info(f"Loaded {len(gene_fasta_map)} gene-structure path mappings from {paths_file}")
+    return gene_fasta_map
 
-def extract_sequences_from_msa(sequences_dir: str, gene_structure_map: Dict[str, str]) -> Dict[str, str]:
-    """Extract representative sequences from MSA files for topology prediction."""
+def extract_structure_sequences_from_paths(gene_fasta_map: Dict[str, str]) -> Dict[str, str]:
+    """Extract sequences directly from the individual 3D structure FASTA files."""
     sequences = {}
     
-    if not os.path.exists(sequences_dir):
-        logger.warning(f"Sequences directory not found: {sequences_dir}")
-        return sequences
-    
-    for gene in gene_structure_map.keys():
-        fasta_file = os.path.join(sequences_dir, f"{gene}.fasta")
-        if os.path.exists(fasta_file):
+    for gene, fasta_path in gene_fasta_map.items():
+        if os.path.exists(fasta_path):
             try:
-                # Get the first sequence (representative) from each gene's FASTA
-                for record in SeqIO.parse(fasta_file, "fasta"):
-                    sequences[f"{gene}_{gene_structure_map[gene]}"] = str(record.seq)
-                    break  # Only take first sequence
+                # Read the sequence from the individual structure FASTA file
+                for record in SeqIO.parse(fasta_path, "fasta"):
+                    # Extract PDB ID from the file name
+                    pdb_id = os.path.basename(fasta_path).replace('.fasta', '')
+                    
+                    # Get the sequence without gaps
+                    structure_sequence = str(record.seq).replace('-', '')
+                    
+                    seq_id = f"{gene}_{pdb_id}"
+                    sequences[seq_id] = structure_sequence
+                    
+                    logger.info(f"Loaded 3D structure sequence for {gene} ({pdb_id}): {len(structure_sequence)} residues")
+                    break  # Only take the first (and usually only) sequence
+                    
             except Exception as e:
-                logger.error(f"Error parsing {fasta_file}: {e}")
+                logger.error(f"Error reading {fasta_path}: {e}")
+        else:
+            logger.warning(f"3D structure FASTA file not found: {fasta_path}")
     
-    logger.info(f"Extracted {len(sequences)} sequences for topology prediction")
+    logger.info(f"Extracted {len(sequences)} 3D structure sequences for topology prediction")
     return sequences
 
-def run_deeptmhmm(sequences: Dict[str, str], output_dir: str, method: str = "deeptmhmm") -> bool:
-    """Run DeepTMHMM topology prediction on sequences."""
+def run_deeptmhmm_biolib(sequences: Dict[str, str], output_dir: str) -> bool:
+    """Run DeepTMHMM using biolib with proper input/output handling."""
     
     # Create temporary FASTA file
     temp_fasta = os.path.join(output_dir, "topology_input.fasta")
@@ -95,159 +102,161 @@ def run_deeptmhmm(sequences: Dict[str, str], output_dir: str, method: str = "dee
     
     logger.info(f"Created input FASTA with {len(sequences)} sequences: {temp_fasta}")
     
-    if method.lower() == "deeptmhmm":
-        return run_deeptmhmm_prediction(temp_fasta, output_dir)
-    elif method.lower() == "topcons":
-        return run_topcons_prediction(temp_fasta, output_dir)
-    else:
-        logger.error(f"Unknown topology prediction method: {method}")
-        return False
-
-def run_deeptmhmm_prediction(input_fasta: str, output_dir: str) -> bool:
-    """Run DeepTMHMM using biolib."""
     try:
-        # First try the biolib method
+        # Run DeepTMHMM via biolib
         cmd = [
             "biolib", "run", "DTU/DeepTMHMM",
-            "--fasta", input_fasta
+            "--fasta", temp_fasta,
+            "--local"  # Run locally for faster processing
         ]
         
         logger.info(f"Running DeepTMHMM via biolib: {' '.join(cmd)}")
-        result = subprocess.run(cmd, capture_output=True, text=True, check=True, cwd=output_dir)
+        result = subprocess.run(cmd, capture_output=True, text=True, cwd=output_dir, timeout=600)  # 10 min timeout
         
-        logger.info("DeepTMHMM completed successfully via biolib")
-        logger.info(f"DeepTMHMM output: {result.stdout}")
-        return True
-        
-    except subprocess.CalledProcessError as e:
-        logger.error(f"DeepTMHMM via biolib failed: {e}")
-        logger.error(f"stderr: {e.stderr}")
-        
-        # Try legacy deeptmhmm command as fallback
-        try:
-            cmd = [
-                "deeptmhmm",
-                "--fasta", input_fasta,
-                "--output-dir", output_dir
-            ]
+        if result.returncode == 0:
+            logger.info("DeepTMHMM completed successfully via biolib")
+            logger.info(f"DeepTMHMM stdout: {result.stdout[:500]}...")  # First 500 chars
             
-            logger.info(f"Trying legacy DeepTMHMM: {' '.join(cmd)}")
-            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-            
-            logger.info("DeepTMHMM completed successfully via legacy command")
-            return True
-            
-        except (subprocess.CalledProcessError, FileNotFoundError) as e2:
-            logger.error(f"Legacy DeepTMHMM also failed: {e2}")
-            logger.error("Creating mock topology predictions for pipeline continuation...")
-            return create_mock_deeptmhmm_output(input_fasta, output_dir)
-            
-    except FileNotFoundError:
-        logger.error("biolib command not found. Creating mock topology predictions for pipeline continuation...")
-        return create_mock_deeptmhmm_output(input_fasta, output_dir)
-
-def create_mock_deeptmhmm_output(input_fasta: str, output_dir: str) -> bool:
-    """Create mock DeepTMHMM output when the tool is not available."""
-    try:
-        # Load sequences from input FASTA
-        sequences = {}
-        for record in SeqIO.parse(input_fasta, "fasta"):
-            sequences[record.id] = str(record.seq)
-        
-        # Use the existing mock function 
-        create_mock_topology_results(sequences, output_dir)
-        logger.info("Mock topology predictions created successfully")
-        return True
-    except Exception as e:
-        logger.error(f"Failed to create mock topology predictions: {e}")
-        return False
-
-def run_topcons_prediction(input_fasta: str, output_dir: str) -> bool:
-    """Run TOPCONS prediction using web API (fallback method)."""
-    try:
-        import requests
-        import time
-        
-        # This is a simplified implementation - you may need to adapt based on TOPCONS API
-        logger.info("Running TOPCONS prediction via web API...")
-        
-        # Read sequences
-        sequences = {}
-        for record in SeqIO.parse(input_fasta, "fasta"):
-            sequences[record.id] = str(record.seq)
-        
-        # Create mock topology predictions for demonstration
-        # In a real implementation, you would call the TOPCONS web API
-        create_mock_topology_results(sequences, output_dir)
-        
-        return True
-        
-    except Exception as e:
-        logger.error(f"TOPCONS prediction failed: {e}")
-        return False
-
-def create_mock_topology_results(sequences: Dict[str, str], output_dir: str):
-    """Create mock topology results for testing (replace with real TOPCONS API call)."""
-    logger.warning("Using mock topology predictions. Replace with real DeepTMHMM/TOPCONS in production!")
-    
-    # Create predicted_topology.gff3 file (DeepTMHMM format)
-    gff_file = os.path.join(output_dir, "predicted_topology.gff3")
-    
-    with open(gff_file, 'w') as f:
-        f.write("##gff-version 3\n")
-        
-        for seq_id, sequence in sequences.items():
-            seq_len = len(sequence)
-            
-            # Mock predictions based on sequence length
-            if seq_len > 100:
-                # Predict some transmembrane regions
-                tm_start = seq_len // 4
-                tm_end = tm_start + 20
-                
-                f.write(f"{seq_id}\tDeepTMHMM\tRegion\t1\t{tm_start-1}\toutside\t.\t.\tNote=Extracellular\n")
-                f.write(f"{seq_id}\tDeepTMHMM\tRegion\t{tm_start}\t{tm_end}\tmembrane\t.\t.\tNote=Transmembrane\n")
-                f.write(f"{seq_id}\tDeepTMHMM\tRegion\t{tm_end+1}\t{seq_len}\tinside\t.\t.\tNote=Intracellular\n")
+            # Check if output files were created
+            output_files = [f for f in os.listdir(output_dir) if f.endswith(('.gff3', '.3line', '.png'))]
+            if output_files:
+                logger.info(f"DeepTMHMM output files: {output_files}")
+                return True
             else:
-                # Short sequence - assume mostly extracellular
-                f.write(f"{seq_id}\tDeepTMHMM\tRegion\t1\t{seq_len}\toutside\t.\t.\tNote=Extracellular\n")
+                logger.warning("DeepTMHMM completed but no output files found")
+                return False
+        else:
+            logger.error(f"DeepTMHMM failed with return code {result.returncode}")
+            logger.error(f"stderr: {result.stderr}")
+            return False
+            
+    except subprocess.TimeoutExpired:
+        logger.error("DeepTMHMM via biolib timed out")
+        return False
+    except Exception as e:
+        logger.error(f"DeepTMHMM via biolib failed: {e}")
+        return False
 
-def parse_topology_results(output_dir: str) -> Dict[str, List[Dict]]:
-    """Parse topology prediction results from DeepTMHMM output."""
+def parse_deeptmhmm_output(output_dir: str) -> Dict[str, List[Dict]]:
+    """Parse DeepTMHMM output files to extract topology predictions."""
     topology_data = {}
     
-    gff_file = os.path.join(output_dir, "predicted_topology.gff3")
+    # Look for GFF3 output file (standard DeepTMHMM output)
+    gff_files = [f for f in os.listdir(output_dir) if f.endswith('.gff3')]
     
-    if not os.path.exists(gff_file):
-        logger.error(f"Topology results file not found: {gff_file}")
-        return topology_data
+    if not gff_files:
+        logger.warning("No GFF3 files found in DeepTMHMM output")
+        # Try to find 3line format
+        line_files = [f for f in os.listdir(output_dir) if f.endswith('.3line')]
+        if line_files:
+            return parse_deeptmhmm_3line(os.path.join(output_dir, line_files[0]))
+        else:
+            logger.error("No DeepTMHMM output files found")
+            return topology_data
+    
+    gff_file = os.path.join(output_dir, gff_files[0])
+    logger.info(f"Parsing DeepTMHMM GFF3 output: {gff_file}")
     
     with open(gff_file, 'r') as f:
+        current_seq = None
         for line in f:
-            if line.startswith('#') or not line.strip():
+            line = line.strip()
+            if line.startswith('#') or not line:
                 continue
             
-            parts = line.strip().split('\t')
+            parts = line.split('\t')
             if len(parts) >= 9:
                 seq_id = parts[0]
+                feature_type = parts[2]
                 start = int(parts[3])
                 end = int(parts[4])
-                region_type = parts[5]  # outside, membrane, inside
                 attributes = parts[8]
                 
                 if seq_id not in topology_data:
                     topology_data[seq_id] = []
                 
+                # Parse region type from attributes
+                region_type = 'unknown'
+                if 'TOPOLOGY=' in attributes:
+                    topology_match = re.search(r'TOPOLOGY=([^;]+)', attributes)
+                    if topology_match:
+                        region_type = topology_match.group(1).lower()
+                
                 topology_data[seq_id].append({
                     'start': start,
-                    'end': end, 
+                    'end': end,
                     'type': region_type,
+                    'feature': feature_type,
                     'attributes': attributes,
                     'length': end - start + 1
                 })
     
     logger.info(f"Parsed topology data for {len(topology_data)} sequences")
     return topology_data
+
+def parse_deeptmhmm_3line(file_path: str) -> Dict[str, List[Dict]]:
+    """Parse DeepTMHMM 3line format output."""
+    topology_data = {}
+    
+    with open(file_path, 'r') as f:
+        lines = f.readlines()
+    
+    i = 0
+    while i < len(lines):
+        line = lines[i].strip()
+        if line.startswith('>'):
+            seq_id = line[1:]  # Remove '>'
+            
+            if i + 2 < len(lines):
+                topology_line = lines[i + 2].strip()  # Third line contains topology
+                topology_data[seq_id] = parse_topology_string(topology_line)
+            i += 3
+        else:
+            i += 1
+    
+    return topology_data
+
+def parse_topology_string(topology_str: str) -> List[Dict]:
+    """Parse topology string into regions."""
+    regions = []
+    current_type = None
+    start_pos = 1
+    
+    for i, char in enumerate(topology_str):
+        if char != current_type:
+            if current_type is not None:
+                # End previous region
+                regions.append({
+                    'start': start_pos,
+                    'end': i,
+                    'type': get_region_type(current_type),
+                    'length': i - start_pos + 1
+                })
+            # Start new region
+            current_type = char
+            start_pos = i + 1
+    
+    # Add final region
+    if current_type is not None:
+        regions.append({
+            'start': start_pos,
+            'end': len(topology_str),
+            'type': get_region_type(current_type),
+            'length': len(topology_str) - start_pos + 1
+        })
+    
+    return regions
+
+def get_region_type(char: str) -> str:
+    """Convert DeepTMHMM character to region type."""
+    mapping = {
+        'O': 'outside',      # Extracellular
+        'M': 'membrane',     # Transmembrane
+        'I': 'inside',       # Intracellular
+        'S': 'signal',       # Signal peptide
+        'P': 'periplasm'     # Periplasmic (for bacteria)
+    }
+    return mapping.get(char.upper(), 'unknown')
 
 def create_topology_summary(topology_data: Dict[str, List[Dict]], output_file: str):
     """Create summary statistics of topology predictions."""
@@ -271,7 +280,8 @@ def create_topology_summary(topology_data: Dict[str, List[Dict]], output_file: s
             'regions': regions,
             'transmembrane_count': 0,
             'extracellular_coverage': 0.0,
-            'has_transmembrane': False
+            'has_transmembrane': False,
+            'total_length': 0
         }
         
         for region in regions:
@@ -281,14 +291,17 @@ def create_topology_summary(topology_data: Dict[str, List[Dict]], output_file: s
             if region['type'] == 'membrane':
                 tm_count += 1
                 protein_info['has_transmembrane'] = True
-            elif region['type'] == 'outside':
+            elif region['type'] in ['outside', 'signal']:  # Include signal peptides as extracellular
                 extracellular_length += region_length
         
         protein_info['transmembrane_count'] = tm_count
+        protein_info['total_length'] = total_length
+        
         if total_length > 0:
             protein_info['extracellular_coverage'] = extracellular_length / total_length
         
         summary_stats['detailed_predictions'][seq_id] = protein_info
+        summary_stats['extracellular_coverage'][seq_id] = protein_info['extracellular_coverage']
         
         total_tm_regions += tm_count
         
@@ -309,6 +322,8 @@ def create_topology_summary(topology_data: Dict[str, List[Dict]], output_file: s
     logger.info(f"Total proteins: {summary_stats['total_proteins']}")
     logger.info(f"Proteins with TM regions: {summary_stats['proteins_with_tm_regions']}")
     logger.info(f"Proteins extracellular only: {summary_stats['proteins_extracellular_only']}")
+    
+    return summary_stats
 
 def main():
     """Main function to run topology prediction."""
@@ -319,11 +334,9 @@ def main():
     topology_method = snakemake.params.topology_method
     topology_dir = snakemake.params.topology_dir
     
-    # Input files
-    selected_3d_positive = snakemake.input.selected_3d_paths_positive
-    selected_3d_negative = snakemake.input.selected_3d_paths_negative
-    sequences_positive = snakemake.input.sequences_positive
-    sequences_negative = snakemake.input.sequences_negative
+    # Input files - use the selected 3D paths files directly from Snakemake input
+    selected_3d_paths_positive = snakemake.input.selected_3d_paths_positive
+    selected_3d_paths_negative = snakemake.input.selected_3d_paths_negative
     
     # Output files
     topology_results = snakemake.output.topology_results
@@ -336,45 +349,60 @@ def main():
     os.makedirs(topology_dir, exist_ok=True)
     os.makedirs(os.path.dirname(topology_results), exist_ok=True)
     
-    # Collect all sequences for prediction
+    # Collect all 3D structure sequences for prediction
     all_sequences = {}
     
     # Process positive group
     logger.info("Processing positive group...")
-    pos_gene_map = parse_selected_3d_paths(selected_3d_positive)
-    pos_sequences = extract_sequences_from_msa(sequences_positive, pos_gene_map)
-    all_sequences.update(pos_sequences)
+    if os.path.exists(selected_3d_paths_positive):
+        pos_gene_map = parse_selected_3d_paths(selected_3d_paths_positive)
+        pos_sequences = extract_structure_sequences_from_paths(pos_gene_map)
+        all_sequences.update(pos_sequences)
+    else:
+        logger.warning(f"Positive 3D paths file not found: {selected_3d_paths_positive}")
     
     # Process negative group  
     logger.info("Processing negative group...")
-    neg_gene_map = parse_selected_3d_paths(selected_3d_negative)
-    neg_sequences = extract_sequences_from_msa(sequences_negative, neg_gene_map)
-    all_sequences.update(neg_sequences)
+    if os.path.exists(selected_3d_paths_negative):
+        neg_gene_map = parse_selected_3d_paths(selected_3d_paths_negative)
+        neg_sequences = extract_structure_sequences_from_paths(neg_gene_map)
+        all_sequences.update(neg_sequences)
+    else:
+        logger.warning(f"Negative 3D paths file not found: {selected_3d_paths_negative}")
     
     if not all_sequences:
-        logger.error("No sequences found for topology prediction")
+        logger.error("No 3D structure sequences found for topology prediction")
         sys.exit(1)
     
-    logger.info(f"Total sequences for topology prediction: {len(all_sequences)}")
+    logger.info(f"Total 3D structure sequences for topology prediction: {len(all_sequences)}")
+    for seq_id, seq in all_sequences.items():
+        logger.info(f"  {seq_id}: {len(seq)} residues")
     
-    # Run topology prediction
-    success = run_deeptmhmm(all_sequences, topology_dir, topology_method)
+    # Run topology prediction using real DeepTMHMM
+    success = run_deeptmhmm_biolib(all_sequences, topology_dir)
     
     if not success:
-        logger.error("Topology prediction failed")
+        logger.error("DeepTMHMM topology prediction failed")
         sys.exit(1)
     
     # Parse results
-    topology_data = parse_topology_results(topology_dir)
+    topology_data = parse_deeptmhmm_output(topology_dir)
+    
+    if not topology_data:
+        logger.error("No topology data could be parsed from DeepTMHMM output")
+        sys.exit(1)
     
     # Save detailed results
     with open(topology_results, 'w') as f:
         json.dump(topology_data, f, indent=2)
     
+    logger.info(f"Saved detailed topology results: {topology_results}")
+    
     # Create summary
-    create_topology_summary(topology_data, topology_summary)
+    summary_stats = create_topology_summary(topology_data, topology_summary)
     
     logger.info("Topology prediction completed successfully")
+    logger.info(f"Summary: {summary_stats['proteins_with_tm_regions']}/{summary_stats['total_proteins']} proteins have transmembrane regions")
 
 if __name__ == "__main__":
     main()

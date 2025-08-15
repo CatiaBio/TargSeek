@@ -86,6 +86,12 @@ snakemake -s Snakefile_analysis all_predictions_and_reports --cores 4
 
 # Run epitope predictions for specific group
 snakemake -s Snakefile_analysis results/analysis1_params1/protein_analysis/epitope_predictions_bepipred/gram_positive --cores 4
+
+# Run ConSurf conservation analysis for all proteins with 3D structures
+snakemake -s Snakefile_analysis all_consurf_analysis --cores 4
+
+# Run ConSurf analysis for specific group
+snakemake -s Snakefile_analysis results/analysis1_params1/protein_analysis/consurf_analysis/gram_negative/.consurf_complete.sentinel --cores 4
 ```
 
 #### IEDB Validation Pipeline
@@ -103,6 +109,22 @@ snakemake -s Snakefile_analysis iedb_validation_all --cores 4
 # Run standalone IEDB analysis with custom parameters
 cd scripts/protein_analysis
 python iedb_pipeline_integration.py --analysis analysis1 --paramset params1 --gram-type negative
+```
+
+### ConSurf Conservation Analysis
+```bash
+# Run ConSurf analysis for all proteins with 3D structures (both Gram-positive and Gram-negative)
+snakemake -s Snakefile_analysis all_consurf_analysis --cores 4
+
+# Run ConSurf analysis for specific Gram type
+snakemake -s Snakefile_analysis results/analysis1_params1/protein_analysis/consurf_analysis/gram_negative/.consurf_complete.sentinel --cores 4
+
+# Run standalone ConSurf analysis (outside of Snakemake)
+python3 run_consurf_analysis.py
+
+# Test ConSurf with single gene (bamA example)
+cd results/analysis1_params1/protein_analysis/consurf_analysis/gram_negative
+python3 ~/Projects/PureMilk/tools/stand_alone_consurf/stand_alone_consurf.py --dir bamA_5OR1_consurf --msa bamA_modified.fasta --structure ~/Projects/PureMilk/data/protein_structures/pdb_files/5OR1.pdb --chain A --query "5OR1"
 ```
 
 ### BepiPred 3.0 Setup (Ubuntu/Linux)
@@ -147,6 +169,7 @@ snakemake all_epitope_predictions_bepipred --cores 4
 - `predict_epitopes_bepipred_3d_only.py`: BepiPred 3.0 epitope prediction
 - `create_epitope_tables_from_bepipred.py`: Generate epitope tables from BepiPred output
 - `analyze_epitope_conservation.py`: Advanced epitope conservation analysis (Jalview, BLOSUM62, Identity)
+- `run_consurf_analysis.py`: ConSurf conservation analysis for proteins with 3D structures
 - `iedb_conservancy_analysis.py`: IEDB-style epitope conservancy analysis tool
 - `iedb_pipeline_integration.py`: Integrated IEDB validation pipeline
 - `generate_iedb_combined_report.py`: Combined IEDB validation report generator
