@@ -3,6 +3,19 @@
 # ==============================================================================
 
 # ------------------------------------------------------------------------------
+# DEVELOPMENT ENVIRONMENT
+# ------------------------------------------------------------------------------
+# VS Code settings (keep workspace settings)
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# Windows batch files for WSL integration
+*.bat
+
+# ------------------------------------------------------------------------------
 # SENSITIVE DATA - NEVER COMMIT
 # ------------------------------------------------------------------------------
 # API credentials and login information
