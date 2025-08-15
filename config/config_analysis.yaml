@@ -142,6 +142,13 @@ conservation:
     # Enable ConSurf for high-priority conserved regions only
     consurf_conserved_regions_only: true
 
+# ConSurf analysis configuration
+consurf:
+  # Path to ConSurf standalone script
+  script_path: "tools/stand_alone_consurf/stand_alone_consurf.py"
+  # Enable ConSurf analysis (set to false to skip)
+  enabled: true
+
 # Conserved sequence extraction configuration
 conserved:
   # Minimum conservation score for including positions in conserved sequences (0.0-1.0)
@@ -253,17 +260,20 @@ paths:
   conservation:
     # Conservation analysis results
     results_structure: "results/{analysis}_{paramset}/protein_analysis/mafft_alignment_with_3d/conservation/gram_{group}"
+    # ConSurf analysis results
+    consurf_results_dir: "results/{analysis}_{paramset}/protein_analysis/consurf_analysis/gram_{group}"
+    consurf_sentinel: "results/{analysis}_{paramset}/protein_analysis/consurf_analysis/gram_{group}/.consurf_complete.sentinel"
 
-  # # -------------------------------------------------------------------------
-  # # STAGE 5: Conserved Sequence Extraction
-  # # -------------------------------------------------------------------------
-  # conserved:
-  #   # Conserved sequences from raw alignments
-  #   raw_sequences_main: "results/{analysis}_{paramset}/protein_analysis/sequences/conserved_sequences_raw_gram_{group}.tsv"
-  #   raw_sequences_structure: "results/{analysis}_{paramset}/protein_analysis/sequences_with_structure/conserved_sequences_raw_gram_{group}.tsv"
-  #   # Conserved sequences from trimmed alignments
-  #   trimmed_sequences_main: "results/{analysis}_{paramset}/protein_analysis/sequences/conserved_sequences_trimmed_gram_{group}.tsv"
-  #   trimmed_sequences_structure: "results/{analysis}_{paramset}/protein_analysis/sequences_with_structure/conserved_sequences_trimmed_gram_{group}.tsv"
+  # -------------------------------------------------------------------------
+  # STAGE 5: Conserved Sequence Extraction
+  # -------------------------------------------------------------------------
+  conserved:
+    # Conserved sequences from raw alignments
+    raw_sequences_main: "results/{analysis}_{paramset}/protein_analysis/sequences/conserved_sequences_raw_gram_{group}.tsv"
+    raw_sequences_structure: "results/{analysis}_{paramset}/protein_analysis/sequences_with_structure/conserved_sequences_raw_gram_{group}.tsv"
+    # Conserved sequences from trimmed alignments
+    trimmed_sequences_main: "results/{analysis}_{paramset}/protein_analysis/sequences/conserved_sequences_trimmed_gram_{group}.tsv"
+    trimmed_sequences_structure: "results/{analysis}_{paramset}/protein_analysis/sequences_with_structure/conserved_sequences_trimmed_gram_{group}.tsv"
 
   # -------------------------------------------------------------------------
   # STAGE 6: Epitope Prediction
@@ -322,6 +332,9 @@ scripts:
   msa:
     run_mafft_alignments: "scripts/protein_analysis/run_mafft_alignments.py"
     trim_alignments: "scripts/protein_analysis/trim_alignments.py"
+    # Shell scripts for MAFFT alignment
+    run_mafft_shell: "scripts/protein_analysis/run_mafft.sh"
+    add_3d_to_mafft_shell: "scripts/protein_analysis/add_3d_to_mafft.sh"
 
   # -------------------------------------------------------------------------
   # STAGE 3: Quality Assessment Scripts
@@ -334,6 +347,7 @@ scripts:
   # -------------------------------------------------------------------------
   conservation:
     analyze_conservation: "scripts/protein_analysis/analyze_conservation_adaptive.py"
+    run_consurf_analysis: "scripts/protein_analysis/run_consurf_analysis.py"
 
   # -------------------------------------------------------------------------
   # STAGE 5: Conserved Sequence Extraction Scripts

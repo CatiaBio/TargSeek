@@ -25,12 +25,23 @@ wildcard_constraints:
 # TARGET RULES
 # =============================================================================
 
+# ConSurf conservation analysis only
+rule all_consurf_analysis:
+    input:
+        expand(
+            config["paths"]["conservation"]["consurf_sentinel"],
+            analysis=config["species_batches"],
+            paramset=config["quickgo_paramsets"],
+            group=["positive", "negative"]
+        )
+
 # Complete analysis pipeline - all stages
 rule all_analysis:
     input:
         expand(
             [
                 config["paths"]["conservation"]["results_structure"],
+                config["paths"]["conservation"]["consurf_sentinel"],
                 config["paths"]["conserved"]["raw_sequences_structure"],
                 config["paths"]["conserved"]["trimmed_sequences_structure"]
             ],
@@ -62,8 +73,8 @@ rule all_analysis:
 
 rule select_sequences_for_msa:
     input:
-        gene_lists=config["paths"]["input"]["gene_lists"],
-        protein_download_sentinel=config["paths"]["input"]["protein_download_sentinel"]
+        gene_lists="results/{analysis}_{paramset}/gene_selection/genes_species/gram_{group}",
+        protein_download_sentinel="data/protein_sequences/.{analysis}_{paramset}_{group}_download_complete"
     output:
         sequences_dir=directory("results/{analysis}_{paramset}/protein_analysis/msa_fasta/gram_{group}")
     params:
@@ -79,9 +90,9 @@ rule select_sequences_for_msa:
 
 rule select_3d_sequence_per_protein:
     input:
-        reference_dir=config["paths"]["sequence_prep"]["msa_sequence_refs"],
-        protein_download_sentinel=config["paths"]["input"]["protein_download_sentinel"],
-        structures_download_sentinel=config["paths"]["input"]["structures_download_sentinel"]
+        reference_dir="results/{analysis}_{paramset}/protein_analysis/msa_fasta/gram_{group}",
+        protein_download_sentinel="data/protein_sequences/.{analysis}_{paramset}_{group}_download_complete",
+        structures_download_sentinel="data/protein_structures/.{analysis}_{paramset}_{group}_structures_complete"
     output:
         selected_3d_paths=config["paths"]["sequence_prep"]["selected_3d_paths"],
         selected_3d_tsv=config["paths"]["sequence_prep"]["selected_3d_tsv"]
@@ -110,7 +121,7 @@ rule mafft_msa:
         paramset="{paramset}",
         group="{group}"
     shell:
-        "bash scripts/protein_analysis/run_mafft.sh {input.sequences_dir} {output.alignments_dir}"
+        "bash {config[scripts][msa][run_mafft_shell]} {input.sequences_dir} {output.alignments_dir}"
 
 rule mafft_msa_with_3d_sequence:
     input:
@@ -123,13 +134,27 @@ rule mafft_msa_with_3d_sequence:
         paramset="{paramset}",
         group="{group}"
     shell:
-        "bash scripts/protein_analysis/add_3d_to_mafft.sh {input.alignments_dir} {input.selected_3d_paths} {output.alignments_with_3d_dir}"
+        "bash {config[scripts][msa][add_3d_to_mafft_shell]} {input.alignments_dir} {input.selected_3d_paths} {output.alignments_with_3d_dir}"
 
 # ---------------------
-# STAGE 4: Quality Assessment with Consurf
+# STAGE 4: Quality Assessment with ConSurf
 # ---------------------
 
-rule assess_msa_aa_conservation:
+rule run_consurf_conservation_analysis:
+    input:
+        alignments_with_3d_dir="results/{analysis}_{paramset}/protein_analysis/mafft_alignment_with_3d/gram_{group}",
+        selected_3d_tsv=config["paths"]["sequence_prep"]["selected_3d_tsv"],
+        structures_download_sentinel="data/protein_structures/.{analysis}_{paramset}_{group}_structures_complete"
+    output:
+        consurf_results_dir=directory("results/{analysis}_{paramset}/protein_analysis/consurf_analysis/gram_{group}"),
+        consurf_sentinel="results/{analysis}_{paramset}/protein_analysis/consurf_analysis/gram_{group}/.consurf_complete.sentinel"
+    params:
+        analysis="{analysis}",
+        paramset="{paramset}",
+        group="{group}",
+        consurf_script=config.get("consurf", {}).get("script_path", "tools/stand_alone_consurf/stand_alone_consurf.py")
+    script:
+        config["scripts"]["conservation"]["run_consurf_analysis"]
 
 
 # ---------------------
@@ -140,8 +165,8 @@ rule predict_protein_topology:
     input:
         selected_3d_paths_positive=config["paths"]["sequence_prep"]["selected_3d_paths"].replace("{group}", "positive"),
         selected_3d_paths_negative=config["paths"]["sequence_prep"]["selected_3d_paths"].replace("{group}", "negative"),
-        sequences_positive=config["paths"]["msa"]["sequences_structure"].replace("{group}", "positive"),
-        sequences_negative=config["paths"]["msa"]["sequences_structure"].replace("{group}", "negative")
+        sequences_positive=config["paths"]["msa"]["alignments_structure"].replace("{group}", "positive"),
+        sequences_negative=config["paths"]["msa"]["alignments_structure"].replace("{group}", "negative")
     output:
         topology_results=config["paths"]["topology"]["topology_predictions"],
         topology_summary=config["paths"]["topology"]["topology_summary"]
@@ -243,8 +268,8 @@ rule visualize_epitopes_pymol:
 rule analyze_epitope_conservation:
     input:
         filtered_epitopes_sentinel=config["paths"]["topology"]["filtered_epitopes_sentinel"],
-        msa_sequences_positive=lambda wildcards: config["paths"]["msa"]["sequences_structure"].replace("{group}", "positive").format(analysis=wildcards.analysis, paramset=wildcards.paramset),
-        msa_sequences_negative=lambda wildcards: config["paths"]["msa"]["sequences_structure"].replace("{group}", "negative").format(analysis=wildcards.analysis, paramset=wildcards.paramset),
+        msa_sequences_positive=lambda wildcards: config["paths"]["msa"]["alignments_structure"].replace("{group}", "positive").format(analysis=wildcards.analysis, paramset=wildcards.paramset),
+        msa_sequences_negative=lambda wildcards: config["paths"]["msa"]["alignments_structure"].replace("{group}", "negative").format(analysis=wildcards.analysis, paramset=wildcards.paramset),
         selected_3d_positive=lambda wildcards: config["paths"]["sequence_prep"]["selected_3d_paths"].replace("{group}", "positive").format(analysis=wildcards.analysis, paramset=wildcards.paramset),
         selected_3d_negative=lambda wildcards: config["paths"]["sequence_prep"]["selected_3d_paths"].replace("{group}", "negative").format(analysis=wildcards.analysis, paramset=wildcards.paramset),
         pdb_numbering_mapping="data/protein_structures/{analysis}_{paramset}_fasta_structure_mapping_final.tsv"
