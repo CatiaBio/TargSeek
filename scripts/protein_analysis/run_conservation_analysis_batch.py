@@ -89,9 +89,19 @@ def main():
         output_dir = Path(snakemake.params.conservation_analysis_dir)
         sentinel_file = snakemake.output.conservation_analysis_sentinel
         
-        # Input files
-        epitope_tables_sentinel = snakemake.input.epitope_tables_sentinel
-        pdb_numbering_mapping = snakemake.input.pdb_numbering_mapping
+        # Input files - handle flexible input structure
+        if hasattr(snakemake.input, 'epitope_tables_sentinel'):
+            epitope_tables_sentinel = snakemake.input.epitope_tables_sentinel
+        else:
+            # Derive from rule definition
+            epitope_tables_sentinel = f"results/{analysis}_{paramset}/protein_analysis/sequences_with_structure/epitope_predictions_bepipred/epitope_tables_complete.sentinel"
+            
+        if hasattr(snakemake.input, 'pdb_numbering_mapping'):
+            pdb_numbering_mapping = snakemake.input.pdb_numbering_mapping
+        else:
+            # Use last input if available
+            inputs = list(snakemake.input)
+            pdb_numbering_mapping = inputs[-1] if inputs else f"data/protein_structures/{analysis}_{paramset}_fasta_structure_mapping_final.tsv"
         
         logging.info(f"Running epitope conservation analysis for {analysis}_{paramset}")
         

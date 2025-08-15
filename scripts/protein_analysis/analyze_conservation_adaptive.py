@@ -23,12 +23,25 @@ import logging
 from collections import Counter
 import json
 import sys
+import yaml
 try:
     import logomaker
     LOGOMAKER_AVAILABLE = True
 except ImportError:
     LOGOMAKER_AVAILABLE = False
     logging.warning("logomaker not available - logo plots will be skipped")
+
+try:
+    from Bio.Align import substitution_matrices
+    BLOSUM_AVAILABLE = True
+except ImportError:
+    try:
+        from Bio.SubsMat import MatrixInfo
+        BLOSUM_AVAILABLE = True
+        LEGACY_BLOSUM = True
+    except ImportError:
+        BLOSUM_AVAILABLE = False
+        logging.warning("Bio.Align.substitution_matrices not available - BLOSUM62 scoring will use fallback method")
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -87,14 +100,102 @@ def calculate_shannon_entropy(column):
     
     return entropy
 
-def calculate_conservation_score(column):
+def calculate_conservation_score(column, method='shannon'):
     """Calculate conservation score (0 = low conservation, 1 = high conservation)"""
+    if method == 'shannon':
+        return calculate_shannon_conservation(column)
+    elif method == 'blosum62':
+        return calculate_blosum62_conservation(column)
+    else:
+        logging.warning(f"Unknown conservation method: {method}, using Shannon entropy")
+        return calculate_shannon_conservation(column)
+
+def calculate_shannon_conservation(column):
+    """Calculate Shannon entropy-based conservation score"""
     max_entropy = np.log2(20)  # Maximum possible entropy for 20 amino acids
     entropy = calculate_shannon_entropy(column)
     
     # Convert to conservation score (inverse of normalized entropy)
     conservation = 1 - (entropy / max_entropy) if max_entropy > 0 else 1
     return conservation
+
+def calculate_blosum62_conservation(column):
+    """Calculate BLOSUM62-based conservation score considering amino acid similarity"""
+    # Remove gaps
+    aa_list = [aa for aa in column if aa != '-']
+    
+    if len(aa_list) <= 1:
+        return 1.0  # Fully conserved or no data
+    
+    if not BLOSUM_AVAILABLE:
+        # Fallback to property-based scoring
+        return calculate_property_conservation(column)
+    
+    try:
+        # Use modern Biopython substitution matrices
+        blosum62 = substitution_matrices.load("BLOSUM62")
+        
+        # Calculate pairwise similarities
+        similarities = []
+        for i, aa1 in enumerate(aa_list):
+            for j, aa2 in enumerate(aa_list):
+                if i < j:  # Avoid double counting
+                    # Modern Biopython substitution matrices use [aa1, aa2] indexing
+                    try:
+                        similarity = blosum62[aa1, aa2]
+                    except KeyError:
+                        similarity = -4  # Default to low similarity for unknown AAs
+                    similarities.append(similarity)
+        
+        if not similarities:
+            return 1.0
+        
+        # Average similarity score
+        avg_similarity = np.mean(similarities)
+        
+        # Normalize BLOSUM62 scores to 0-1 range
+        # BLOSUM62 scores typically range from -4 to 11
+        normalized_score = (avg_similarity + 4) / 15
+        
+        # Ensure score is in [0, 1] range
+        return max(0.0, min(1.0, normalized_score))
+        
+    except Exception as e:
+        logging.warning(f"Error in BLOSUM62 calculation: {e}, falling back to Shannon entropy")
+        return calculate_shannon_conservation(column)
+
+def calculate_property_conservation(column):
+    """Calculate conservation based on amino acid physicochemical properties"""
+    # Amino acid property groups
+    property_groups = {
+        'hydrophobic': set('AILMFPWVY'),
+        'polar': set('NQST'),
+        'charged_positive': set('KRH'),
+        'charged_negative': set('DE'),
+        'special': set('CG')
+    }
+    
+    # Remove gaps
+    aa_list = [aa for aa in column if aa != '-']
+    
+    if len(aa_list) <= 1:
+        return 1.0
+    
+    # Count amino acids by property group
+    group_counts = {group: 0 for group in property_groups}
+    for aa in aa_list:
+        for group, aas in property_groups.items():
+            if aa in aas:
+                group_counts[group] += 1
+                break
+    
+    # Calculate property-based conservation
+    # Higher score if amino acids belong to the same property group
+    total_aa = len(aa_list)
+    max_group_count = max(group_counts.values())
+    property_conservation = max_group_count / total_aa
+    
+    return property_conservation
 
 def get_consensus_aa(column, min_frequency=0.5):
     """Get consensus amino acid for a position"""
@@ -109,7 +210,7 @@ def get_consensus_aa(column, min_frequency=0.5):
     # Return consensus only if it meets minimum frequency threshold
     return most_common_aa if frequency >= min_frequency else 'X'
 
-def analyze_alignment_conservation(alignment_file, alignment_type):
+def analyze_alignment_conservation(alignment_file, alignment_type, conservation_method='shannon'):
     """Analyze conservation for a single alignment"""
     try:
         # Read alignment
@@ -129,8 +230,8 @@ def analyze_alignment_conservation(alignment_file, alignment_type):
         for i in range(alignment_length):
             column = alignment[:, i]  # Get column (all AAs at position i)
             
-            # Calculate metrics
-            conservation_score = calculate_conservation_score(column)
+            # Calculate metrics using specified method
+            conservation_score = calculate_conservation_score(column, method=conservation_method)
             entropy = calculate_shannon_entropy(column)
             consensus_aa = get_consensus_aa(column)
             gap_frequency = column.count('-') / len(column)
@@ -147,7 +248,8 @@ def analyze_alignment_conservation(alignment_file, alignment_type):
                 'gap_frequency': gap_frequency,
                 'most_common_aa': most_common[0],
                 'most_common_count': most_common[1],
-                'most_common_freq': most_common[1] / num_sequences if num_sequences > 0 else 0
+                'most_common_freq': most_common[1] / num_sequences if num_sequences > 0 else 0,
+                'conservation_method': conservation_method
             })
             
             consensus_sequence.append(consensus_aa)
@@ -158,6 +260,7 @@ def analyze_alignment_conservation(alignment_file, alignment_type):
         summary = {
             'gene': alignment_file.stem.replace('_trimmed', '').replace('_aligned', ''),
             'alignment_type_used': alignment_type,
+            'conservation_method': conservation_method,
             'num_sequences': num_sequences,
             'alignment_length': alignment_length,
             'mean_conservation': np.mean(conservation_scores),
@@ -270,10 +373,10 @@ def create_all_logo_plots(alignment_file, conservation_data, gene_name, output_d
         logging.error(f"Error creating logo plots for {gene_name}: {e}")
         return 0
 
-def analyze_gene_conservation(alignment_file, gene_name, output_dir, alignment_type="unknown", logos_dir=None):
+def analyze_gene_conservation(alignment_file, gene_name, output_dir, alignment_type="unknown", logos_dir=None, conservation_method='shannon'):
     """Analyze conservation for a single gene"""
     try:
-        result = analyze_alignment_conservation(alignment_file, alignment_type)
+        result = analyze_alignment_conservation(alignment_file, alignment_type, conservation_method)
         if not result:
             return None
             
@@ -344,7 +447,7 @@ def create_overview_plots(results_df, plots_dir, set_name):
     except Exception as e:
         logging.error(f"Error creating overview plots for {set_name}: {e}")
 
-def process_conservation_set(raw_dir, trimmed_dir, quality_dir, output_dir, set_name, create_logos=False):
+def process_conservation_set(raw_dir, trimmed_dir, quality_dir, output_dir, set_name, create_logos=False, conservation_method='shannon', config=None):
     """Process conservation analysis for one set (no-3D or with-3D)"""
     
     logging.info(f"\nProcessing {set_name} conservation analysis:")
@@ -416,9 +519,9 @@ def process_conservation_set(raw_dir, trimmed_dir, quality_dir, output_dir, set_
             continue
         
         try:
-            logging.info(f"    [{genes_processed + 1}] Analyzing {gene_name} ({alignment_type})")
+            logging.info(f"    [{genes_processed + 1}] Analyzing {gene_name} ({alignment_type}, method: {conservation_method})")
             gene_results = analyze_gene_conservation(
-                alignment_file, gene_name, output_dir, alignment_type, logos_dir
+                alignment_file, gene_name, output_dir, alignment_type, logos_dir, conservation_method
             )
             
             if gene_results:
@@ -440,32 +543,131 @@ def process_conservation_set(raw_dir, trimmed_dir, quality_dir, output_dir, set_
         # Create overview plots for this set
         create_overview_plots(results_df, plots_dir, set_name)
         
-        logging.info(f"  {set_name} conservation analysis complete: {genes_processed} genes processed")
+        # Run ConSurf analysis for hybrid method if configured
+        if conservation_method == 'hybrid' and config:
+            run_hybrid_analysis(results, output_dir, set_name, config)
+        
+        logging.info(f"  {set_name} conservation analysis complete: {genes_processed} genes processed (method: {conservation_method})")
     else:
         logging.warning(f"  No successful conservation analyses for {set_name}")
     
     return genes_processed
 
+def run_hybrid_analysis(results_data, output_dir, set_name, config):
+    """Run ConSurf analysis for top-ranked genes in hybrid mode"""
+    try:
+        # Import ConSurf integration module
+        import importlib.util
+        script_dir = Path(__file__).parent
+        consurf_script = script_dir / "consurf_integration.py"
+        
+        if not consurf_script.exists():
+            logging.warning("ConSurf integration script not found - skipping hybrid analysis")
+            return
+            
+        spec = importlib.util.spec_from_file_location("consurf_integration", consurf_script)
+        consurf_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(consurf_module)
+        
+        logging.info(f"Running hybrid ConSurf analysis for {set_name}...")
+        
+        # Create ConSurf output directory
+        consurf_dir = output_dir / "consurf_analysis"
+        consurf_dir.mkdir(exist_ok=True)
+        
+        # Find alignment directory (prefer trimmed, fallback to raw)
+        alignment_dir = None
+        for candidate in [output_dir.parent / "trimmed", output_dir.parent / "alignments"]:
+            if candidate.exists():
+                alignment_dir = candidate
+                break
+        
+        if not alignment_dir:
+            logging.warning(f"No alignment directory found for ConSurf analysis of {set_name}")
+            return
+        
+        # Run ConSurf analysis on high-priority genes
+        consurf_results = consurf_module.process_high_priority_genes(
+            results_data, alignment_dir, consurf_dir, config
+        )
+        
+        logging.info(f"ConSurf hybrid analysis completed for {set_name}")
+        
+    except ImportError:
+        logging.warning("ConSurf integration not available - skipping hybrid analysis")
+    except Exception as e:
+        logging.error(f"Error in hybrid ConSurf analysis for {set_name}: {e}")
+
+def load_config(config_file="config/config_analysis.yaml"):
+    """Load configuration from YAML file"""
+    try:
+        with open(config_file, 'r') as f:
+            return yaml.safe_load(f)
+    except Exception as e:
+        logging.warning(f"Could not load config file {config_file}: {e}")
+        return {}
+
 def main():
     """Main function for Snakemake integration"""
     
     try:
-        # Get parameters from Snakemake - handle 6 directory inputs
-        raw_main = Path(snakemake.input.main)
-        raw_structure = Path(snakemake.input.structure)
-        trimmed_main = Path(snakemake.input.trim_main)
-        trimmed_structure = Path(snakemake.input.trim_structure)
-        quality_main = Path(snakemake.input.quality_main)
-        quality_structure = Path(snakemake.input.quality_structure)
+        # Handle flexible inputs from Snakemake
+        if hasattr(snakemake.input, 'main'):
+            raw_main = Path(snakemake.input.main)
+        else:
+            raw_main = None
+            
+        if hasattr(snakemake.input, 'structure'):
+            raw_structure = Path(snakemake.input.structure)
+        else:
+            # Fallback: use first input
+            inputs = list(snakemake.input)
+            raw_structure = Path(inputs[0]) if inputs else None
+            
+        if hasattr(snakemake.input, 'trim_main'):
+            trimmed_main = Path(snakemake.input.trim_main)
+        else:
+            trimmed_main = None
+            
+        if hasattr(snakemake.input, 'trim_structure'):
+            trimmed_structure = Path(snakemake.input.trim_structure)
+        else:
+            # Fallback: use second input
+            inputs = list(snakemake.input)
+            trimmed_structure = Path(inputs[1]) if len(inputs) > 1 else None
+            
+        if hasattr(snakemake.input, 'quality_main'):
+            quality_main = Path(snakemake.input.quality_main)
+        else:
+            quality_main = None
+            
+        if hasattr(snakemake.input, 'quality_structure'):
+            quality_structure = Path(snakemake.input.quality_structure)
+        else:
+            # Fallback: use third input
+            inputs = list(snakemake.input)
+            quality_structure = Path(inputs[2]) if len(inputs) > 2 else None
         
-        output_main = Path(snakemake.output.main)
-        output_structure = Path(snakemake.output.structure)
+        if hasattr(snakemake.output, 'main'):
+            output_main = Path(snakemake.output.main)
+        else:
+            output_main = None
+            
+        if hasattr(snakemake.output, 'structure'):
+            output_structure = Path(snakemake.output.structure)
+        else:
+            # Fallback: use first output
+            outputs = list(snakemake.output)
+            output_structure = Path(outputs[0]) if outputs else None
         
         analysis = snakemake.params.analysis
         paramset = snakemake.params.paramset
         group = snakemake.params.group
         use_3d = snakemake.params.get('use_3d', 'no_3d')
         create_logos = getattr(snakemake.params, 'create_logos', False)
+        
+        # Load configuration
+        config = load_config()
         
     except NameError:
         # Test mode
@@ -487,29 +689,46 @@ def main():
         group = "test"
         use_3d = "both"
         create_logos = False
+        
+        # Load configuration for test mode
+        config = load_config()
+    
+    # Get conservation method from config
+    conservation_config = config.get('conservation', {})
+    conservation_method = conservation_config.get('scoring_method', 'shannon')
+    create_logos = conservation_config.get('create_logos', create_logos)
     
     logging.info(f"Adaptive Amino Acid Conservation Analysis")
     logging.info(f"="*50)
     logging.info(f"Analysis: {analysis}")
     logging.info(f"Paramset: {paramset}")
     logging.info(f"Group: {group}")
+    logging.info(f"Conservation method: {conservation_method}")
     logging.info(f"Create logo plots: {create_logos}")
     
     total_genes = 0
     
-    # Process main conservation
-    genes_main = process_conservation_set(
-        raw_main, trimmed_main, quality_main, 
-        output_main, "main", create_logos
-    )
-    total_genes += genes_main
+    # Process main conservation (if available)
+    if raw_main and trimmed_main and output_main and (raw_main.exists() or trimmed_main.exists()):
+        genes_main = process_conservation_set(
+            raw_main, trimmed_main, quality_main, 
+            output_main, "main", create_logos, conservation_method, config
+        )
+        total_genes += genes_main
+    else:
+        logging.info("Skipping main conservation analysis (not available or configured)")
+        genes_main = 0
     
-    # Process structure conservation  
-    genes_structure = process_conservation_set(
-        raw_structure, trimmed_structure, quality_structure,
-        output_structure, "structure", create_logos
-    )
-    total_genes += genes_structure
+    # Process structure conservation (if available)
+    if raw_structure and trimmed_structure and output_structure and (raw_structure.exists() or trimmed_structure.exists()):
+        genes_structure = process_conservation_set(
+            raw_structure, trimmed_structure, quality_structure,
+            output_structure, "structure", create_logos, conservation_method, config
+        )
+        total_genes += genes_structure
+    else:
+        logging.warning("Structure conservation analysis not available")
+        genes_structure = 0
     
     logging.info(f"\n=== Conservation Analysis Complete ===")
     logging.info(f"Total genes processed: {total_genes}")
