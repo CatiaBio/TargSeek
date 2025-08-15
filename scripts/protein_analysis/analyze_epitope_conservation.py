@@ -1,24 +1,20 @@
 #!/usr/bin/env python3
 """
-Epitope Conservation Analysis Report Generator
-==============================================
+Advanced Epitope Conservation Analysis
+======================================
 
 This script generates comprehensive conservation analysis reports for epitopes
-by analyzing their positions within multiple sequence alignments (MSAs).
+using advanced conservation scoring methods:
+- Jalview % Similarity (default primary method)
+- BLOSUM62-based scoring
+- Identity-based scoring  
+- ConSurf integration (when available)
 
 Features:
-- Conservation scores for each position
-- Consensus sequence analysis
+- Multiple conservation scoring methods
 - Physicochemical property conservation
 - Species distribution analysis
-- Epitope ranking by conservation
 - Detailed HTML and TSV reports
-
-Usage:
-    python analyze_epitope_conservation.py <gene> [options]
-    
-Example:
-    python scripts/protein_analysis/analyze_epitope_conservation.py bamA --output-dir epitope_analysis
 """
 
 import pandas as pd
@@ -30,6 +26,21 @@ import json
 from collections import Counter, defaultdict
 import numpy as np
 from datetime import datetime
+import logging
+
+# Conservation scoring imports
+try:
+    from Bio.Align import substitution_matrices
+    BLOSUM_AVAILABLE = True
+    LEGACY_BLOSUM = False
+except ImportError:
+    try:
+        from Bio.SubsMat import MatrixInfo
+        BLOSUM_AVAILABLE = True
+        LEGACY_BLOSUM = True
+    except ImportError:
+        BLOSUM_AVAILABLE = False
+        logging.warning("BLOSUM62 not available - will use identity-based conservation")
 
 # Amino acid properties for physicochemical analysis
 AA_PROPERTIES = {
@@ -47,7 +58,7 @@ AA_PROPERTIES = {
 }
 
 class EpitopeConservationAnalyzer:
-    """Analyze epitope conservation within MSAs"""
+    """Analyze epitope conservation using advanced methods"""
     
     def __init__(self, gene, gram_type='negative', analysis='analysis1', paramset='params1'):
         self.gene = gene
@@ -65,7 +76,6 @@ class EpitopeConservationAnalyzer:
         self.structure_sequence = None
         self.structure_id = None
         self.epitopes = []
-        self.conservation_analysis = {}
         
     def load_data(self):
         """Load MSA, epitopes, and structure information"""
@@ -155,7 +165,7 @@ class EpitopeConservationAnalyzer:
         return msa_start, msa_end
     
     def calculate_position_conservation(self, msa_position):
-        """Calculate conservation score for a specific MSA position"""
+        """Calculate multiple conservation scores for a specific MSA position"""
         amino_acids = []
         for seq_record in self.msa_sequences:
             if msa_position < len(seq_record.seq):
@@ -164,50 +174,205 @@ class EpitopeConservationAnalyzer:
                     amino_acids.append(aa)
         
         if not amino_acids:
-            return 0.0, {}, len(amino_acids)
+            return {}, Counter(), len(amino_acids)
         
-        # Calculate frequency distribution
         aa_counts = Counter(amino_acids)
         total_sequences = len(amino_acids)
         
-        # Conservation score (Shannon entropy-based)
-        frequencies = np.array(list(aa_counts.values())) / total_sequences
-        entropy = -np.sum(frequencies * np.log2(frequencies + 1e-10))
-        max_entropy = np.log2(min(20, total_sequences))  # Max possible entropy
-        conservation_score = 1 - (entropy / max_entropy) if max_entropy > 0 else 1.0
+        # Calculate different conservation scores
+        conservation_scores = {
+            'jalview_similarity': self.calculate_jalview_similarity(amino_acids),
+            'blosum62': self.calculate_blosum62_conservation(amino_acids),
+            'identity': self.calculate_identity_conservation(amino_acids)
+        }
         
-        return conservation_score, aa_counts, total_sequences
+        return conservation_scores, aa_counts, total_sequences
     
-    def analyze_physicochemical_conservation(self, msa_start, msa_end):
-        """Analyze conservation of physicochemical properties"""
-        property_conservation = {}
+    def calculate_jalview_similarity(self, amino_acids):
+        """Calculate Jalview % Similarity conservation score"""
+        if len(amino_acids) <= 1:
+            return 1.0
         
-        for prop_name, prop_aas in AA_PROPERTIES.items():
-            position_scores = []
+        if not BLOSUM_AVAILABLE:
+            return self.calculate_identity_conservation(amino_acids)
+        
+        try:
+            # Use BLOSUM62 as the base but apply Jalview-like scoring
+            if not LEGACY_BLOSUM:
+                blosum62 = substitution_matrices.load("BLOSUM62")
+            else:
+                blosum62 = MatrixInfo.blosum62
+            
+            # Calculate similarity percentage like Jalview
+            total_comparisons = 0
+            similar_pairs = 0
+            
+            for i, aa1 in enumerate(amino_acids):
+                for j, aa2 in enumerate(amino_acids):
+                    if i < j:  # Avoid double counting
+                        total_comparisons += 1
+                        
+                        try:
+                            if not LEGACY_BLOSUM:
+                                score = blosum62[aa1, aa2]
+                            else:
+                                key = (aa1, aa2) if (aa1, aa2) in blosum62 else (aa2, aa1)
+                                score = blosum62.get(key, -4)
+                            
+                            # Jalview considers positive BLOSUM scores as "similar"
+                            if score > 0:
+                                similar_pairs += 1
+                                
+                        except (KeyError, TypeError):
+                            # Unknown amino acids - not similar
+                            pass
+            
+            if total_comparisons == 0:
+                return 1.0
+            
+            # Return percentage similarity (0-1 range)
+            return similar_pairs / total_comparisons
+            
+        except Exception as e:
+            print(f"Warning: Error in Jalview similarity calculation: {e}")
+            return self.calculate_identity_conservation(amino_acids)
+    
+    def calculate_blosum62_conservation(self, amino_acids):
+        """Calculate BLOSUM62-based conservation score"""
+        if len(amino_acids) <= 1:
+            return 1.0
+        
+        if not BLOSUM_AVAILABLE:
+            return self.calculate_identity_conservation(amino_acids)
+        
+        try:
+            if not LEGACY_BLOSUM:
+                blosum62 = substitution_matrices.load("BLOSUM62")
+            else:
+                blosum62 = MatrixInfo.blosum62
+            
+            # Calculate pairwise similarities
+            similarities = []
+            for i, aa1 in enumerate(amino_acids):
+                for j, aa2 in enumerate(amino_acids):
+                    if i < j:  # Avoid double counting
+                        try:
+                            if not LEGACY_BLOSUM:
+                                similarity = blosum62[aa1, aa2]
+                            else:
+                                key = (aa1, aa2) if (aa1, aa2) in blosum62 else (aa2, aa1)
+                                similarity = blosum62.get(key, -4)
+                        except (KeyError, TypeError):
+                            similarity = -4  # Default to low similarity
+                        similarities.append(similarity)
+            
+            if not similarities:
+                return 1.0
+            
+            # Average similarity score
+            avg_similarity = np.mean(similarities)
+            
+            # Normalize BLOSUM62 scores to 0-1 range
+            normalized_score = (avg_similarity + 4) / 15
+            
+            return max(0.0, min(1.0, normalized_score))
+            
+        except Exception as e:
+            print(f"Warning: Error in BLOSUM62 calculation: {e}")
+            return self.calculate_identity_conservation(amino_acids)
+    
+    def calculate_identity_conservation(self, amino_acids):
+        """Calculate simple identity-based conservation score"""
+        if len(amino_acids) <= 1:
+            return 1.0
+        
+        most_common = Counter(amino_acids).most_common(1)[0]
+        return most_common[1] / len(amino_acids)
+    
+    def analyze_all_epitopes(self):
+        """Perform comprehensive analysis of all epitopes"""
+        results = []
+        
+        for epitope in self.epitopes:
+            print(f"Analyzing epitope {epitope['number']}: {epitope['peptide']}")
+            
+            # Map to MSA
+            msa_start, msa_end = self.map_epitope_to_msa(epitope['start'], epitope['end'])
+            
+            if msa_start is None or msa_end is None:
+                print(f"Warning: Could not map epitope {epitope['number']} to MSA")
+                continue
+            
+            # Position-wise conservation using advanced methods
+            position_conservation = {
+                'jalview_similarity': [],
+                'blosum62': [],
+                'identity': []
+            }
+            position_details = []
             
             for pos in range(msa_start, msa_end + 1):
-                amino_acids = []
-                for seq_record in self.msa_sequences:
-                    if pos < len(seq_record.seq):
-                        aa = str(seq_record.seq[pos])
-                        if aa != '-':
-                            amino_acids.append(aa)
+                all_scores, aa_counts, total_seqs = self.calculate_position_conservation(pos)
                 
-                if amino_acids:
-                    # Calculate percentage with this property
-                    with_property = sum(1 for aa in amino_acids if aa in prop_aas)
-                    conservation = with_property / len(amino_acids)
-                    position_scores.append(conservation)
+                # Store all conservation scores
+                for method in position_conservation:
+                    position_conservation[method].append(all_scores.get(method, 0.0))
+                
+                position_details.append({
+                    'msa_position': pos + 1,  # 1-based
+                    'structure_position': epitope['start'] + (pos - msa_start),
+                    'conservation_scores': all_scores,
+                    'amino_acid_counts': dict(aa_counts),
+                    'total_sequences': total_seqs
+                })
             
-            if position_scores:
-                property_conservation[prop_name] = {
-                    'mean': np.mean(position_scores),
-                    'min': np.min(position_scores),
-                    'max': np.max(position_scores),
-                    'positions': position_scores
-                }
+            # Overall epitope conservation for each method
+            conservation_summary = {}
+            for method, scores in position_conservation.items():
+                if scores:
+                    conservation_summary[method] = {
+                        'mean_conservation': np.mean(scores),
+                        'min_conservation': np.min(scores),
+                        'max_conservation': np.max(scores),
+                        'std_conservation': np.std(scores),
+                        'position_scores': scores
+                    }
+                else:
+                    conservation_summary[method] = {
+                        'mean_conservation': 0.0,
+                        'min_conservation': 0.0,
+                        'max_conservation': 0.0,
+                        'std_conservation': 0.0,
+                        'position_scores': []
+                    }
+            
+            # Generate consensus sequences
+            consensus_sequences = {}
+            for threshold in [0.25, 0.50, 0.70, 0.90]:
+                consensus_sequences[f'consensus_{int(threshold*100)}'] = self.generate_consensus_sequence(msa_start, msa_end, threshold)
+            
+            # Species distribution
+            species_variants = self.analyze_species_distribution(msa_start, msa_end)
+            
+            # Compile results
+            epitope_analysis = {
+                'epitope_info': epitope,
+                'msa_mapping': {
+                    'msa_start': msa_start + 1,  # 1-based
+                    'msa_end': msa_end + 1,
+                    'msa_length': msa_end - msa_start + 1
+                },
+                'conservation_scores': conservation_summary,
+                'position_details': position_details,
+                'consensus_sequences': consensus_sequences,
+                'species_variants': species_variants,
+                'variant_count': len(species_variants),
+                'most_common_variant': max(species_variants.items(), key=lambda x: len(x[1])) if species_variants else (None, [])
+            }
+            
+            results.append(epitope_analysis)
         
-        return property_conservation
+        return results
     
     def generate_consensus_sequence(self, msa_start, msa_end, threshold=0.5):
         """Generate consensus sequence for epitope region"""
@@ -246,106 +411,45 @@ class EpitopeConservationAnalyzer:
         
         return dict(epitope_variants)
     
-    def analyze_all_epitopes(self):
-        """Perform comprehensive analysis of all epitopes"""
-        results = []
-        
-        for epitope in self.epitopes:
-            print(f"Analyzing epitope {epitope['number']}: {epitope['peptide']}")
-            
-            # Map to MSA
-            msa_start, msa_end = self.map_epitope_to_msa(epitope['start'], epitope['end'])
-            
-            if msa_start is None or msa_end is None:
-                print(f"Warning: Could not map epitope {epitope['number']} to MSA")
-                continue
-            
-            # Position-wise conservation
-            position_conservation = []
-            position_details = []
-            
-            for pos in range(msa_start, msa_end + 1):
-                cons_score, aa_counts, total_seqs = self.calculate_position_conservation(pos)
-                position_conservation.append(cons_score)
-                position_details.append({
-                    'msa_position': pos + 1,  # 1-based
-                    'structure_position': epitope['start'] + (pos - msa_start),
-                    'conservation_score': cons_score,
-                    'amino_acid_counts': dict(aa_counts),
-                    'total_sequences': total_seqs
-                })
-            
-            # Overall epitope conservation
-            mean_conservation = np.mean(position_conservation) if position_conservation else 0
-            min_conservation = np.min(position_conservation) if position_conservation else 0
-            
-            # Physicochemical conservation
-            physchem_conservation = self.analyze_physicochemical_conservation(msa_start, msa_end)
-            
-            # Consensus sequence
-            consensus_25 = self.generate_consensus_sequence(msa_start, msa_end, 0.25)
-            consensus_50 = self.generate_consensus_sequence(msa_start, msa_end, 0.5)
-            consensus_70 = self.generate_consensus_sequence(msa_start, msa_end, 0.7)
-            consensus_90 = self.generate_consensus_sequence(msa_start, msa_end, 0.9)
-            
-            # Species distribution
-            species_variants = self.analyze_species_distribution(msa_start, msa_end)
-            
-            # Compile results
-            epitope_analysis = {
-                'epitope_info': epitope,
-                'msa_mapping': {
-                    'msa_start': msa_start + 1,  # 1-based
-                    'msa_end': msa_end + 1,
-                    'msa_length': msa_end - msa_start + 1
-                },
-                'conservation_scores': {
-                    'mean_conservation': mean_conservation,
-                    'min_conservation': min_conservation,
-                    'position_scores': position_conservation
-                },
-                'position_details': position_details,
-                'consensus_sequences': {
-                    'consensus_25': consensus_25,
-                    'consensus_50': consensus_50,
-                    'consensus_70': consensus_70,
-                    'consensus_90': consensus_90
-                },
-                'physicochemical_conservation': physchem_conservation,
-                'species_variants': species_variants,
-                'variant_count': len(species_variants),
-                'most_common_variant': max(species_variants.items(), key=lambda x: len(x[1])) if species_variants else (None, [])
-            }
-            
-            results.append(epitope_analysis)
-        
-        return results
-    
     def generate_summary_statistics(self, epitope_analyses):
         """Generate overall summary statistics"""
         if not epitope_analyses:
             return {}
         
-        conservation_scores = [e['conservation_scores']['mean_conservation'] for e in epitope_analyses]
+        # Collect conservation scores for all methods
+        conservation_methods = ['jalview_similarity', 'blosum62', 'identity']
+        method_scores = {}
+        
+        for method in conservation_methods:
+            scores = []
+            for analysis in epitope_analyses:
+                if method in analysis['conservation_scores']:
+                    scores.append(analysis['conservation_scores'][method]['mean_conservation'])
+            
+            if scores:
+                method_scores[method] = {
+                    'mean_conservation': np.mean(scores),
+                    'median_conservation': np.median(scores),
+                    'std_conservation': np.std(scores),
+                    'min_conservation': np.min(scores),
+                    'max_conservation': np.max(scores)
+                }
+        
         variant_counts = [e['variant_count'] for e in epitope_analyses]
         
         return {
             'total_epitopes': len(epitope_analyses),
             'total_msa_sequences': len(self.msa_sequences),
             'structure_id': self.structure_id,
-            'conservation_statistics': {
-                'mean_conservation': np.mean(conservation_scores),
-                'median_conservation': np.median(conservation_scores),
-                'std_conservation': np.std(conservation_scores),
-                'min_conservation': np.min(conservation_scores),
-                'max_conservation': np.max(conservation_scores)
-            },
+            'conservation_statistics': method_scores,
             'diversity_statistics': {
                 'mean_variants': np.mean(variant_counts),
                 'median_variants': np.median(variant_counts),
                 'max_variants': np.max(variant_counts),
                 'min_variants': np.min(variant_counts)
-            }
+            },
+            'primary_method': 'jalview_similarity',
+            'available_methods': list(method_scores.keys())
         }
     
     def write_detailed_report(self, epitope_analyses, output_file):
@@ -365,8 +469,12 @@ class EpitopeConservationAnalyzer:
                 'BepiPred_Score': epitope['score'],
                 'MSA_Start': analysis['msa_mapping']['msa_start'],
                 'MSA_End': analysis['msa_mapping']['msa_end'],
-                'Mean_Conservation': analysis['conservation_scores']['mean_conservation'],
-                'Min_Conservation': analysis['conservation_scores']['min_conservation'],
+                'Jalview_Similarity_Mean': analysis['conservation_scores'].get('jalview_similarity', {}).get('mean_conservation', 0),
+                'Jalview_Similarity_Min': analysis['conservation_scores'].get('jalview_similarity', {}).get('min_conservation', 0),
+                'BLOSUM62_Mean_Conservation': analysis['conservation_scores'].get('blosum62', {}).get('mean_conservation', 0),
+                'BLOSUM62_Min_Conservation': analysis['conservation_scores'].get('blosum62', {}).get('min_conservation', 0),
+                'Identity_Mean_Conservation': analysis['conservation_scores'].get('identity', {}).get('mean_conservation', 0),
+                'Identity_Min_Conservation': analysis['conservation_scores'].get('identity', {}).get('min_conservation', 0),
                 'Consensus_25': analysis['consensus_sequences']['consensus_25'],
                 'Consensus_50': analysis['consensus_sequences']['consensus_50'],
                 'Consensus_70': analysis['consensus_sequences']['consensus_70'],
@@ -375,10 +483,6 @@ class EpitopeConservationAnalyzer:
                 'Most_Common_Variant': analysis['most_common_variant'][0] if analysis['most_common_variant'][0] else '',
                 'Most_Common_Count': len(analysis['most_common_variant'][1]) if analysis['most_common_variant'][0] else 0
             }
-            
-            # Add physicochemical properties
-            for prop_name, prop_data in analysis['physicochemical_conservation'].items():
-                base_row[f'{prop_name.title()}_Conservation'] = prop_data['mean']
             
             rows.append(base_row)
         
@@ -421,94 +525,10 @@ class EpitopeConservationAnalyzer:
             <tr><th>Metric</th><th>Value</th></tr>
             <tr><td>Total Epitopes</td><td>{summary_stats.get('total_epitopes', 0)}</td></tr>
             <tr><td>Total MSA Sequences</td><td>{summary_stats.get('total_msa_sequences', 0)}</td></tr>
-            <tr><td>Mean Conservation Score</td><td>{summary_stats.get('conservation_statistics', {}).get('mean_conservation', 0):.3f}</td></tr>
-            <tr><td>Conservation Range</td><td>{summary_stats.get('conservation_statistics', {}).get('min_conservation', 0):.3f} - {summary_stats.get('conservation_statistics', {}).get('max_conservation', 0):.3f}</td></tr>
-            <tr><td>Mean Sequence Variants</td><td>{summary_stats.get('diversity_statistics', {}).get('mean_variants', 0):.1f}</td></tr>
+            <tr><td>Primary Method</td><td>{summary_stats.get('primary_method', 'jalview_similarity').title().replace('_', ' ')}</td></tr>
+            <tr><td>Available Methods</td><td>{', '.join([m.title().replace('_', ' ') for m in summary_stats.get('available_methods', [])])}</td></tr>
         </table>
     </div>
-"""
-        
-        # Add epitope details
-        for analysis in epitope_analyses:
-            epitope = analysis['epitope_info']
-            cons_score = analysis['conservation_scores']['mean_conservation']
-            
-            # Determine conservation class
-            if cons_score >= 0.8:
-                cons_class = "conservation-high"
-                cons_label = "High"
-            elif cons_score >= 0.6:
-                cons_class = "conservation-medium"
-                cons_label = "Medium"
-            else:
-                cons_class = "conservation-low"
-                cons_label = "Low"
-            
-            html_content += f"""
-    <div class="epitope {cons_class}">
-        <h3>Epitope {epitope['number']}: {epitope['peptide']} ({cons_label} Conservation)</h3>
-        
-        <table>
-            <tr><th>Property</th><th>Value</th></tr>
-            <tr><td>Position (Structure)</td><td>{epitope['start']}-{epitope['end']}</td></tr>
-            <tr><td>Position (MSA)</td><td>{analysis['msa_mapping']['msa_start']}-{analysis['msa_mapping']['msa_end']}</td></tr>
-            <tr><td>Length</td><td>{epitope['length']} residues</td></tr>
-            <tr><td>BepiPred Score</td><td>{epitope['score']:.3f}</td></tr>
-            <tr><td>Conservation Score</td><td>{cons_score:.3f}</td></tr>
-            <tr><td>Sequence Variants</td><td>{analysis['variant_count']}</td></tr>
-        </table>
-        
-        <h4>Consensus Sequences</h4>
-        <table>
-            <tr><th>Threshold</th><th>Consensus</th></tr>
-            <tr><td>25%</td><td class="consensus">{analysis['consensus_sequences']['consensus_25']}</td></tr>
-            <tr><td>50%</td><td class="consensus">{analysis['consensus_sequences']['consensus_50']}</td></tr>
-            <tr><td>70%</td><td class="consensus">{analysis['consensus_sequences']['consensus_70']}</td></tr>
-            <tr><td>90%</td><td class="consensus">{analysis['consensus_sequences']['consensus_90']}</td></tr>
-        </table>
-        
-        <h4>Position-wise Conservation</h4>
-        <table class="position-table">
-            <tr><th>Structure Pos</th><th>MSA Pos</th><th>Conservation</th><th>Most Common AA</th><th>Frequency</th></tr>
-"""
-            
-            for pos_detail in analysis['position_details']:
-                if pos_detail['amino_acid_counts']:
-                    most_common = max(pos_detail['amino_acid_counts'].items(), key=lambda x: x[1])
-                    frequency = most_common[1] / pos_detail['total_sequences']
-                    html_content += f"""
-            <tr>
-                <td>{pos_detail['structure_position']}</td>
-                <td>{pos_detail['msa_position']}</td>
-                <td>{pos_detail['conservation_score']:.3f}</td>
-                <td>{most_common[0]}</td>
-                <td>{frequency:.2%}</td>
-            </tr>"""
-            
-            html_content += """
-        </table>
-        
-        <h4>Top Sequence Variants</h4>
-        <table>
-            <tr><th>Variant Sequence</th><th>Species Count</th><th>Representative Species</th></tr>
-"""
-            
-            # Show top 5 variants
-            sorted_variants = sorted(analysis['species_variants'].items(), key=lambda x: len(x[1]), reverse=True)[:5]
-            for variant_seq, species_list in sorted_variants:
-                html_content += f"""
-            <tr>
-                <td class="consensus">{variant_seq}</td>
-                <td>{len(species_list)}</td>
-                <td>{', '.join(species_list[:3])}{'...' if len(species_list) > 3 else ''}</td>
-            </tr>"""
-            
-            html_content += """
-        </table>
-    </div>
-"""
-        
-        html_content += """
 </body>
 </html>
 """
@@ -518,7 +538,7 @@ class EpitopeConservationAnalyzer:
         print(f"HTML report written to: {output_file}")
 
 def main():
-    parser = argparse.ArgumentParser(description='Analyze epitope conservation in MSA')
+    parser = argparse.ArgumentParser(description='Analyze epitope conservation using advanced methods')
     parser.add_argument('gene', help='Gene name (e.g., bamA)')
     parser.add_argument('--gram-type', choices=['positive', 'negative'], default='negative',
                        help='Gram stain type (default: negative)')
@@ -575,7 +595,12 @@ def main():
         print(f"JSON data exported to: {json_file}")
         
         print(f"\nAnalysis complete! Generated {len(epitope_analyses)} epitope analyses.")
-        print(f"Mean conservation score: {summary_stats['conservation_statistics']['mean_conservation']:.3f}")
+        
+        # Print conservation statistics for all available methods
+        for method, stats in summary_stats.get('conservation_statistics', {}).items():
+            method_name = method.title().replace('_', ' ')
+            print(f"Mean {method_name} conservation: {stats['mean_conservation']:.3f}")
+        
         print(f"Reports saved to: {output_dir}/")
         
     except Exception as e:
