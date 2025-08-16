@@ -280,12 +280,12 @@ paths:
   # -------------------------------------------------------------------------
   epitopes:
     # BepiPred 3.0 predictions
-    bepipred_predictions: "results/{analysis}_{paramset}/protein_analysis/sequences_with_structure/epitope_predictions_bepipred"
+    bepipred_predictions: "results/{analysis}_{paramset}/protein_analysis/bepipred_epitope_predictions"
     # Epitope tables (linear epitopes and raw scores)
-    epitope_tables_sentinel: "results/{analysis}_{paramset}/protein_analysis/sequences_with_structure/epitope_predictions_bepipred/epitope_tables_complete.sentinel"
+    epitope_tables_sentinel: "results/{analysis}_{paramset}/protein_analysis/bepipred_epitope_predictions/epitope_tables_complete.sentinel"
     # Epitope conservation analysis reports
-    conservation_analysis_dir: "results/{analysis}_{paramset}/protein_analysis/sequences_with_structure/epitope_conservation_analysis"
-    conservation_analysis_sentinel: "results/{analysis}_{paramset}/protein_analysis/sequences_with_structure/epitope_conservation_analysis/conservation_analysis_complete.sentinel"
+    conservation_analysis_dir: "results/{analysis}_{paramset}/protein_analysis/epitope_conservation_analysis"
+    conservation_analysis_sentinel: "results/{analysis}_{paramset}/protein_analysis/epitope_conservation_analysis/conservation_analysis_complete.sentinel"
     conservation_report: "results/{analysis}_{paramset}/protein_analysis_report.html"
 
   # -------------------------------------------------------------------------
@@ -303,6 +303,11 @@ paths:
     # Filtered epitope results (only extracellular epitopes)
     filtered_epitopes_sentinel: "results/{analysis}_{paramset}/protein_analysis/topology_analysis/filtered_epitopes_complete.sentinel"
     topology_filter_report: "results/{analysis}_{paramset}/protein_analysis/topology_analysis/epitope_filter_report.json"
+
+  # Integrated epitope analysis (combining BepiPred, ConSurf, and Topology)
+  integrated_epitope_analysis:
+    output_dir: "results/{analysis}_{paramset}/protein_analysis/integrated_epitope_analysis"
+    sentinel: "results/{analysis}_{paramset}/protein_analysis/integrated_epitope_analysis/integrated_analysis_complete.sentinel"
 
   # -------------------------------------------------------------------------
   # STAGE 8: Summaries and Reports
@@ -363,6 +368,7 @@ scripts:
     create_epitope_tables: "scripts/protein_analysis/create_epitope_tables_from_bepipred.py"
     visualize_epitopes_pymol: "scripts/protein_analysis/visualize_epitopes_pymol.py"
     analyze_epitope_conservation: "scripts/protein_analysis/analyze_epitope_conservation.py"
+    integrate_epitope_analysis: "scripts/protein_analysis/integrate_epitope_analysis.py"
 
   # -------------------------------------------------------------------------
   # STAGE 7: Topology Analysis Scripts
