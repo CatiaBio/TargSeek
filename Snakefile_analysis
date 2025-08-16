@@ -35,6 +35,24 @@ rule all_consurf_analysis:
             group=["positive", "negative"]
         )
 
+# Integrated epitope analysis combining BepiPred, ConSurf, and Topology
+rule all_integrated_epitope_analysis:
+    input:
+        expand(
+            config["paths"]["integrated_epitope_analysis"]["sentinel"],
+            analysis=config["species_batches"],
+            paramset=config["quickgo_paramsets"]
+        )
+
+# Comprehensive epitope visualizations for all genes
+rule all_comprehensive_epitope_visualizations:
+    input:
+        expand(
+            config["paths"]["integrated_epitope_analysis"]["output_dir"] + "/.visualization_complete.sentinel",
+            analysis=config["species_batches"],
+            paramset=config["quickgo_paramsets"]
+        )
+
 # Complete analysis pipeline - all stages
 rule all_analysis:
     input:
@@ -261,7 +279,40 @@ rule visualize_epitopes_pymol:
         config["scripts"]["epitopes"]["visualize_epitopes_pymol"]
 
 # ---------------------
-# STAGE 8: Summaries and Reports
+# STAGE 8: Integrated Epitope Analysis
+# ---------------------
+
+# Integrated analysis combining BepiPred, ConSurf, and Topology data
+rule integrate_epitope_analysis:
+    input:
+        bepipred_sentinel=config["paths"]["epitopes"]["bepipred_predictions"] + "/bepipred_complete.sentinel",
+        consurf_sentinel_positive=config["paths"]["conservation"]["consurf_sentinel"].replace("{group}", "positive"),
+        consurf_sentinel_negative=config["paths"]["conservation"]["consurf_sentinel"].replace("{group}", "negative"),
+        topology_sentinel_positive=config["paths"]["topology"]["topology_dir"] + "/gram_positive/.topology_complete.sentinel",
+        topology_sentinel_negative=config["paths"]["topology"]["topology_dir"] + "/gram_negative/.topology_complete.sentinel"
+    output:
+        integrated_sentinel=config["paths"]["integrated_epitope_analysis"]["sentinel"]
+    params:
+        analysis="{analysis}",
+        paramset="{paramset}",
+        output_dir=lambda wildcards: config["paths"]["integrated_epitope_analysis"]["output_dir"].format(analysis=wildcards.analysis, paramset=wildcards.paramset)
+    shell:
+        "python scripts/protein_analysis/run_integrated_epitope_analysis.py --analysis {params.analysis} --paramset {params.paramset} --output-dir {params.output_dir}"
+
+# Create comprehensive epitope visualizations for all genes
+rule create_comprehensive_epitope_visualizations:
+    input:
+        integrated_sentinel=config["paths"]["integrated_epitope_analysis"]["sentinel"]
+    output:
+        visualization_sentinel=config["paths"]["integrated_epitope_analysis"]["output_dir"] + "/.visualization_complete.sentinel"
+    params:
+        analysis="{analysis}",
+        paramset="{paramset}"
+    shell:
+        "python scripts/protein_analysis/run_comprehensive_visualizations.py --analysis {params.analysis} --paramset {params.paramset} && touch {output.visualization_sentinel}"
+
+# ---------------------
+# STAGE 9: Summaries and Reports
 # ---------------------
 
 # Run epitope conservation analysis for all genes (using topology-filtered epitopes)
