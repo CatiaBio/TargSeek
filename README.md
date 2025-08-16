@@ -162,7 +162,7 @@ Please follow the recommended citations when publishing results.
 @software{baptista2024targseek,
   title={TargSeek: Surface Protein Discovery and Epitope Prediction Pipeline},
   author={Cátia Baptista},
-  year={2024},
+  year={2025},
   url={https://github.com/CatiaBio/TargSeek}
 }
 ```
