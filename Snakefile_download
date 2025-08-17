@@ -23,6 +23,8 @@ wildcard_constraints:
 # Download rules - comprehensive data collection target
 rule all_download_data:
     input:
+        # BLAST databases (independent of analysis/paramset)
+        config["paths"]["blast_databases"]["download_sentinel"],
         expand(
             [
                 config["paths"]["bacdive"]["updated_gram_classification"],
@@ -79,6 +81,11 @@ rule all_gene_selection:
             paramset=config["quickgo_paramsets"]
         )
 
+# BLAST databases only
+rule all_blast_databases:
+    input:
+        config["paths"]["blast_databases"]["download_sentinel"]
+
 rule all_downloads:
     input:
         expand(
@@ -96,6 +103,27 @@ rule all_downloads:
 # ---------------------
 # Download Rules
 # ---------------------
+
+# =============================================================================
+# STAGE 0: BLAST Database Downloads
+# =============================================================================
+
+# Download and format BLAST databases for epitope cross-reactivity analysis
+# Downloads selected proteomes and formats them as BLAST databases
+# Databases can be enabled/disabled in configuration for flexible setup
+rule download_blast_databases:
+    output:
+        download_log=config["paths"]["blast_databases"]["download_log"],
+        download_sentinel=config["paths"]["blast_databases"]["download_sentinel"]
+    params:
+        base_dir=config["paths"]["blast_databases"]["base_dir"]
+    priority: 50  # High priority - run this first
+    script:
+        config["scripts"]["blast_databases"]["download_databases"]
+
+# =============================================================================
+# STAGE 1: Species Classification
+# =============================================================================
 
 # Classify bacterial species by Gram staining properties
 # Queries BacDive API for comprehensive Gram stain classification data

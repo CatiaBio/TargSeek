@@ -4,7 +4,7 @@
 #
 # Defines all paths, thresholds, and settings for data collection,
 # species classification, gene selection, and protein/structure downloads.
-# 
+#
 # Only this file needs to be edited to adjust download parameters,
 # thresholds, or update paths without modifying the Snakefile_download.
 # ------------------------------------------------------
@@ -30,6 +30,57 @@ quickgo_paramsets:
   - params1
   #- params2
   #- params3
+
+# =============================================================================
+# BLAST DATABASE CONFIGURATION
+# =============================================================================
+
+# BLAST databases to download for epitope cross-reactivity analysis
+# Enable/disable individual databases by setting to true/false
+blast_databases:
+  # Standard databases
+  human: true
+  viral_proteins: true
+  fungal_proteins: true
+
+  # Farm animals & livestock (important for milk project)
+  cow: true
+  goat: true
+  horse: true
+  pig: true
+  chicken: true
+  buffalo: true
+  sheep: true
+
+  # Companion/domestic animals (often found on farms)
+  # dog: true  # Not available on current UniProt FTP - consider NCBI RefSeq alternative
+  cat: true
+
+  # Research model organisms (also common in farm settings)
+  mouse: true
+  rat: true
+  rabbit: true
+
+  # Aquatic food organisms
+  salmon: false
+  zebrafish: false
+
+  # Plant crops (food allergens/contamination)
+  arabidopsis: false
+  rice: false
+  soybean: false
+
+  # Bacterial pathogens
+  ecoli: false
+  salmonella: false
+  staph: false
+
+# BLAST database refresh settings
+blast_database_refresh:
+  # Refresh interval in months (databases older than this will be re-downloaded)
+  refresh_interval_months: 6
+  # Set to true to force refresh of all databases regardless of age
+  force_refresh_all: false
 
 # Defined Gram stain groups
 groups:
@@ -71,13 +122,13 @@ protein_selection:
   identity_cutoff: 0.3  # Minimum sequence identity (0.0-1.0, 30%)
   evalue_cutoff: 0.1    # Maximum E-value cutoff
   min_experimental: 5   # Minimum experimental structures before including AlphaFold
-  
+
   # Legacy parameters (for backward compatibility)
   bacterial_only: true
   prioritize_extracellular: true
   extracellular_keywords:
     - "extracellular"
-    - "outer membrane" 
+    - "outer membrane"
     - "cell surface"
     - "secreted"
     - "periplasm"
@@ -91,7 +142,7 @@ protein_selection:
     - "ribosome"
     - "nucleus"
     - "nucleoid"
-  
+
   # Structure quality filtering (legacy)
   structure_filters:
     max_resolution: 3.5
@@ -108,7 +159,7 @@ protein_selection:
 
 # Path templates - organized by workflow stage and data type
 paths:
-  
+
   # -------------------------------------------------------------------------
   # STAGE 1: Species Classification (BacDive)
   # -------------------------------------------------------------------------
@@ -117,12 +168,12 @@ paths:
     gram_raw_json: "data/bacdive/{analysis}/gram_raw.json"
     gram_classification: "data/bacdive/{analysis}/gram.tsv"
     updated_gram_classification: "data/bacdive/{analysis}/updated_gram.tsv"
-    
+
     # Species lists by Gram stain
     gram_positive: "data/bacdive/{analysis}/gram_positive.txt"
     gram_negative: "data/bacdive/{analysis}/gram_negative.txt"
     all_identified: "data/bacdive/{analysis}/all_identified.txt"
-    
+
     # Error tracking and metadata
     not_found: "data/bacdive/{analysis}/not_found.txt"
     updated_not_found: "data/bacdive/{analysis}/updated_not_found.txt"
@@ -136,12 +187,12 @@ paths:
     # Configuration and parameters
     params_file: "config/quickgo/{paramset}.json"
     surface_accessible_config: "config/quickgo/surface_accessible.txt"
-    
+
     # Raw GO data
     annotations: "data/quickgo/{paramset}/annotations.json"
     gene_symbols: "data/quickgo/{paramset}/gene_symbols.txt"
     gene_aliases: "data/quickgo/{paramset}/gene_and_aliases_names.tsv"
-    
+
     # Filtered and validated data
     go_validation_report: "data/quickgo/{paramset}/protein_go_validation_report.tsv"
     surface_accessible_proteins: "data/quickgo/{paramset}/surface_accessible_proteins.txt"
@@ -153,18 +204,18 @@ paths:
   gene_selection:
     # Base directory for all gene selection outputs
     base_dir: "results/{analysis}_{paramset}/gene_selection"
-    
+
     # Coverage analysis results
     coverage_count: "results/{analysis}_{paramset}/gene_selection/coverage_count.tsv"
     summary: "results/{analysis}_{paramset}/gene_selection/summary.tsv"
-    
+
     # Selected gene lists by Gram group
     selected_genes_positive: "results/{analysis}_{paramset}/gene_selection/selected_genes_gram_positive.txt"
     selected_genes_negative: "results/{analysis}_{paramset}/gene_selection/selected_genes_gram_negative.txt"
-    
+
     # Gene-specific species lists for downloads
     genes_species_dir: "results/{analysis}_{paramset}/gene_selection/genes_species/gram_{group}"
-    
+
     # Final report
     download_report: "results/{analysis}_{paramset}/gene_selection_report.html"
 
@@ -205,6 +256,17 @@ paths:
     summary_file: "results/{analysis}_{paramset}/gene_selection/summary.tsv"
 
   # -------------------------------------------------------------------------
+  # STAGE 0: BLAST Database Downloads
+  # -------------------------------------------------------------------------
+  blast_databases:
+    # Base directory for BLAST databases
+    base_dir: "data/blast_databases"
+    # Completion sentinel file
+    download_sentinel: "data/blast_databases/.blast_databases_complete.sentinel"
+    # Download log
+    download_log: "data/blast_databases/download.log"
+
+  # -------------------------------------------------------------------------
   # EXTERNAL DATA SOURCES
   # -------------------------------------------------------------------------
   uniprot:
@@ -222,14 +284,20 @@ paths:
 
 # Script paths - organized by workflow stage
 scripts:
-  
+
+  # -------------------------------------------------------------------------
+  # STAGE 0: BLAST Database Download Scripts
+  # -------------------------------------------------------------------------
+  blast_databases:
+    download_databases: "scripts/gene_selection/download_blast_databases.py"
+
   # -------------------------------------------------------------------------
   # STAGE 1: Species Classification Scripts
   # -------------------------------------------------------------------------
   bacdive:
     classify_gram: "scripts/gene_selection/classify_gram.py"
     supplement_gram_classification: "scripts/gene_selection/supplement_gram_classification.py"
-  
+
   # -------------------------------------------------------------------------
   # STAGE 2: Gene Ontology Data Scripts
   # -------------------------------------------------------------------------
@@ -239,7 +307,7 @@ scripts:
     validate_protein_go_assignments: "scripts/gene_selection/validate_protein_go_assignments.py"
     filter_surface_accessible: "scripts/gene_selection/filter_surface_accessible.py"
     filter_quickgo_data_simplified: "scripts/gene_selection/filter_quickgo_data_simplified.py"
-  
+
   # -------------------------------------------------------------------------
   # STAGE 3: Gene Selection and Coverage Scripts
   # -------------------------------------------------------------------------
@@ -247,7 +315,7 @@ scripts:
     gene_taxa_coverage_unified: "scripts/gene_selection/gene_taxa_coverage_unified.py"
     select_proteins_to_study: "scripts/gene_selection/select_proteins_to_study.py"
     create_gene_species_lists_from_coverage: "scripts/gene_selection/create_gene_species_lists_from_coverage.py"
-  
+
   # -------------------------------------------------------------------------
   # STAGE 4 & 5: Download Scripts
   # -------------------------------------------------------------------------
@@ -256,7 +324,7 @@ scripts:
     download_protein_structures: "scripts/gene_selection/download_structures_by_similarity.py"
     extract_protein_structures_metadata: "scripts/gene_selection/extract_protein_structures_metadata.py"
     extract_pdb_numbering: "scripts/gene_selection/extract_pdb_numbering.py"
-  
+
   # -------------------------------------------------------------------------
   # REPORTING SCRIPTS
   # -------------------------------------------------------------------------

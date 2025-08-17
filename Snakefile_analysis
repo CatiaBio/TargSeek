@@ -39,18 +39,20 @@ rule all_consurf_analysis:
 rule all_integrated_epitope_analysis:
     input:
         expand(
-            config["paths"]["integrated_epitope_analysis"]["sentinel"],
+            config["paths"]["integrated_epitope_analysis"]["sentinel"].replace("integrated_analysis_complete.sentinel", "gram_{group}/integrated_analysis_complete.sentinel"),
             analysis=config["species_batches"],
-            paramset=config["quickgo_paramsets"]
+            paramset=config["quickgo_paramsets"],
+            group=["positive", "negative"]
         )
 
 # Comprehensive epitope visualizations for all genes
 rule all_comprehensive_epitope_visualizations:
     input:
         expand(
-            config["paths"]["integrated_epitope_analysis"]["output_dir"] + "/.visualization_complete.sentinel",
+            config["paths"]["integrated_epitope_analysis"]["output_dir"] + "/gram_{group}/.visualization_complete.sentinel",
             analysis=config["species_batches"],
-            paramset=config["quickgo_paramsets"]
+            paramset=config["quickgo_paramsets"],
+            group=["positive", "negative"]
         )
 
 # Complete analysis pipeline - all stages
@@ -68,16 +70,18 @@ rule all_analysis:
             group=["positive", "negative"]
         ) + expand(
             [
-                config["paths"]["epitopes"]["epitope_tables_sentinel"],
-                config["paths"]["topology"]["filtered_epitopes_sentinel"],
-                config["paths"]["topology"]["topology_filter_report"]
+                config["paths"]["epitopes"]["epitope_tables_sentinel"].replace("epitope_tables_complete.sentinel", "gram_{group}/epitope_tables_complete.sentinel"),
+                config["paths"]["topology"]["filtered_epitopes_sentinel"].replace("filtered_epitopes_complete.sentinel", "gram_{group}/filtered_epitopes_complete.sentinel"),
+                config["paths"]["topology"]["topology_filter_report"].replace("epitope_filter_report.json", "gram_{group}/epitope_filter_report.json")
             ],
             analysis=config["species_batches"],
-            paramset=config["quickgo_paramsets"]
+            paramset=config["quickgo_paramsets"],
+            group=["positive", "negative"]
         ) + expand(
-            [config["paths"]["epitopes"]["conservation_report"]],
+            [config["paths"]["epitopes"]["conservation_report"].replace("protein_analysis_report.html", "gram_{group}/protein_analysis_report.html")],
             analysis=config["species_batches"],
-            paramset=config["quickgo_paramsets"]
+            paramset=config["quickgo_paramsets"],
+            group=["positive", "negative"]
         )
 
 
@@ -126,12 +130,49 @@ rule select_3d_sequence_per_protein:
         config["scripts"]["sequence_prep"]["select_3d_from_sequences"]
 
 # ---------------------
+# STAGE 2.5: Predict membrane protein topology using DeepTMHMM
+# ---------------------
+
+rule predict_protein_topology:
+    input:
+        selected_3d_paths_positive=config["paths"]["sequence_prep"]["selected_3d_paths"].replace("{group}", "positive"),
+        selected_3d_paths_negative=config["paths"]["sequence_prep"]["selected_3d_paths"].replace("{group}", "negative"),
+        sequences_positive=config["paths"]["msa"]["alignments_structure"].replace("{group}", "positive"),
+        sequences_negative=config["paths"]["msa"]["alignments_structure"].replace("{group}", "negative")
+    output:
+        topology_results=config["paths"]["topology"]["topology_predictions"],
+        topology_summary=config["paths"]["topology"]["topology_summary"]
+    params:
+        analysis="{analysis}",
+        paramset="{paramset}",
+        topology_method=config.get("topology", {}).get("method", "deeptmhmm"),
+        topology_dir=lambda wildcards: config["paths"]["topology"]["topology_dir"].format(analysis=wildcards.analysis, paramset=wildcards.paramset)
+    script:
+        config["scripts"]["topology"]["predict_topology"]
+
+# Create filtered protein list containing only proteins with surface topology
+rule create_surface_protein_list:
+    input:
+        topology_results=config["paths"]["topology"]["topology_predictions"]
+    output:
+        surface_proteins_positive="results/{analysis}_{paramset}/protein_analysis/topology_analysis/surface_proteins_gram_positive.txt",
+        surface_proteins_negative="results/{analysis}_{paramset}/protein_analysis/topology_analysis/surface_proteins_gram_negative.txt",
+        protein_filter_summary=config["paths"]["topology"]["topology_dir"] + "/protein_filter_summary.json"
+    params:
+        analysis="{analysis}",
+        paramset="{paramset}",
+        min_extracellular_coverage=config.get("topology", {}).get("min_extracellular_coverage", 0.5)
+    script:
+        config["scripts"]["topology"]["create_surface_protein_list"]
+
+# ---------------------
 # STAGE 3: Multiple Sequence Alignment with MAFFT
 # ---------------------
 
-rule mafft_msa:
+rule mafft_msa_filtered:
     input:
-        sequences_dir="results/{analysis}_{paramset}/protein_analysis/msa_fasta/gram_{group}"
+        sequences_dir="results/{analysis}_{paramset}/protein_analysis/msa_fasta/gram_{group}",
+        surface_protein_list="results/{analysis}_{paramset}/protein_analysis/topology_analysis/surface_proteins_gram_{group}.txt"
     output:
         alignments_dir=directory("results/{analysis}_{paramset}/protein_analysis/mafft_alignment/gram_{group}")
     params:
@@ -139,7 +180,7 @@ rule mafft_msa:
         paramset="{paramset}",
         group="{group}"
     shell:
-        "bash {config[scripts][msa][run_mafft_shell]} {input.sequences_dir} {output.alignments_dir}"
+        "bash scripts/protein_analysis/run_mafft_filtered.sh {input.sequences_dir} {input.surface_protein_list} {output.alignments_dir}"
 
 rule mafft_msa_with_3d_sequence:
     input:
@@ -162,7 +203,8 @@ rule run_consurf_conservation_analysis:
     input:
         alignments_with_3d_dir="results/{analysis}_{paramset}/protein_analysis/mafft_alignment_with_3d/gram_{group}",
         selected_3d_tsv=config["paths"]["sequence_prep"]["selected_3d_tsv"],
-        structures_download_sentinel="data/protein_structures/.{analysis}_{paramset}_{group}_structures_complete"
+        structures_download_sentinel="data/protein_structures/.{analysis}_{paramset}_{group}_structures_complete",
+        protein_filter_summary="results/{analysis}_{paramset}/protein_analysis/topology_analysis/protein_filter_summary.json"
     output:
         consurf_results_dir=directory("results/{analysis}_{paramset}/protein_analysis/consurf_analysis/gram_{group}"),
         consurf_sentinel="results/{analysis}_{paramset}/protein_analysis/consurf_analysis/gram_{group}/.consurf_complete.sentinel"
@@ -175,54 +217,36 @@ rule run_consurf_conservation_analysis:
         config["scripts"]["conservation"]["run_consurf_analysis"]
 
 
+
 # ---------------------
-# STAGE 5: Predict membrane protein topology using DeepTMHMM
+# STAGE 5: Epitope Prediction with Bepipred and selection according to conservation and topology
 # ---------------------
 
-rule predict_protein_topology:
+# Predict B-cell epitopes using BepiPred 3.0 on selected 3D structure sequences (surface proteins only)
+rule predict_epitopes_bepipred:
     input:
-        selected_3d_paths_positive=config["paths"]["sequence_prep"]["selected_3d_paths"].replace("{group}", "positive"),
-        selected_3d_paths_negative=config["paths"]["sequence_prep"]["selected_3d_paths"].replace("{group}", "negative"),
-        sequences_positive=config["paths"]["msa"]["alignments_structure"].replace("{group}", "positive"),
-        sequences_negative=config["paths"]["msa"]["alignments_structure"].replace("{group}", "negative")
+        selected_3d_paths=config["paths"]["sequence_prep"]["selected_3d_paths"],
+        protein_filter_summary="results/{analysis}_{paramset}/protein_analysis/topology_analysis/protein_filter_summary.json"
     output:
-        topology_results=config["paths"]["topology"]["topology_predictions"],
-        topology_summary=config["paths"]["topology"]["topology_summary"]
+        bepipred_sentinel=config["paths"]["epitopes"]["bepipred_predictions"] + "/gram_{group}/bepipred_complete.sentinel"
     params:
         analysis="{analysis}",
         paramset="{paramset}",
-        topology_method=config.get("topology", {}).get("method", "deeptmhmm"),
-        topology_dir=lambda wildcards: config["paths"]["topology"]["topology_dir"].format(analysis=wildcards.analysis, paramset=wildcards.paramset)
-    script:
-        config["scripts"]["topology"]["predict_topology"]
-
-# ---------------------
-# STAGE 6: Epitope Prediction with Bepipred and selection according to conservation and topology
-# ---------------------
-
-# Predict B-cell epitopes using BepiPred 3.0 on selected 3D structure sequences
-rule predict_epitopes_bepipred:
-    input:
-        selected_3d_paths_positive=config["paths"]["sequence_prep"]["selected_3d_paths"].replace("{group}", "positive"),
-        selected_3d_paths_negative=config["paths"]["sequence_prep"]["selected_3d_paths"].replace("{group}", "negative")
-    output:
-        bepipred_sentinel=config["paths"]["epitopes"]["bepipred_predictions"] + "/bepipred_complete.sentinel"
-    params:
-        analysis="{analysis}",
-        paramset="{paramset}"
+        group="{group}"
     script:
         config["scripts"]["epitopes"]["predict_epitopes_bepipred"]
 
 # Create epitope tables from BepiPred 3.0 raw output
 rule create_epitope_tables:
     input:
-        bepipred_sentinel=config["paths"]["epitopes"]["bepipred_predictions"] + "/bepipred_complete.sentinel",
+        bepipred_sentinel=config["paths"]["epitopes"]["bepipred_predictions"] + "/gram_{group}/bepipred_complete.sentinel",
         structure_mapping="data/protein_structures/{analysis}_{paramset}_fasta_structure_mapping_final.tsv"
     output:
-        epitope_tables_sentinel=config["paths"]["epitopes"]["epitope_tables_sentinel"]
+        epitope_tables_sentinel=config["paths"]["epitopes"]["epitope_tables_sentinel"].replace("epitope_tables_complete.sentinel", "gram_{group}/epitope_tables_complete.sentinel")
     params:
         analysis="{analysis}",
         paramset="{paramset}",
+        group="{group}",
         min_epitope_length=config.get("epitope_analysis", {}).get("min_epitope_length", 6)
     script:
         config["scripts"]["epitopes"]["create_epitope_tables"]
@@ -230,36 +254,21 @@ rule create_epitope_tables:
 # Filter epitopes to keep only those in extracellular regions
 rule filter_epitopes_by_topology:
     input:
-        epitope_tables_sentinel=config["paths"]["epitopes"]["epitope_tables_sentinel"],
+        epitope_tables_sentinel=config["paths"]["epitopes"]["epitope_tables_sentinel"].replace("epitope_tables_complete.sentinel", "gram_{group}/epitope_tables_complete.sentinel"),
         extracellular_mapping=config["paths"]["topology"]["extracellular_mapping"],
         pdb_numbering_mapping="data/protein_structures/{analysis}_{paramset}_fasta_structure_mapping_final.tsv"
     output:
-        filtered_epitopes_sentinel=config["paths"]["topology"]["filtered_epitopes_sentinel"],
-        topology_filter_report=config["paths"]["topology"]["topology_filter_report"]
+        filtered_epitopes_sentinel=config["paths"]["topology"]["filtered_epitopes_sentinel"].replace("filtered_epitopes_complete.sentinel", "gram_{group}/filtered_epitopes_complete.sentinel"),
+        topology_filter_report=config["paths"]["topology"]["topology_filter_report"].replace("epitope_filter_report.json", "gram_{group}/epitope_filter_report.json")
     params:
         analysis="{analysis}",
         paramset="{paramset}",
+        group="{group}",
         topology_dir=lambda wildcards: config["paths"]["topology"]["topology_dir"].format(analysis=wildcards.analysis, paramset=wildcards.paramset),
         min_extracellular_coverage=config.get("topology", {}).get("min_extracellular_coverage", 0.5)
     script:
         config["scripts"]["topology"]["filter_epitopes_topology"]
 
-# Rank extracellular epitopes based on conservation
-rule rank_extracellular_epitopes:
-    input:
-        epitope_tables_sentinel=config["paths"]["epitopes"]["epitope_tables_sentinel"],
-        extracellular_mapping=config["paths"]["topology"]["extracellular_mapping"],
-        pdb_numbering_mapping="data/protein_structures/{analysis}_{paramset}_fasta_structure_mapping_final.tsv"
-    output:
-        filtered_epitopes_sentinel=config["paths"]["topology"]["filtered_epitopes_sentinel"],
-        topology_filter_report=config["paths"]["topology"]["topology_filter_report"]
-    params:
-        analysis="{analysis}",
-        paramset="{paramset}",
-        topology_dir=lambda wildcards: config["paths"]["topology"]["topology_dir"].format(analysis=wildcards.analysis, paramset=wildcards.paramset),
-        min_extracellular_coverage=config.get("topology", {}).get("min_extracellular_coverage", 0.5)
-    script:
-        config["scripts"]["topology"]["filter_epitopes_topology"]
 
 # ---------------------
 # STAGE 7: Epitope Visualization with Pymol
@@ -268,13 +277,14 @@ rule rank_extracellular_epitopes:
 # Create 3D PyMOL visualizations of selected epitopes on protein structures
 rule visualize_epitopes_pymol:
     input:
-        epitope_tables_sentinel=config["paths"]["epitopes"]["epitope_tables_sentinel"],
+        epitope_tables_sentinel=config["paths"]["epitopes"]["epitope_tables_sentinel"].replace("epitope_tables_complete.sentinel", "gram_{group}/epitope_tables_complete.sentinel"),
         structures_mapping="data/protein_structures/{analysis}_{paramset}_fasta_structure_mapping_final.tsv"
     output:
-        visualization_sentinel=config["paths"]["epitopes"]["bepipred_predictions"] + "/3d_visualizations/visualization_complete.sentinel"
+        visualization_sentinel=config["paths"]["epitopes"]["bepipred_predictions"] + "/gram_{group}/3d_visualizations/visualization_complete.sentinel"
     params:
         analysis="{analysis}",
-        paramset="{paramset}"
+        paramset="{paramset}",
+        group="{group}"
     script:
         config["scripts"]["epitopes"]["visualize_epitopes_pymol"]
 
@@ -285,31 +295,31 @@ rule visualize_epitopes_pymol:
 # Integrated analysis combining BepiPred, ConSurf, and Topology data
 rule integrate_epitope_analysis:
     input:
-        bepipred_sentinel=config["paths"]["epitopes"]["bepipred_predictions"] + "/bepipred_complete.sentinel",
-        consurf_sentinel_positive=config["paths"]["conservation"]["consurf_sentinel"].replace("{group}", "positive"),
-        consurf_sentinel_negative=config["paths"]["conservation"]["consurf_sentinel"].replace("{group}", "negative"),
-        topology_sentinel_positive=config["paths"]["topology"]["topology_dir"] + "/gram_positive/.topology_complete.sentinel",
-        topology_sentinel_negative=config["paths"]["topology"]["topology_dir"] + "/gram_negative/.topology_complete.sentinel"
+        bepipred_sentinel=config["paths"]["epitopes"]["bepipred_predictions"] + "/gram_{group}/bepipred_complete.sentinel",
+        consurf_sentinel=config["paths"]["conservation"]["consurf_sentinel"],
+        topology_sentinel=config["paths"]["topology"]["topology_dir"] + "/gram_{group}/.topology_complete.sentinel"
     output:
-        integrated_sentinel=config["paths"]["integrated_epitope_analysis"]["sentinel"]
+        integrated_sentinel=config["paths"]["integrated_epitope_analysis"]["sentinel"].replace("integrated_analysis_complete.sentinel", "gram_{group}/integrated_analysis_complete.sentinel")
     params:
         analysis="{analysis}",
         paramset="{paramset}",
-        output_dir=lambda wildcards: config["paths"]["integrated_epitope_analysis"]["output_dir"].format(analysis=wildcards.analysis, paramset=wildcards.paramset)
+        group="{group}",
+        output_dir=lambda wildcards: config["paths"]["integrated_epitope_analysis"]["output_dir"].format(analysis=wildcards.analysis, paramset=wildcards.paramset) + f"/gram_{wildcards.group}"
     shell:
-        "python scripts/protein_analysis/run_integrated_epitope_analysis.py --analysis {params.analysis} --paramset {params.paramset} --output-dir {params.output_dir}"
+        "python scripts/protein_analysis/run_integrated_epitope_analysis.py --analysis {params.analysis} --paramset {params.paramset} --group {params.group} --output-dir {params.output_dir}"
 
 # Create comprehensive epitope visualizations for all genes
 rule create_comprehensive_epitope_visualizations:
     input:
-        integrated_sentinel=config["paths"]["integrated_epitope_analysis"]["sentinel"]
+        integrated_sentinel=config["paths"]["integrated_epitope_analysis"]["sentinel"].replace("integrated_analysis_complete.sentinel", "gram_{group}/integrated_analysis_complete.sentinel")
     output:
-        visualization_sentinel=config["paths"]["integrated_epitope_analysis"]["output_dir"] + "/.visualization_complete.sentinel"
+        visualization_sentinel=config["paths"]["integrated_epitope_analysis"]["output_dir"] + "/gram_{group}/.visualization_complete.sentinel"
     params:
         analysis="{analysis}",
-        paramset="{paramset}"
+        paramset="{paramset}",
+        group="{group}"
     shell:
-        "python scripts/protein_analysis/run_comprehensive_visualizations.py --analysis {params.analysis} --paramset {params.paramset} && touch {output.visualization_sentinel}"
+        "python scripts/protein_analysis/run_comprehensive_visualizations.py --analysis {params.analysis} --paramset {params.paramset} --group {params.group} && touch {output.visualization_sentinel}"
 
 # ---------------------
 # STAGE 9: Summaries and Reports
@@ -318,30 +328,30 @@ rule create_comprehensive_epitope_visualizations:
 # Run epitope conservation analysis for all genes (using topology-filtered epitopes)
 rule analyze_epitope_conservation:
     input:
-        filtered_epitopes_sentinel=config["paths"]["topology"]["filtered_epitopes_sentinel"],
-        msa_sequences_positive=lambda wildcards: config["paths"]["msa"]["alignments_structure"].replace("{group}", "positive").format(analysis=wildcards.analysis, paramset=wildcards.paramset),
-        msa_sequences_negative=lambda wildcards: config["paths"]["msa"]["alignments_structure"].replace("{group}", "negative").format(analysis=wildcards.analysis, paramset=wildcards.paramset),
-        selected_3d_positive=lambda wildcards: config["paths"]["sequence_prep"]["selected_3d_paths"].replace("{group}", "positive").format(analysis=wildcards.analysis, paramset=wildcards.paramset),
-        selected_3d_negative=lambda wildcards: config["paths"]["sequence_prep"]["selected_3d_paths"].replace("{group}", "negative").format(analysis=wildcards.analysis, paramset=wildcards.paramset),
+        filtered_epitopes_sentinel=config["paths"]["topology"]["filtered_epitopes_sentinel"].replace("filtered_epitopes_complete.sentinel", "gram_{group}/filtered_epitopes_complete.sentinel"),
+        msa_sequences=lambda wildcards: config["paths"]["msa"]["alignments_structure"].format(analysis=wildcards.analysis, paramset=wildcards.paramset, group=wildcards.group),
+        selected_3d_paths=config["paths"]["sequence_prep"]["selected_3d_paths"],
         pdb_numbering_mapping="data/protein_structures/{analysis}_{paramset}_fasta_structure_mapping_final.tsv"
     output:
-        conservation_analysis_sentinel=config["paths"]["epitopes"]["conservation_analysis_sentinel"]
+        conservation_analysis_sentinel=config["paths"]["epitopes"]["conservation_analysis_sentinel"].replace("conservation_analysis_complete.sentinel", "gram_{group}/conservation_analysis_complete.sentinel")
     params:
         analysis="{analysis}",
         paramset="{paramset}",
-        conservation_analysis_dir=lambda wildcards: config["paths"]["epitopes"]["conservation_analysis_dir"].format(analysis=wildcards.analysis, paramset=wildcards.paramset)
+        group="{group}",
+        conservation_analysis_dir=lambda wildcards: config["paths"]["epitopes"]["conservation_analysis_dir"].format(analysis=wildcards.analysis, paramset=wildcards.paramset) + f"/gram_{wildcards.group}"
     script:
         "scripts/protein_analysis/run_conservation_analysis_batch.py"
 
 # Generate comprehensive epitope conservation analysis report
 rule generate_epitope_conservation_report:
     input:
-        conservation_analysis_sentinel=config["paths"]["epitopes"]["conservation_analysis_sentinel"]
+        conservation_analysis_sentinel=config["paths"]["epitopes"]["conservation_analysis_sentinel"].replace("conservation_analysis_complete.sentinel", "gram_{group}/conservation_analysis_complete.sentinel")
     output:
-        conservation_report=config["paths"]["epitopes"]["conservation_report"]
+        conservation_report=config["paths"]["epitopes"]["conservation_report"].replace("protein_analysis_report.html", "gram_{group}/protein_analysis_report.html")
     params:
         analysis="{analysis}",
         paramset="{paramset}",
-        conservation_analysis_dir=lambda wildcards: config["paths"]["epitopes"]["conservation_analysis_dir"].format(analysis=wildcards.analysis, paramset=wildcards.paramset)
+        group="{group}",
+        conservation_analysis_dir=lambda wildcards: config["paths"]["epitopes"]["conservation_analysis_dir"].format(analysis=wildcards.analysis, paramset=wildcards.paramset) + f"/gram_{wildcards.group}"
     script:
         "scripts/protein_analysis/generate_epitope_conservation_report.py"
