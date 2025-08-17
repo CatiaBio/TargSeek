@@ -375,6 +375,8 @@ scripts:
   # -------------------------------------------------------------------------
   topology:
     predict_topology: "scripts/protein_analysis/predict_topology.py"
+    create_surface_protein_list: "scripts/protein_analysis/create_surface_protein_list.py"
+    filter_surface_proteins: "scripts/protein_analysis/filter_surface_proteins.py"
     map_extracellular_regions: "scripts/protein_analysis/map_extracellular_regions.py"
     filter_epitopes_topology: "scripts/protein_analysis/filter_epitopes_topology.py"
 
