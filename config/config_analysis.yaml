@@ -176,7 +176,9 @@ topology:
   # Topology prediction method: "deeptmhmm" (recommended) or "topcons"
   method: "deeptmhmm"
   # Minimum extracellular coverage required for epitope inclusion (0.0-1.0)
-  min_extracellular_coverage: 0.5
+  min_extracellular_coverage: 0.05
+  # Minimum extracellular amino acids (absolute count)
+  min_extracellular_aa: 30
   # Enable structure-based topology validation
   use_structure_validation: true
 
@@ -376,12 +378,20 @@ scripts:
   topology:
     predict_topology: "scripts/protein_analysis/predict_topology.py"
     create_surface_protein_list: "scripts/protein_analysis/create_surface_protein_list.py"
+    create_extracellular_mapping: "scripts/protein_analysis/create_extracellular_mapping.py"
     filter_surface_proteins: "scripts/protein_analysis/filter_surface_proteins.py"
     map_extracellular_regions: "scripts/protein_analysis/map_extracellular_regions.py"
     filter_epitopes_topology: "scripts/protein_analysis/filter_epitopes_topology.py"
 
   # -------------------------------------------------------------------------
-  # STAGE 8: Summary and Report Scripts
+  # STAGE 8: Integrated Epitope Analysis Scripts
+  # -------------------------------------------------------------------------
+  integrated_analysis:
+    blast_cross_reactivity: "scripts/protein_analysis/blast_epitope_cross_reactivity.py"
+    integrate_comprehensive_analysis: "scripts/protein_analysis/integrate_comprehensive_epitope_analysis.py"
+
+  # -------------------------------------------------------------------------
+  # STAGE 9: Summary and Report Scripts
   # -------------------------------------------------------------------------
   # reports:
     # generate_final_report: "scripts/protein_analysis/generate_final_report.py"  # EXCLUDED
