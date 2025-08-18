@@ -10,6 +10,6 @@ for fasta_file in "$SEQUENCES_DIR"/*.fasta; do
     if [[ -f "$fasta_file" ]]; then
         gene_name=$(basename "$fasta_file" .fasta)
         echo "Running MAFFT on $gene_name..."
-        mafft --localpair --maxiterate 1000 "$fasta_file" > "${ALIGNMENTS_DIR}/${gene_name}.fasta"
+        mafft --localpair --maxiterate 1000 "$fasta_file" > "${ALIGNMENTS_DIR}/${gene_name}.fasta" 2>/dev/null
     fi
 done

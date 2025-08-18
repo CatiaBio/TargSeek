@@ -41,8 +41,8 @@ def load_topology_results(topology_file: str) -> Dict:
     logger.info(f"Loaded topology data for {len(topology_data)} groups")
     return topology_data
 
-def calculate_extracellular_coverage(regions: List[Dict]) -> float:
-    """Calculate the percentage of protein sequence that is extracellular."""
+def calculate_extracellular_coverage(regions: List[Dict]) -> tuple:
+    """Calculate the percentage and absolute count of protein sequence that is extracellular."""
     total_length = 0
     extracellular_length = 0
     
@@ -55,11 +55,12 @@ def calculate_extracellular_coverage(regions: List[Dict]) -> float:
             extracellular_length += region_length
     
     if total_length == 0:
-        return 0.0
+        return 0.0, 0
     
-    return extracellular_length / total_length
+    coverage_percentage = extracellular_length / total_length
+    return coverage_percentage, extracellular_length
 
-def identify_surface_genes(topology_data: Dict, min_extracellular_coverage: float) -> Dict[str, Set[str]]:
+def identify_surface_genes(topology_data: Dict, min_extracellular_coverage: float, min_extracellular_aa: int = 30) -> Dict[str, Set[str]]:
     """
     Identify genes with at least one protein structure having sufficient extracellular coverage.
     
@@ -92,18 +93,22 @@ def identify_surface_genes(topology_data: Dict, min_extracellular_coverage: floa
             structure_count = 0
             
             # Check all structures for this gene
+            max_extracellular_aa = 0
             for seq_id, regions in sequences.items():
                 structure_count += 1
-                extracellular_coverage = calculate_extracellular_coverage(regions)
-                max_coverage = max(max_coverage, extracellular_coverage)
+                coverage_percentage, extracellular_aa = calculate_extracellular_coverage(regions)
+                max_coverage = max(max_coverage, coverage_percentage)
+                max_extracellular_aa = max(max_extracellular_aa, extracellular_aa)
                 
-                if extracellular_coverage >= min_extracellular_coverage:
+                # Protein qualifies if it meets EITHER criteria (percentage OR absolute count)
+                if coverage_percentage >= min_extracellular_coverage or extracellular_aa >= min_extracellular_aa:
                     has_surface_structure = True
                 
-                logger.debug(f"  {seq_id}: {extracellular_coverage:.2%} extracellular coverage")
+                logger.debug(f"  {seq_id}: {coverage_percentage:.2%} extracellular coverage ({extracellular_aa} AA)")
             
             gene_details = {
                 'max_extracellular_coverage': max_coverage,
+                'max_extracellular_aa': max_extracellular_aa,
                 'has_surface_structures': has_surface_structure,
                 'structure_count': structure_count
             }
@@ -112,11 +117,11 @@ def identify_surface_genes(topology_data: Dict, min_extracellular_coverage: floa
                 surface_gene_set.add(gene)
                 group_stats['surface_genes'] += 1
                 filter_stats['surface_genes'] += 1
-                logger.info(f"Gene {gene} (gram_{group}): INCLUDED - max coverage {max_coverage:.2%}")
+                logger.info(f"Gene {gene} (gram_{group}): INCLUDED - max coverage {max_coverage:.2%} ({max_extracellular_aa} AA)")
             else:
                 group_stats['filtered_out_genes'] += 1
                 filter_stats['filtered_out_genes'] += 1
-                logger.warning(f"Gene {gene} (gram_{group}): EXCLUDED - max coverage {max_coverage:.2%}")
+                logger.warning(f"Gene {gene} (gram_{group}): EXCLUDED - max coverage {max_coverage:.2%} ({max_extracellular_aa} AA)")
             
             group_stats['gene_details'][gene] = gene_details
         
@@ -158,6 +163,7 @@ def save_filter_summary(filter_stats: Dict, surface_genes: Dict, output_file: st
     summary = {
         'filter_parameters': {
             'min_extracellular_coverage': snakemake.params.min_extracellular_coverage,
+            'min_extracellular_aa': getattr(snakemake.params, 'min_extracellular_aa', 30),
             'analysis': snakemake.params.analysis,
             'paramset': snakemake.params.paramset
         },
@@ -186,6 +192,7 @@ def main():
     analysis = snakemake.params.analysis
     paramset = snakemake.params.paramset
     min_extracellular_coverage = snakemake.params.min_extracellular_coverage
+    min_extracellular_aa = getattr(snakemake.params, 'min_extracellular_aa', 30)
     
     # Input files
     topology_results = snakemake.input.topology_results
@@ -196,7 +203,7 @@ def main():
     protein_filter_summary = snakemake.output.protein_filter_summary
     
     logger.info(f"Creating surface gene list for {analysis}_{paramset}")
-    logger.info(f"Minimum extracellular coverage threshold: {min_extracellular_coverage:.1%}")
+    logger.info(f"Minimum extracellular coverage threshold: {min_extracellular_coverage:.1%} OR {min_extracellular_aa} amino acids")
     
     # Load topology prediction results
     topology_data = load_topology_results(topology_results)
@@ -206,7 +213,7 @@ def main():
         sys.exit(1)
     
     # Identify genes with sufficient surface topology
-    surface_genes, filter_stats = identify_surface_genes(topology_data, min_extracellular_coverage)
+    surface_genes, filter_stats = identify_surface_genes(topology_data, min_extracellular_coverage, min_extracellular_aa)
     
     total_surface_genes = sum(len(genes) for genes in surface_genes.values())
     

@@ -79,7 +79,7 @@ class BepiPredPredictor:
                 # Use BepiPred virtual environment (simpler and more reliable)
                 cmd = [
                     "bash", "-c",
-                    f"cd '{bepipred_unix}' && source venv/bin/activate && python bepipred3_CLI.py -i '{fasta_unix}' -o '{output_unix}' -pred {self.method} -top {self.top_percentage}"
+                    f"source /home/biokate/miniconda3/etc/profile.d/conda.sh && conda activate targseek && cd '{bepipred_unix}' && python bepipred3_CLI.py -i '{fasta_unix}' -o '{output_unix}' -pred {self.method} -top {self.top_percentage}"
                 ]
                 
                 logging.info(f"Running BepiPred from directory: {bepipred_dir}")

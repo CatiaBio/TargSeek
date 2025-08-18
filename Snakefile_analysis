@@ -161,9 +161,23 @@ rule create_surface_protein_list:
     params:
         analysis="{analysis}",
         paramset="{paramset}",
-        min_extracellular_coverage=config.get("topology", {}).get("min_extracellular_coverage", 0.5)
+        min_extracellular_coverage=config.get("topology", {}).get("min_extracellular_coverage", 0.05),
+        min_extracellular_aa=config.get("topology", {}).get("min_extracellular_aa", 30)
     script:
         config["scripts"]["topology"]["create_surface_protein_list"]
+
+# Create extracellular mapping from topology predictions for epitope filtering
+rule create_extracellular_mapping:
+    input:
+        topology_results=config["paths"]["topology"]["topology_predictions"]
+    output:
+        extracellular_mapping=config["paths"]["topology"]["extracellular_mapping"]
+    params:
+        analysis="{analysis}",
+        paramset="{paramset}",
+        min_extracellular_coverage=config.get("topology", {}).get("min_extracellular_coverage", 0.5)
+    script:
+        config["scripts"]["topology"]["create_extracellular_mapping"]
 
 # ---------------------
 # STAGE 3: Multiple Sequence Alignment with MAFFT
@@ -292,21 +306,40 @@ rule visualize_epitopes_pymol:
 # STAGE 8: Integrated Epitope Analysis
 # ---------------------
 
-# Integrated analysis combining BepiPred, ConSurf, and Topology data
+# BLAST cross-reactivity analysis for filtered epitopes
+rule blast_epitope_cross_reactivity:
+    input:
+        filtered_epitopes_sentinel=config["paths"]["topology"]["filtered_epitopes_sentinel"].replace("filtered_epitopes_complete.sentinel", "gram_{group}/filtered_epitopes_complete.sentinel"),
+        extracellular_mapping=config["paths"]["topology"]["extracellular_mapping"]
+    output:
+        blast_results_sentinel=config["paths"]["integrated_epitope_analysis"]["output_dir"] + "/gram_{group}/.blast_complete.sentinel",
+        blast_summary=config["paths"]["integrated_epitope_analysis"]["output_dir"] + "/gram_{group}/blast_cross_reactivity_summary.json"
+    params:
+        analysis="{analysis}",
+        paramset="{paramset}",
+        group="{group}",
+        blast_databases_dir="data/blast_databases",
+        output_dir=lambda wildcards: config["paths"]["integrated_epitope_analysis"]["output_dir"].format(analysis=wildcards.analysis, paramset=wildcards.paramset) + f"/gram_{wildcards.group}"
+    script:
+        config["scripts"]["integrated_analysis"]["blast_cross_reactivity"]
+
+# Integrated analysis combining BepiPred, ConSurf, Topology, and BLAST data
 rule integrate_epitope_analysis:
     input:
-        bepipred_sentinel=config["paths"]["epitopes"]["bepipred_predictions"] + "/gram_{group}/bepipred_complete.sentinel",
+        filtered_epitopes_sentinel=config["paths"]["topology"]["filtered_epitopes_sentinel"].replace("filtered_epitopes_complete.sentinel", "gram_{group}/filtered_epitopes_complete.sentinel"),
         consurf_sentinel=config["paths"]["conservation"]["consurf_sentinel"],
-        topology_sentinel=config["paths"]["topology"]["topology_dir"] + "/gram_{group}/.topology_complete.sentinel"
+        blast_results_sentinel=config["paths"]["integrated_epitope_analysis"]["output_dir"] + "/gram_{group}/.blast_complete.sentinel",
+        extracellular_mapping=config["paths"]["topology"]["extracellular_mapping"]
     output:
-        integrated_sentinel=config["paths"]["integrated_epitope_analysis"]["sentinel"].replace("integrated_analysis_complete.sentinel", "gram_{group}/integrated_analysis_complete.sentinel")
+        integrated_sentinel=config["paths"]["integrated_epitope_analysis"]["sentinel"].replace("integrated_analysis_complete.sentinel", "gram_{group}/integrated_analysis_complete.sentinel"),
+        comprehensive_report=config["paths"]["integrated_epitope_analysis"]["output_dir"] + "/gram_{group}/comprehensive_epitope_report.html"
     params:
         analysis="{analysis}",
         paramset="{paramset}",
         group="{group}",
         output_dir=lambda wildcards: config["paths"]["integrated_epitope_analysis"]["output_dir"].format(analysis=wildcards.analysis, paramset=wildcards.paramset) + f"/gram_{wildcards.group}"
-    shell:
-        "python scripts/protein_analysis/run_integrated_epitope_analysis.py --analysis {params.analysis} --paramset {params.paramset} --group {params.group} --output-dir {params.output_dir}"
+    script:
+        config["scripts"]["integrated_analysis"]["integrate_comprehensive_analysis"]
 
 # Create comprehensive epitope visualizations for all genes
 rule create_comprehensive_epitope_visualizations:

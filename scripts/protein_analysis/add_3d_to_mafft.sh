@@ -17,15 +17,20 @@ if [[ -f "$SELECTED_3D_PATHS" ]]; then
     done < "$SELECTED_3D_PATHS"
 fi
 
-# Process each original alignment
-for aln_file in "$ALIGNMENTS_DIR"/*.fasta; do
-    gene=$(basename "$aln_file" .fasta)
-    out_file="${OUTPUT_DIR}/${gene}.fasta"
+# Check if there are any alignment files to process
+if ls "$ALIGNMENTS_DIR"/*.fasta 1> /dev/null 2>&1; then
+    # Process each original alignment
+    for aln_file in "$ALIGNMENTS_DIR"/*.fasta; do
+        gene=$(basename "$aln_file" .fasta)
+        out_file="${OUTPUT_DIR}/${gene}.fasta"
 
-    if [[ -n "${STRUCT_MAP[$gene]:-}" && -f "${STRUCT_MAP[$gene]}" ]]; then
-        echo "Adding 3D structure for $gene..."
-        mafft --add "${STRUCT_MAP[$gene]}" --reorder "$aln_file" > "$out_file"
-    else
-        cp "$aln_file" "$out_file"
-    fi
-done
+        if [[ -n "${STRUCT_MAP[$gene]:-}" && -f "${STRUCT_MAP[$gene]}" ]]; then
+            echo "Adding 3D structure for $gene..."
+            mafft --add "${STRUCT_MAP[$gene]}" --reorder "$aln_file" > "$out_file" 2>/dev/null
+        else
+            cp "$aln_file" "$out_file"
+        fi
+    done
+else
+    echo "No alignment files found in $ALIGNMENTS_DIR - skipping 3D structure addition"
+fi

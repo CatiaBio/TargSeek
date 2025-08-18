@@ -42,9 +42,17 @@ echo "Input directory: $INPUT_DIR"
 echo "Gene list: $GENE_LIST"
 echo "Output directory: $OUTPUT_DIR"
 
-# Count total genes in list
-TOTAL_GENES=$(wc -l < "$GENE_LIST")
+# Count total genes in list (excluding empty lines)
+TOTAL_GENES=$(grep -c -v '^[[:space:]]*$' "$GENE_LIST" 2>/dev/null || echo "0")
 echo "Processing $TOTAL_GENES surface genes"
+
+# Handle empty gene list case
+if [[ $TOTAL_GENES -eq 0 ]]; then
+    echo "Warning: No surface genes found in list. Creating empty output directory."
+    mkdir -p "$OUTPUT_DIR"
+    echo "No genes to process - skipping MAFFT alignment."
+    exit 0
+fi
 
 PROCESSED=0
 SUCCESSFUL=0
@@ -87,9 +95,12 @@ echo "  Total genes processed: $PROCESSED"
 echo "  Successful alignments: $SUCCESSFUL"
 echo "  Failed alignments: $FAILED"
 
-if [[ $SUCCESSFUL -eq 0 ]]; then
+if [[ $SUCCESSFUL -eq 0 && $PROCESSED -gt 0 ]]; then
     echo "Error: No successful alignments produced"
     exit 1
+elif [[ $SUCCESSFUL -eq 0 && $PROCESSED -eq 0 ]]; then
+    echo "Warning: No genes were processed (all were empty lines or comments)"
+    exit 0
 fi
 
 echo "Alignment results saved to: $OUTPUT_DIR"
