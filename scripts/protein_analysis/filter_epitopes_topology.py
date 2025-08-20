@@ -39,8 +39,15 @@ def load_extracellular_mapping(mapping_file: str) -> Dict[str, Dict]:
     try:
         with open(mapping_file, 'r') as f:
             mapping_data = json.load(f)
-        logger.info(f"Loaded extracellular mapping for {len(mapping_data)} proteins")
-        return mapping_data
+        
+        # Extract the actual mapping from the JSON structure
+        if 'mapping' in mapping_data:
+            protein_mappings = mapping_data['mapping']
+        else:
+            protein_mappings = mapping_data
+        
+        logger.info(f"Loaded extracellular mapping for {len(protein_mappings)} proteins")
+        return protein_mappings
     except Exception as e:
         logger.error(f"Error loading extracellular mapping: {e}")
         return {}
@@ -54,7 +61,9 @@ def find_epitope_files(epitope_dir: str) -> List[str]:
         os.path.join(epitope_dir, "**", "*epitope_table*.csv"),
         os.path.join(epitope_dir, "**", "*epitope_table*.tsv"),
         os.path.join(epitope_dir, "**", "*epitopes*.csv"),
-        os.path.join(epitope_dir, "**", "*epitopes*.tsv")
+        os.path.join(epitope_dir, "**", "*epitopes*.tsv"),
+        os.path.join(epitope_dir, "**", "*linear_epitopes*.tsv"),
+        os.path.join(epitope_dir, "**", "*linear_epitopes*.csv")
     ]
     
     for pattern in search_patterns:
@@ -69,14 +78,15 @@ def find_epitope_files(epitope_dir: str) -> List[str]:
 def load_epitope_table(file_path: str) -> pd.DataFrame:
     """Load epitope table from CSV/TSV file."""
     try:
-        # Try different separators
-        for sep in [',', '\t']:
+        # Try different separators and handle comment lines
+        for sep in ['\t', ',']:
             try:
-                df = pd.read_csv(file_path, sep=sep)
-                if len(df.columns) > 1:  # Valid dataframe
+                df = pd.read_csv(file_path, sep=sep, comment='#')
+                if len(df.columns) > 1 and len(df) > 0:  # Valid dataframe with data
                     logger.debug(f"Loaded epitope table with {len(df)} rows from {file_path}")
                     return df
-            except:
+            except Exception as e:
+                logger.debug(f"Failed to load with separator '{sep}': {e}")
                 continue
         
         logger.warning(f"Could not load epitope table: {file_path}")
@@ -331,9 +341,11 @@ def create_topology_filter_report(
     proteins_with_regions = 0
     
     for protein_id, mapping in extracellular_mapping.items():
-        if mapping['total_extracellular_residues'] > 0:
+        # Use 'extracellular_length' as it exists in the JSON structure
+        extracellular_length = mapping.get('extracellular_length', 0)
+        if extracellular_length > 0:
             proteins_with_regions += 1
-            total_extracellular_residues += mapping['total_extracellular_residues']
+            total_extracellular_residues += extracellular_length
     
     if proteins_with_regions > 0:
         report['topology_summary']['extracellular_region_stats'] = {
