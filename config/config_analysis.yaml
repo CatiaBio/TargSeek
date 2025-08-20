@@ -145,7 +145,7 @@ conservation:
 # ConSurf analysis configuration
 consurf:
   # Path to ConSurf standalone script
-  script_path: "tools/stand_alone_consurf/stand_alone_consurf.py"
+  script_path: "/home/catia/tools/stand_alone_consurf/stand_alone_consurf-1.00/stand_alone_consurf.py"
   # Enable ConSurf analysis (set to false to skip)
   enabled: true
 
@@ -159,7 +159,7 @@ conserved:
 # BepiPred 3.0 epitope prediction configuration
 bepipred:
   # Path to BepiPred 3.0 installation
-  path: "tools/BepiPred3.0"
+  path: "/home/catia/tools/BepiPred3.0-Predictor"
   # Prediction method: 'vt_pred' (recommended) or 'mjv_pred'
   method: "vt_pred"
   # Epitope score threshold (0.0-1.0, higher = more confident predictions)

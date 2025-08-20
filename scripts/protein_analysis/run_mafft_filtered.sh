@@ -76,8 +76,8 @@ while IFS= read -r gene; do
     
     echo "Processing gene $gene ($PROCESSED/$TOTAL_GENES)..."
     
-    # Run MAFFT alignment
-    if mafft --auto --quiet "$INPUT_FASTA" > "$OUTPUT_FASTA" 2>/dev/null; then
+    # Run MAFFT alignment (redirect stderr to /dev/null to avoid mixing diagnostic output)
+    if mafft --auto "$INPUT_FASTA" > "$OUTPUT_FASTA" 2>/dev/null; then
         echo "  ✓ Successfully aligned $gene"
         ((SUCCESSFUL++))
     else

@@ -79,7 +79,7 @@ class BepiPredPredictor:
                 # Use BepiPred virtual environment (simpler and more reliable)
                 cmd = [
                     "bash", "-c",
-                    f"source /home/biokate/miniconda3/etc/profile.d/conda.sh && conda activate targseek && cd '{bepipred_unix}' && python bepipred3_CLI.py -i '{fasta_unix}' -o '{output_unix}' -pred {self.method} -top {self.top_percentage}"
+                    f"source /home/catia/tools/miniconda3/etc/profile.d/conda.sh && conda activate bepipred && cd '{bepipred_unix}' && python bepipred3_CLI.py -i '{fasta_unix}' -o '{output_unix}' -pred {self.method} -top {self.top_percentage}"
                 ]
                 
                 logging.info(f"Running BepiPred from directory: {bepipred_dir}")
@@ -317,9 +317,8 @@ def main():
     """Main function for Snakemake integration"""
     
     try:
-        # Get inputs from Snakemake - expect both gram groups
-        selected_3d_paths_positive = snakemake.input.selected_3d_paths_positive
-        selected_3d_paths_negative = snakemake.input.selected_3d_paths_negative
+        # Get inputs from Snakemake - handle single group input
+        selected_3d_paths = snakemake.input.selected_3d_paths
         sentinel_file = snakemake.output.bepipred_sentinel
         
         # Derive output directory from sentinel file path
@@ -328,13 +327,14 @@ def main():
         # Get parameters
         analysis = snakemake.params.analysis
         paramset = snakemake.params.paramset
+        group = snakemake.params.group
         
         # Get BepiPred config
         bepipred_config = snakemake.config.get('bepipred', {})
         bepipred_path = bepipred_config.get('path', 'tools/BepiPred3.0')
         
         # Combine both paths files
-        paths_files = [selected_3d_paths_positive, selected_3d_paths_negative]
+        paths_files = [selected_3d_paths]
         
     except NameError:
         # Test mode

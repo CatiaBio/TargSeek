@@ -88,6 +88,11 @@ archive/temp_files/
 archive/backups/
 scripts_test/
 
+# Test pipeline files and directories
+Snakefile_analysis_test
+scripts/protein_analysis_test/
+results/*/protein_analysis_test/
+
 # Archived unused scripts (not part of active pipeline)
 scripts/archive_unused/
 

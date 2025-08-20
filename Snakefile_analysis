@@ -55,34 +55,36 @@ rule all_comprehensive_epitope_visualizations:
             group=["positive", "negative"]
         )
 
-# Complete analysis pipeline - all stages
+# Complete working analysis pipeline - stages 1-8
 rule all_analysis:
     input:
-        expand(
-            [
-                config["paths"]["conservation"]["results_structure"],
-                config["paths"]["conservation"]["consurf_sentinel"],
-                config["paths"]["conserved"]["raw_sequences_structure"],
-                config["paths"]["conserved"]["trimmed_sequences_structure"]
-            ],
-            analysis=config["species_batches"],
-            paramset=config["quickgo_paramsets"],
-            group=["positive", "negative"]
-        ) + expand(
-            [
-                config["paths"]["epitopes"]["epitope_tables_sentinel"].replace("epitope_tables_complete.sentinel", "gram_{group}/epitope_tables_complete.sentinel"),
-                config["paths"]["topology"]["filtered_epitopes_sentinel"].replace("filtered_epitopes_complete.sentinel", "gram_{group}/filtered_epitopes_complete.sentinel"),
-                config["paths"]["topology"]["topology_filter_report"].replace("epitope_filter_report.json", "gram_{group}/epitope_filter_report.json")
-            ],
-            analysis=config["species_batches"],
-            paramset=config["quickgo_paramsets"],
-            group=["positive", "negative"]
-        ) + expand(
-            [config["paths"]["epitopes"]["conservation_report"].replace("protein_analysis_report.html", "gram_{group}/protein_analysis_report.html")],
-            analysis=config["species_batches"],
-            paramset=config["quickgo_paramsets"],
-            group=["positive", "negative"]
-        )
+        # Stage 1: MSA sequences
+        expand("results/{analysis}_{paramset}/protein_analysis/msa_fasta/gram_{group}", 
+               analysis=config["species_batches"], paramset=config["quickgo_paramsets"], group=["positive", "negative"]),
+        # Stage 2: 3D structure selection  
+        expand("results/{analysis}_{paramset}/protein_analysis/selected_3d_paths_gram_{group}.txt",
+               analysis=config["species_batches"], paramset=config["quickgo_paramsets"], group=["positive", "negative"]),
+        # Stage 2.5: Topology prediction and surface proteins
+        expand("results/{analysis}_{paramset}/protein_analysis/topology_analysis/surface_proteins_gram_{group}.txt",
+               analysis=config["species_batches"], paramset=config["quickgo_paramsets"], group=["positive", "negative"]),
+        # Stage 3: MAFFT alignments (filtered by surface proteins)
+        expand("results/{analysis}_{paramset}/protein_analysis/mafft_alignment/gram_{group}",
+               analysis=config["species_batches"], paramset=config["quickgo_paramsets"], group=["positive", "negative"]),
+        # Stage 3: MAFFT alignments with 3D structures
+        expand("results/{analysis}_{paramset}/protein_analysis/mafft_alignment_with_3d/gram_{group}",
+               analysis=config["species_batches"], paramset=config["quickgo_paramsets"], group=["positive", "negative"]),
+        # Stage 4: ConSurf conservation analysis
+        expand("results/{analysis}_{paramset}/protein_analysis/consurf_analysis/gram_{group}/.consurf_complete.sentinel",
+               analysis=config["species_batches"], paramset=config["quickgo_paramsets"], group=["positive", "negative"]),
+        # Stage 5: BepiPred epitope predictions and tables
+        expand("results/{analysis}_{paramset}/protein_analysis/bepipred_epitope_predictions/gram_{group}/epitope_tables_complete.sentinel",
+               analysis=config["species_batches"], paramset=config["quickgo_paramsets"], group=["positive", "negative"]),
+        # Stage 5: Topology-filtered epitopes  
+        expand("results/{analysis}_{paramset}/protein_analysis/topology_analysis/gram_{group}/filtered_epitopes_complete.sentinel",
+               analysis=config["species_batches"], paramset=config["quickgo_paramsets"], group=["positive", "negative"]),
+        # Stage 8: Integrated epitope analysis
+        expand("results/{analysis}_{paramset}/protein_analysis/integrated_epitope_analysis/gram_{group}/integrated_analysis_complete.sentinel",
+               analysis=config["species_batches"], paramset=config["quickgo_paramsets"], group=["positive", "negative"])
 
 
 # =============================================================================
@@ -137,11 +139,11 @@ rule predict_protein_topology:
     input:
         selected_3d_paths_positive=config["paths"]["sequence_prep"]["selected_3d_paths"].replace("{group}", "positive"),
         selected_3d_paths_negative=config["paths"]["sequence_prep"]["selected_3d_paths"].replace("{group}", "negative"),
-        sequences_positive=config["paths"]["msa"]["alignments_structure"].replace("{group}", "positive"),
-        sequences_negative=config["paths"]["msa"]["alignments_structure"].replace("{group}", "negative")
+        sequences_positive="results/{analysis}_{paramset}/protein_analysis/msa_fasta/gram_positive",
+        sequences_negative="results/{analysis}_{paramset}/protein_analysis/msa_fasta/gram_negative"
     output:
-        topology_results=config["paths"]["topology"]["topology_predictions"],
-        topology_summary=config["paths"]["topology"]["topology_summary"]
+        topology_results="results/{analysis}_{paramset}/protein_analysis/topology_analysis/topology_predictions.json",
+        topology_summary="results/{analysis}_{paramset}/protein_analysis/topology_analysis/topology_summary.json"
     params:
         analysis="{analysis}",
         paramset="{paramset}",
@@ -153,11 +155,11 @@ rule predict_protein_topology:
 # Create filtered protein list containing only proteins with surface topology
 rule create_surface_protein_list:
     input:
-        topology_results=config["paths"]["topology"]["topology_predictions"]
+        topology_results="results/{analysis}_{paramset}/protein_analysis/topology_analysis/topology_predictions.json"
     output:
         surface_proteins_positive="results/{analysis}_{paramset}/protein_analysis/topology_analysis/surface_proteins_gram_positive.txt",
         surface_proteins_negative="results/{analysis}_{paramset}/protein_analysis/topology_analysis/surface_proteins_gram_negative.txt",
-        protein_filter_summary=config["paths"]["topology"]["topology_dir"] + "/protein_filter_summary.json"
+        protein_filter_summary="results/{analysis}_{paramset}/protein_analysis/topology_analysis/protein_filter_summary.json"
     params:
         analysis="{analysis}",
         paramset="{paramset}",
@@ -169,9 +171,9 @@ rule create_surface_protein_list:
 # Create extracellular mapping from topology predictions for epitope filtering
 rule create_extracellular_mapping:
     input:
-        topology_results=config["paths"]["topology"]["topology_predictions"]
+        topology_results="results/{analysis}_{paramset}/protein_analysis/topology_analysis/topology_predictions.json"
     output:
-        extracellular_mapping=config["paths"]["topology"]["extracellular_mapping"]
+        extracellular_mapping="results/{analysis}_{paramset}/protein_analysis/topology_analysis/extracellular_mapping.json"
     params:
         analysis="{analysis}",
         paramset="{paramset}",
