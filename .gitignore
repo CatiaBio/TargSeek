@@ -378,6 +378,10 @@ config/config.local.yaml
 config/config_download.local.yaml
 config/config_analysis.local.yaml
 
+# Methodology documents (keep private)
+*_Methodology.md
+*_methodology.md
+
 # Claude Code settings (user-specific)
 .claude/
 

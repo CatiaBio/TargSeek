@@ -145,7 +145,7 @@ conservation:
 # ConSurf analysis configuration
 consurf:
   # Path to ConSurf standalone script
-  script_path: "/home/catia/tools/stand_alone_consurf/stand_alone_consurf-1.00/stand_alone_consurf.py"
+  script_path: "/home/catia/tools/ConSurf-StandAlone/stand_alone_consurf-1.00/stand_alone_consurf.py"
   # Enable ConSurf analysis (set to false to skip)
   enabled: true
 
