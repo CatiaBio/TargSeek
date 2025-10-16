@@ -183,59 +183,130 @@ def update_gene_metadata(gene_dir, gene_name, successful_species, failed_species
     
     logging.info(f"Updated metadata for {gene_name}: {len(metadata['available_species'])} available, {len(metadata['failed_species'])} failed")
 
+def find_existing_sequences_in_other_analyses(gene_name, species, base_protein_dir, current_analysis_paramset):
+    """
+    Check if sequence exists in other analysis directories
+
+    Args:
+        gene_name: Name of the gene
+        species: Species name (may include "spp." entries)
+        base_protein_dir: Base protein sequences directory (data/protein_sequences)
+        current_analysis_paramset: Current analysis_paramset to exclude
+
+    Returns:
+        Path or None: Path to existing sequence file if found
+    """
+
+    # Handle "spp." entries by looking for any species in that genus
+    if "spp." in species:
+        genus = species.replace(" spp.", "").strip()
+        logging.debug(f"Looking for any {genus} species in previous analyses")
+
+        # Check all analysis directories except current one
+        for analysis_dir in base_protein_dir.iterdir():
+            if analysis_dir.is_dir() and analysis_dir.name != current_analysis_paramset:
+                gene_dir = analysis_dir / gene_name
+                if gene_dir.exists():
+                    # Look for any FASTA file that starts with the genus
+                    for fasta_file in gene_dir.glob("*.fasta"):
+                        # Check if filename starts with genus
+                        if fasta_file.stem.lower().startswith(genus.lower().replace(' ', '_')):
+                            if fasta_file.stat().st_size > 0:
+                                logging.debug(f"Found {genus} species {fasta_file.name} in {analysis_dir.name}")
+                                return fasta_file
+    else:
+        # Exact species match
+        safe_species = species.replace(' ', '_').replace('/', '_')
+        filename = f"{safe_species}.fasta"
+
+        # Check all analysis directories except current one
+        for analysis_dir in base_protein_dir.iterdir():
+            if analysis_dir.is_dir() and analysis_dir.name != current_analysis_paramset:
+                gene_dir = analysis_dir / gene_name
+                sequence_file = gene_dir / filename
+                if sequence_file.exists() and sequence_file.stat().st_size > 0:
+                    logging.debug(f"Found existing sequence for {species} in {analysis_dir.name}")
+                    return sequence_file
+
+    return None
+
 def download_proteins_shared(gene_species_mapping, gene_aliases, ncbi_credentials, analysis, paramset, group):
     """
-    Download proteins to shared directory structure with caching and alias fallback
-    
+    Download proteins to analysis-specific directory structure with cross-analysis copying and caching
+
     Args:
         gene_species_mapping: Dict of {gene: [species_list]}
         gene_aliases: Dict of {gene: [alias_list]} for fallback searches
         ncbi_credentials: Dict with NCBI credentials for bulk alias searches
-        analysis: Analysis name for logging
-        paramset: Parameter set name for logging  
+        analysis: Analysis name for directory organization
+        paramset: Parameter set name for directory organization
         group: Gram group name for logging
     """
-    
-    logging.info(f"=== Downloading Proteins to Shared Directory ===")
+
+    analysis_paramset = f"{analysis}_{paramset}"
+    logging.info(f"=== Downloading Proteins to Analysis-Specific Directory ===")
     logging.info(f"Analysis: {analysis}, Paramset: {paramset}, Group: {group}")
+    logging.info(f"Analysis-Paramset: {analysis_paramset}")
     logging.info(f"Genes to process: {len(gene_species_mapping)}")
-    
-    # Create shared protein data directory from sentinel file path
+
+    # Create analysis-specific protein data directory
     sentinel_path = Path(snakemake.output.sentinel)
-    shared_protein_dir = sentinel_path.parent
-    shared_protein_dir.mkdir(parents=True, exist_ok=True)
-    
-    # Initialize cached downloader
-    downloader = CachedProteinDownloader()
-    
+    base_protein_dir = sentinel_path.parent.parent  # data/protein_sequences
+    analysis_protein_dir = base_protein_dir / analysis_paramset
+    analysis_protein_dir.mkdir(parents=True, exist_ok=True)
+
+    # Initialize cached downloader with analysis-specific cache
+    downloader = CachedProteinDownloader(analysis=analysis, paramset=paramset)
+
     # Show cache status once
     cache_size = len(downloader.cache.cache)
-    logging.info(f"Initialized protein cache with {cache_size} entries")
+    logging.info(f"Initialized analysis-specific protein cache with {cache_size} entries")
+    logging.info(f"Cache file: {downloader.cache.cache_file}")
+    logging.info(f"Protein directory: {analysis_protein_dir}")
     
     total_genes = len(gene_species_mapping)
     total_successful_downloads = 0
     total_species_attempted = 0
-    
-    # Track overall cache performance
+
+    # Track overall cache performance and cross-analysis copying
     total_cache_hits = 0
     total_new_lookups = 0
-    
+    total_copied_from_other_analyses = 0
+
     # Process each gene
     for gene_idx, (gene_name, species_list) in enumerate(gene_species_mapping.items(), 1):
-        # Create gene directory
-        gene_dir = shared_protein_dir / gene_name
+        # Create gene directory in analysis-specific location
+        gene_dir = analysis_protein_dir / gene_name
         gene_dir.mkdir(exist_ok=True)
-        
-        # Check which species already exist
+
+        # Check which species already exist in current analysis
         existing_species = []
+        species_to_process = []
+
         for species in species_list:
             safe_species = species.replace(' ', '_').replace('/', '_')
             fasta_file = gene_dir / f"{safe_species}.fasta"
+
             if fasta_file.exists() and fasta_file.stat().st_size > 0:
                 existing_species.append(species)
-        
-        # Filter out existing species
-        species_to_download = [s for s in species_list if s not in existing_species]
+            else:
+                # Check if sequence exists in other analyses
+                existing_file = find_existing_sequences_in_other_analyses(
+                    gene_name, species, base_protein_dir, analysis_paramset
+                )
+
+                if existing_file:
+                    # Copy from other analysis
+                    import shutil
+                    shutil.copy2(existing_file, fasta_file)
+                    existing_species.append(species)
+                    total_copied_from_other_analyses += 1
+                    logging.debug(f"Copied {species} from {existing_file.parent.parent.name}")
+                else:
+                    species_to_process.append(species)
+
+        # Filter species that need downloading or cross-analysis lookup
+        species_to_download = species_to_process
         
         if species_to_download:
             logging.info(f"\n=== Processing Gene {gene_idx}/{total_genes}: {gene_name} ===")
@@ -281,10 +352,59 @@ def download_proteins_shared(gene_species_mapping, gene_aliases, ncbi_credential
                 is_cached = False
                 logging.info(f"  Downloading {species} ({species_idx}/{len(species_to_download)}) - NEW LOOKUP")
                 
-                # Search for sequence with caching (primary gene name)
-                seq_data = downloader.search_uniprot_cached(gene_name, species)
+                # Handle "spp." entries by searching for representative species
+                if "spp." in species:
+                    genus = species.replace(" spp.", "").strip()
+                    logging.info(f"    Searching for representative {genus} species...")
+
+                    # Try common representative species for this genus
+                    representative_species = [
+                        f"{genus} sp.",
+                        f"{genus} species",
+                    ]
+
+                    # Add genus-specific representatives
+                    genus_representatives = {
+                        "Acinetobacter": ["Acinetobacter baumannii", "Acinetobacter pittii"],
+                        "Klebsiella": ["Klebsiella pneumoniae", "Klebsiella oxytoca"],
+                        "Pseudomonas": ["Pseudomonas aeruginosa", "Pseudomonas fluorescens"],
+                        "Serratia": ["Serratia marcescens"],
+                        "Lactobacillus": ["Lactobacillus plantarum", "Lactobacillus acidophilus"],
+                        "Microbacterium": ["Microbacterium lacticum"],
+                        "Arthrobacter": ["Arthrobacter sp."],
+                    }
+
+                    if genus in genus_representatives:
+                        representative_species.extend(genus_representatives[genus])
+
+                    # Try each representative species
+                    for rep_species in representative_species:
+                        seq_data = downloader.search_uniprot_cached(gene_name, rep_species)
+                        if seq_data:
+                            logging.info(f"    ✓ Found via representative species: {rep_species}")
+                            break
+                else:
+                    # Search for exact species name with caching
+                    seq_data = downloader.search_uniprot_cached(gene_name, species)
+
+                # If found, also update cache in other analysis caches to maintain cross-analysis consistency
+                if seq_data:
+                    # Update caches in other analyses for future cross-analysis copying
+                    for other_analysis_dir in base_protein_dir.iterdir():
+                        if other_analysis_dir.is_dir() and other_analysis_dir.name != analysis_paramset:
+                            other_cache_file = f"cache/protein_sequences/{other_analysis_dir.name}/protein_fasta_cache.json"
+                            if Path(other_cache_file).exists():
+                                # Load other cache and update with this sequence
+                                try:
+                                    other_cache = CachedProteinDownloader(analysis=other_analysis_dir.name.split('_')[0],
+                                                                        paramset=other_analysis_dir.name.split('_')[1])
+                                    other_cache.cache.cache_sequence(gene_name, species, seq_data, "uniprot")
+                                    other_cache.finalize()
+                                except Exception as e:
+                                    logging.debug(f"Could not update cache for {other_analysis_dir.name}: {e}")
+
             found_via_alias = None
-            
+
             # If primary search failed for new lookups, try aliases with bulk NCBI check first
             if not seq_data and not is_cached and gene_name in gene_aliases:
                 aliases = gene_aliases[gene_name]
@@ -358,15 +478,17 @@ def download_proteins_shared(gene_species_mapping, gene_aliases, ncbi_credential
     # Print final summary
     cache_stats = downloader.get_cache_stats()
     logging.info(f"\n=== Download Summary ===")
+    logging.info(f"Analysis-Paramset: {analysis_paramset}")
     logging.info(f"Total genes processed: {total_genes}")
     logging.info(f"Total species attempted: {total_species_attempted}")
     logging.info(f"Successful downloads: {total_successful_downloads}")
+    logging.info(f"Copied from other analyses: {total_copied_from_other_analyses}")
     logging.info(f"Cache performance:")
     logging.info(f"  Cache hits: {total_cache_hits}")
     logging.info(f"  New lookups: {total_new_lookups}")
     logging.info(f"  Cache hit rate: {(total_cache_hits / (total_cache_hits + total_new_lookups) * 100) if (total_cache_hits + total_new_lookups) > 0 else 0:.1f}%")
-    logging.info(f"  API calls made: {cache_stats['api_calls']}")
-    logging.info(f"Shared protein directory: {shared_protein_dir}")
+    logging.info(f"Analysis-specific protein directory: {analysis_protein_dir}")
+    logging.info(f"Analysis-specific cache file: {downloader.cache.cache_file}")
 
 def main():
     """Main function for Snakemake integration"""

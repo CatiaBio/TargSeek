@@ -1,15 +1,18 @@
 # Snakefile_download
 # ------------------------------------------------------
-# TargSeek Data Download Workflow
-# 
-# This pipeline downloads BacDive metadata, classifies species by Gram stain,
-# fetches QuickGO annotations, selects important proteins, downloads protein sequences,
-# and downloads 3D structures.
+# TargSeek Data Download Workflow - Stage-Based Organization
+#
+# This pipeline downloads data in 4 organized stages:
+# Stage 1: Species Classification & BLAST Databases
+# Stage 2: Gene Discovery & Annotation
+# Stage 3: Protein Selection & Coverage Analysis
+# Stage 4: Sequence & Structure Downloads
 #
 # Configuration: config/config_download.yaml
 # Usage Guide: USAGE_DOWNLOAD.txt
-# 
+#
 # Quick Start: snakemake -s Snakefile_download all_download_data --cores 4
+# Stage-specific: snakemake -s Snakefile_download stage1_species_classification --cores 4
 # ------------------------------------------------------
 
 # Load configuration
@@ -20,48 +23,114 @@ wildcard_constraints:
     analysis="analysis[0-9]+",
     paramset="params[0-9]+"
 
-# Download rules - comprehensive data collection target
-rule all_download_data:
+
+# =============================================================================
+# TARGET RULES - Stage-Based Organization
+# =============================================================================
+
+# Stage-specific target rules
+rule stage1_species_classification:
     input:
         # BLAST databases (independent of analysis/paramset)
         config["paths"]["blast_databases"]["download_sentinel"],
+        # Species classification
         expand(
-            [
-                config["paths"]["bacdive"]["updated_gram_classification"],
-                config["paths"]["bacdive"]["gram_positive"],
-                config["paths"]["bacdive"]["gram_negative"],
-                config["paths"]["gene_selection"]["genes_species_dir"],
-                config["paths"]["protein_sequences"]["download_sentinel"],
-                config["paths"]["protein_structures"]["download_sentinel"]
-            ],
+            [config["paths"]["bacdive"]["updated_gram_classification"],
+             config["paths"]["bacdive"]["gram_positive"],
+             config["paths"]["bacdive"]["gram_negative"]],
+            analysis=config["species_batches"]
+        )
+
+rule stage2_gene_discovery:
+    input:
+        # Gene discovery and GO annotation
+        expand(
+            [config["paths"]["quickgo"]["proteins_to_test"]],
+            paramset=config["quickgo_paramsets"]
+        )
+
+rule stage3_protein_selection:
+    input:
+        # Coverage analysis and protein selection
+        expand(
+            [config["paths"]["gene_selection"]["coverage_count"],
+             config["paths"]["gene_selection"]["summary"]],
+            analysis=config["species_batches"],
+            paramset=config["quickgo_paramsets"]
+        ),
+        expand(
+            [config["paths"]["gene_selection"]["genes_species_dir"]],
             analysis=config["species_batches"],
             paramset=config["quickgo_paramsets"],
             group=["positive", "negative"]
-        ) + expand(
-            [
-                config["paths"]["quickgo"]["proteins_to_test"]
-            ],
-            paramset=config["quickgo_paramsets"]
-        ) + expand(
-            [
-                config["paths"]["gene_selection"]["coverage_count"],
-                config["paths"]["gene_selection"]["summary"]
-            ],
+        )
+
+rule stage4_downloads:
+    input:
+        # Protein sequences and 3D structure downloads
+        expand(
+            [config["paths"]["protein_sequences"]["download_sentinel"]],
             analysis=config["species_batches"],
-            paramset=config["quickgo_paramsets"]
-        ) + expand(
-            [
-                config["paths"]["protein_structures"]["metadata_tsv"],
-                config["paths"]["protein_structures"]["pdb_numbering_sentinel"],
-                config["paths"]["gene_selection"]["download_report"],
-                config["paths"]["protein_structures"]["chains_complete_sentinel"],
-                config["paths"]["protein_structures"]["fasta_structure_mapping_final"]
-            ],
+            paramset=config["quickgo_paramsets"],
+            group=["positive", "negative"]
+        ),
+        expand(
+            [config["paths"]["protein_structures"]["download_sentinel"],
+             config["paths"]["protein_structures"]["metadata_tsv"],
+             config["paths"]["protein_structures"]["chains_complete_sentinel"],
+             config["paths"]["protein_structures"]["fasta_structure_mapping_final"],
+             config["paths"]["gene_selection"]["download_report"]],
             analysis=config["species_batches"],
             paramset=config["quickgo_paramsets"]
         )
 
-# Partial pipeline targets - useful for testing and debugging individual stages
+# Complete download pipeline - all 4 stages
+rule all_download_data:
+    input:
+        # Stage 1: Species classification and BLAST databases
+        config["paths"]["blast_databases"]["download_sentinel"],
+        expand(
+            [config["paths"]["bacdive"]["updated_gram_classification"],
+             config["paths"]["bacdive"]["gram_positive"],
+             config["paths"]["bacdive"]["gram_negative"]],
+            analysis=config["species_batches"]
+        ),
+        # Stage 2: Gene discovery and GO annotation
+        expand(
+            [config["paths"]["quickgo"]["proteins_to_test"]],
+            paramset=config["quickgo_paramsets"]
+        ),
+        # Stage 3: Coverage analysis and protein selection
+        expand(
+            [config["paths"]["gene_selection"]["coverage_count"],
+             config["paths"]["gene_selection"]["summary"]],
+            analysis=config["species_batches"],
+            paramset=config["quickgo_paramsets"]
+        ),
+        expand(
+            [config["paths"]["gene_selection"]["genes_species_dir"]],
+            analysis=config["species_batches"],
+            paramset=config["quickgo_paramsets"],
+            group=["positive", "negative"]
+        ),
+        # Stage 4: Protein sequences and 3D structure downloads
+        expand(
+            [config["paths"]["protein_sequences"]["download_sentinel"]],
+            analysis=config["species_batches"],
+            paramset=config["quickgo_paramsets"],
+            group=["positive", "negative"]
+        ),
+        expand(
+            [config["paths"]["protein_structures"]["download_sentinel"],
+             config["paths"]["protein_structures"]["metadata_tsv"],
+             config["paths"]["protein_structures"]["chains_complete_sentinel"],
+             config["paths"]["protein_structures"]["fasta_structure_mapping_final"],
+             config["paths"]["gene_selection"]["download_report"]],
+            analysis=config["species_batches"],
+            paramset=config["quickgo_paramsets"]
+        )
+
+# Legacy target rules for backward compatibility
 rule all_species_classification:
     input:
         expand(
@@ -81,7 +150,6 @@ rule all_gene_selection:
             paramset=config["quickgo_paramsets"]
         )
 
-# BLAST databases only
 rule all_blast_databases:
     input:
         config["paths"]["blast_databases"]["download_sentinel"]
@@ -92,7 +160,7 @@ rule all_downloads:
             config["paths"]["protein_sequences"]["download_sentinel"],
             analysis=config["species_batches"],
             paramset=config["quickgo_paramsets"],
-            group=["positive", "negative"]  # Keep protein_sequences by group
+            group=["positive", "negative"]
         ),
         expand(
             config["paths"]["protein_structures"]["download_sentinel"],
@@ -100,30 +168,29 @@ rule all_downloads:
             paramset=config["quickgo_paramsets"]
         )
 
-# ---------------------
-# Download Rules
-# ---------------------
+# =============================================================================
+# STAGE-BASED DOWNLOAD RULES
+# =============================================================================
 
 # =============================================================================
-# STAGE 0: BLAST Database Downloads
+# STAGE 1: SPECIES CLASSIFICATION & BLAST DATABASES
+# =============================================================================
+# Purpose: Classify bacterial species and setup BLAST databases
+# Output: Gram-positive/negative species lists and formatted BLAST databases
 # =============================================================================
 
 # Download and format BLAST databases for epitope cross-reactivity analysis
 # Downloads selected proteomes and formats them as BLAST databases
 # Databases can be enabled/disabled in configuration for flexible setup
-rule download_blast_databases:
-    output:
-        download_log=config["paths"]["blast_databases"]["download_log"],
-        download_sentinel=config["paths"]["blast_databases"]["download_sentinel"]
-    params:
-        base_dir=config["paths"]["blast_databases"]["base_dir"]
-    priority: 50  # High priority - run this first
-    script:
-        config["scripts"]["blast_databases"]["download_databases"]
-
-# =============================================================================
-# STAGE 1: Species Classification
-# =============================================================================
+# rule download_blast_databases:
+#     output:
+#         download_log=config["paths"]["blast_databases"]["download_log"],
+#         download_sentinel=config["paths"]["blast_databases"]["download_sentinel"]
+#     params:
+#         base_dir=config["paths"]["blast_databases"]["base_dir"]
+#     priority: 50  # High priority - run this first
+#     script:
+#         config["scripts"]["blast_databases"]["download_databases"]
 
 # Classify bacterial species by Gram staining properties
 # Queries BacDive API for comprehensive Gram stain classification data
@@ -170,7 +237,14 @@ rule split_species_by_gram:
         awk -F'\t' 'NR > 1 && $2 == "positive" {{ print $1 }}' {input.gram_classification} > {output.gram_positive}
         awk -F'\t' 'NR > 1 && $2 == "negative" {{ print $1 }}' {input.gram_classification} > {output.gram_negative}
         """
-     
+
+# =============================================================================
+# STAGE 2: GENE DISCOVERY & ANNOTATION
+# =============================================================================
+# Purpose: Discover genes through GO annotations and validate assignments
+# Output: Filtered surface-accessible proteins ready for analysis
+# =============================================================================
+
 # Retrieve Gene Ontology annotations and symbols from QuickGO database
 # Downloads comprehensive GO term assignments and associated gene nomenclature
 # Filters by specified taxonomic groups and GO categories for targeted protein discovery
@@ -230,6 +304,13 @@ rule filter_quickgo_genes:
     script:
         config["scripts"]["quickgo"]["filter_quickgo_data_simplified"]
 
+# =============================================================================
+# STAGE 3: PROTEIN SELECTION & COVERAGE ANALYSIS
+# =============================================================================
+# Purpose: Analyze gene coverage and select proteins for study
+# Output: Coverage data, protein selection summaries, and gene-species lists
+# =============================================================================
+
 # Assess gene coverage across all bacterial species in unified analysis
 # Systematically queries NCBI Protein database to determine gene presence/absence
 # Uses intelligent caching and alias fallback to maximize coverage detection accuracy
@@ -250,7 +331,7 @@ rule assess_gene_taxa_coverage_unified:
         analysis="{analysis}",
         paramset="{paramset}"
     script:
-        config["scripts"]["gene_selection"]["gene_taxa_coverage_unified"] 
+        config["scripts"]["gene_selection"]["gene_taxa_coverage_unified"]
 
 # Select proteins to study based on coverage thresholds
 # Creates simple gene lists per Gram group and comprehensive summary TSV with protein details
@@ -289,6 +370,13 @@ rule create_gene_species_lists:
     group: "gram_group_{analysis}_{paramset}"
     script:
         config["scripts"]["gene_selection"]["create_gene_species_lists_from_coverage"]
+
+# =============================================================================
+# STAGE 4: SEQUENCE & STRUCTURE DOWNLOADS
+# =============================================================================
+# Purpose: Download protein sequences and 3D structures
+# Output: FASTA sequences, PDB structures, metadata, and comprehensive reports
+# =============================================================================
 
 # Download protein sequences with intelligent search strategy
 # Multi-stage approach: UniProt primary search → gene alias fallback → NCBI bulk validation

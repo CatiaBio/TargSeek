@@ -15,14 +15,14 @@
 
 # Species analysis batches - each analysis represents a different dataset
 species_batches:
-  - analysis1
-  #- analysis2
-  #- analysis3
+  #analysis1
+  analysis2
+  #analysis3
 
 # Species input files for each analysis batch
 species_files:
-  analysis1: "config/species/analysis1.txt"
-  #analysis2: "config/species/analysis2.txt"
+  #analysis1: "config/species/analysis1.txt"
+  analysis2: "config/species/analysis2.txt"
   #analysis3: "config/species/analysis3.txt"
 
 # QuickGO parameter sets - different GO term configurations
@@ -112,10 +112,10 @@ protein_selection:
   # If using top_n mode, specify maximum proteins per group
   max_proteins_per_group: 50
 
-# 3D structure download configuration - Sequence Similarity Based
+# 3D structure download configuration - All available structures
 3d_structures:
-  # Maximum number of structures to download per gene (1-50)
-  max_structures: 20
+  # Maximum number of structures to download per gene (no longer enforced - all available structures are downloaded)
+  max_structures: 20  # This parameter is kept for compatibility but ignored - ALL available structures are downloaded
   # Download computed models (AlphaFold) if insufficient experimental structures
   include_computed_models: true
   # Sequence similarity parameters for PDB search
@@ -225,19 +225,21 @@ paths:
   protein_sequences:
     # Base directory for protein FASTA files
     base_dir: "data/protein_sequences"
-    # Completion sentinel files
-    download_sentinel: "data/protein_sequences/.{analysis}_{paramset}_{group}_download_complete"
+    # Analysis-specific directory for protein sequences
+    analysis_dir: "data/protein_sequences/{analysis}_{paramset}"
+    # Completion sentinel files per analysis and group
+    download_sentinel: "data/protein_sequences/{analysis}_{paramset}/.{group}_download_complete"
 
   # -------------------------------------------------------------------------
-  # STAGE 5: 3D Structure Downloads (Enhanced with PDBML support)
+  # STAGE 5: 3D Structure Downloads (All available structures)
   # -------------------------------------------------------------------------
   protein_structures:
     # Base directory for gene-specific FASTA files
     # Each gene directory contains:
-    #   - .fasta files (protein sequences from PDB/UniProt)
+    #   - .fasta files (protein sequences from PDB/UniProt for ALL available structures)
     #   - metadata.json (structure metadata)
     base_dir: "data/protein_structures"
-    # Shared directory for 3D structure files (PDB, mmCIF)
+    # Shared directory for 3D structure files (PDB, mmCIF) - ALL available structures are downloaded
     structures_dir: "data/protein_structures/pdb_files"
     # Completion sentinel files (unified, inside protein_structures folder)
     download_sentinel: "data/protein_structures/{analysis}_{paramset}_structures_complete.sentinel"
@@ -320,7 +322,7 @@ scripts:
   # STAGE 4 & 5: Download Scripts
   # -------------------------------------------------------------------------
   downloads:
-    download_protein_sequences: "scripts/gene_selection/download_protein_sequences.py"
+    download_protein_sequences: "scripts/gene_selection/download_protein_sequences_uniprot.py"
     download_protein_structures: "scripts/gene_selection/download_structures_by_similarity.py"
     extract_protein_structures_metadata: "scripts/gene_selection/extract_protein_structures_metadata.py"
     extract_pdb_numbering: "scripts/gene_selection/extract_pdb_numbering.py"

@@ -66,9 +66,8 @@ cache_backup_*/
 # ------------------------------------------------------------------------------
 # EXTERNAL TOOLS AND DEPENDENCIES
 # ------------------------------------------------------------------------------
-# Large tools and external dependencies
+# All external tools (never commit binaries or large dependencies)
 tools/
-!tools/.gitkeep
 
 # BepiPred 3.0 installation files
 tools/BepiPred3.0/
@@ -78,38 +77,49 @@ tools/bepipred/
 tools/alistat/
 tools/AliStat/
 
+# ConSurf and other bioinformatics tools
+tools/stand_alone_consurf/
+tools/dssp/
+tools/rate4site*/
+tools/jmodeltest*/
+tools/prank*/
+
+# Tool installation archives
+tools/*.zip
+tools/*.tar.gz
+tools/*.deb
+
 # ------------------------------------------------------------------------------
 # DEVELOPMENT AND TESTING FILES
 # ------------------------------------------------------------------------------
-# Archive and backup folders
-archive/logs/
-archive/temp/
-archive/temp_files/
-archive/backups/
-scripts_test/
+# Archive and backup folders (ignore all except tracked Snakefiles)
+archive/
+!archive/Snakefile*
 
-# Test pipeline files and directories
-Snakefile_analysis_test
-scripts/protein_analysis_test/
-results/*/protein_analysis_test/
-
-# Archived unused scripts (not part of active pipeline)
-scripts/archive_unused/
+# Utils directory - development/testing scripts (not part of pipeline)
+utils/
 
 # User-specific configurations and custom files
 custom/
 personal/
 
-# Temporary and test files
+# Temporary and test files in root
 *_original*
 *_backup*
 *_test*
 *_debug*
 *_temp*
 *.log
-debug_*.py
-test_*.py
 *.tmp
+
+# Test pipeline files and directories
+Snakefile_analysis_test
+scripts/protein_analysis_test/
+results/*/protein_analysis_test/
+scripts_test/
+
+# Note: scripts/archived_unused/ is currently tracked in git for historical reference
+# These are deprecated scripts not part of the active pipeline
 
 # Specific test patterns
 analysis_*.tsv
@@ -170,7 +180,9 @@ Snakefile_test
 # ------------------------------------------------------------------------------
 # DOCUMENTATION AND REPORTS
 # ------------------------------------------------------------------------------
-# Generated documentation
+# Generated documentation and temporary docs
+docs/
+!docs/.gitkeep
 docs/_build/
 docs/build/
 site/

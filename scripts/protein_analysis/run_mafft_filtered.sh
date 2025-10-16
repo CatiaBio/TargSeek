@@ -76,15 +76,17 @@ while IFS= read -r gene; do
     
     echo "Processing gene $gene ($PROCESSED/$TOTAL_GENES)..."
     
-    # Run MAFFT alignment (redirect stderr to /dev/null to avoid mixing diagnostic output)
-    if mafft --auto "$INPUT_FASTA" > "$OUTPUT_FASTA" 2>/dev/null; then
+    # Run MAFFT alignment (handle WSL2 stderr issue)
+    TEMP_OUTPUT=$(mktemp)
+    if mafft --auto "$INPUT_FASTA" > "$TEMP_OUTPUT" 2>&1; then
+        mv "$TEMP_OUTPUT" "$OUTPUT_FASTA"
         echo "  ✓ Successfully aligned $gene"
         ((SUCCESSFUL++))
     else
         echo "  ✗ Failed to align $gene"
         ((FAILED++))
-        # Remove failed output file
-        rm -f "$OUTPUT_FASTA"
+        # Remove failed output files
+        rm -f "$OUTPUT_FASTA" "$TEMP_OUTPUT"
     fi
     
 done < "$GENE_LIST"

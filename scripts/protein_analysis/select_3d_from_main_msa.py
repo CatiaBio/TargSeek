@@ -215,11 +215,72 @@ def calculate_coverage_score(aligned_sequences: dict, structure_id: str) -> floa
     coverage_score = covered_positions / total_structure_positions
     return coverage_score
 
+def check_manual_override(gene_name: str, structure_dir: Path, manual_overrides: dict) -> list:
+    """Check if there's a manual override for this gene and return the structure info if found"""
+    if not manual_overrides or gene_name not in manual_overrides:
+        return []
+
+    override_filename = manual_overrides[gene_name]
+    override_path = structure_dir / override_filename
+
+    if not override_path.exists():
+        logging.warning(f"Manual override file not found for {gene_name}: {override_path}")
+        return []
+
+    logging.info(f"  Using manual override: {override_filename}")
+
+    try:
+        # Load the manually specified structure
+        sequences = list(SeqIO.parse(override_path, "fasta"))
+        if not sequences:
+            logging.warning(f"Manual override file is empty: {override_path}")
+            return []
+
+        # Use the first sequence in the file
+        structure_seq = sequences[0]
+
+        # Extract metadata
+        pdb_id = override_filename.replace('.fasta', '').split('_')[0]
+        organism = getattr(structure_seq, 'description', 'Unknown').split(' ')[0:2]
+        organism_name = ' '.join(organism) if len(organism) >= 2 else 'Unknown'
+
+        structure_info = {
+            'gene': gene_name,
+            'pdb': pdb_id,
+            'chain': '',  # Could be extracted from description if available
+            'bacteria': organism_name,
+            'length_score': 1.0,  # Manual selection gets perfect scores
+            'similarity_score': 1.0,
+            'coverage_score': 1.0,
+            'combined_score': 1.0,
+            'consensus_similarity': 1.0,
+            'total_score': 1.0,
+            'structure_length': len(str(structure_seq.seq).replace('-', '')),
+            'msa_avg_length': 0,  # Not calculated for manual overrides
+            'file_name': override_filename,
+            'file_path': str(override_path),
+            'selection_method': 'manual_override'
+        }
+
+        logging.info(f"  Manual override structure: {pdb_id} (length: {structure_info['structure_length']} aa)")
+        return [structure_info]
+
+    except Exception as e:
+        logging.error(f"Error loading manual override for {gene_name}: {e}")
+        return []
+
 def select_best_3d_structure(gene_name: str, main_msa_dir: Path, structure_dir: Path,
                            similarity_method: str, min_similarity_score: float,
                            max_structures: int = 1, scoring_weights: dict = None,
-                           enable_prefilter: bool = False, max_length_deviation: float = 0.5) -> list:
+                           enable_prefilter: bool = False, max_length_deviation: float = 0.5,
+                           manual_overrides: dict = None) -> list:
     """Select the best 3D structure for a gene based on similarity to main MSA"""
+
+    # Step 0: Check for manual override first
+    if manual_overrides:
+        override_result = check_manual_override(gene_name, structure_dir, manual_overrides)
+        if override_result:
+            return override_result
 
     # Default scoring weights if not provided
     if scoring_weights is None:
@@ -394,10 +455,11 @@ def main():
         enable_prefilter = length_config.get('enable_prefilter', False)
         max_length_deviation = length_config.get('max_length_deviation', 0.5)
 
+        # Get manual overrides from config
+        manual_overrides = snakemake.config.get('structure_selection', {}).get('manual_overrides', {})
+
         # Set random seed for deterministic structure selection
         random_seed = snakemake.config.get('structure_selection', {}).get('random_seed', 42)
-        random.seed(random_seed)
-        logging.info(f"Random seed set to: {random_seed}")
 
         # Structure directory path
         structure_base_dir = Path("data/protein_structures")
@@ -417,6 +479,17 @@ def main():
         max_structures = 1
         structure_base_dir = Path("data/protein_structures")
 
+        # Default values for standalone testing
+        scoring_weights = {'length': 0.5, 'similarity': 0.3, 'coverage': 0.2}
+        enable_prefilter = False
+        max_length_deviation = 0.5
+        manual_overrides = {'bamA': '5OR1_1.fasta'}  # Test manual override
+        random_seed = 42
+
+    # Set random seed for deterministic structure selection
+    random.seed(random_seed)
+    logging.info(f"Random seed set to: {random_seed}")
+
     logging.info("=== 3D Structure Selection from Main MSA (STAGE 2) ===")
     logging.info(f"Reference directory: {reference_dir}")
     logging.info(f"Main MSA directory: {main_msa_dir}")
@@ -430,6 +503,14 @@ def main():
         logging.info(f"Max length deviation: {max_length_deviation:.1%}")
     logging.info(f"Min combined score threshold: {min_similarity_score}")
     logging.info(f"Max structures per gene: {max_structures}")
+
+    # Report manual overrides
+    if manual_overrides:
+        logging.info(f"Manual overrides configured: {len(manual_overrides)} genes")
+        for gene, filename in manual_overrides.items():
+            logging.info(f"  {gene}: {filename}")
+    else:
+        logging.info("Manual overrides: None configured")
 
     # Create output directories
     selected_3d_paths.parent.mkdir(parents=True, exist_ok=True)
@@ -452,7 +533,7 @@ def main():
         selected_structures = select_best_3d_structure(
             gene_name, main_msa_dir, structure_dir,
             "length_similarity_coverage", min_similarity_score, max_structures,
-            scoring_weights, enable_prefilter, max_length_deviation
+            scoring_weights, enable_prefilter, max_length_deviation, manual_overrides
         )
 
         if selected_structures:

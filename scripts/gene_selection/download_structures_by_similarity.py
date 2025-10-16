@@ -219,43 +219,25 @@ class SequenceSimilarityStructureDownloader:
         return None
     
     def search_similar_structures(self, gene_name, sequence, max_structures=20, identity_cutoff=0.3, evalue_cutoff=0.1, experimental_only=False):
-        """Search for similar structures using PDB REST API"""
+        """Search for all similar structures using PDB REST API (max_structures parameter kept for compatibility but not used to limit results)"""
         search_type = "experimental only" if experimental_only else "experimental and computational"
         logging.info(f"Searching PDB for {search_type} structures similar to {gene_name} (identity >{identity_cutoff*100}%)")
         
         # PDB search API endpoint
         pdb_url = "https://search.rcsb.org/rcsbsearch/v2/query"
         
-        # Use the working PDB API query format (based on user-provided example)
+        # Use sequence similarity as primary search - proven to work with experimental structures
+        # Gene name filtering via combined AND search was too restrictive and filtered out experimental structures
         search_query = {
             "query": {
-                "type": "group",
-                "nodes": [
-                    {
-                        "type": "group",
-                        "nodes": [
-                            {
-                                "type": "terminal",
-                                "service": "full_text",
-                                "parameters": {
-                                    "value": gene_name
-                                }
-                            }
-                        ],
-                        "logical_operator": "and"
-                    },
-                    {
-                        "type": "terminal",
-                        "service": "sequence",
-                        "parameters": {
-                            "evalue_cutoff": evalue_cutoff,
-                            "identity_cutoff": identity_cutoff,
-                            "sequence_type": "protein",
-                            "value": str(sequence.seq)
-                        }
-                    }
-                ],
-                "logical_operator": "and"
+                "type": "terminal",
+                "service": "sequence",
+                "parameters": {
+                    "evalue_cutoff": evalue_cutoff,
+                    "identity_cutoff": identity_cutoff,
+                    "sequence_type": "protein",
+                    "value": str(sequence.seq)
+                }
             },
             "return_type": "entry",
             "request_options": {
@@ -267,7 +249,7 @@ class SequenceSimilarityStructureDownloader:
                 ],
                 "paginate": {
                     "start": 0,
-                    "rows": 25
+                    "rows": 200
                 },
                 "sort": [
                     {
@@ -403,13 +385,13 @@ class SequenceSimilarityStructureDownloader:
             logging.info(f"Found {len(experimental_structures)} experimental and {len(alphafold_structures)} AlphaFold structures")
             
             if experimental_structures:
-                # Use only experimental structures if any are available
-                similar_structures = experimental_structures[:max_structures]
-                logging.info(f"Using {len(similar_structures)} experimental structures (ignoring {len(alphafold_structures)} AlphaFold)")
+                # Use all experimental structures if any are available
+                similar_structures = experimental_structures  # Remove [:max_structures] to get ALL structures
+                logging.info(f"Using all {len(similar_structures)} experimental structures (ignoring {len(alphafold_structures)} AlphaFold)")
             else:
-                # Use AlphaFold structures only if no experimental structures found
-                similar_structures = alphafold_structures[:max_structures]
-                logging.info(f"No experimental structures found, using {len(similar_structures)} AlphaFold structures")
+                # Use all AlphaFold structures if no experimental structures found
+                similar_structures = alphafold_structures  # Remove [:max_structures] to get ALL structures
+                logging.info(f"No experimental structures found, using all {len(similar_structures)} AlphaFold structures")
             
             # Sort by score (descending)
             similar_structures.sort(key=lambda x: x['score'], reverse=True)
@@ -777,9 +759,9 @@ class SequenceSimilarityStructureDownloader:
             logging.debug(f"Error reading {fasta_file}: {e}")
         return None
     
-    def download_structures_for_gene_with_fallback(self, gene_name, max_structures=20, include_alphafold=True, 
+    def download_structures_for_gene_with_fallback(self, gene_name, max_structures=20, include_alphafold=True,
                                                  identity_cutoff=0.3, evalue_cutoff=0.1, min_experimental=5):
-        """Download structures for a gene using two-phase approach: experimental first, then computational"""
+        """Download all available structures for a gene using two-phase approach: experimental first, then computational"""
         logging.info(f"Starting structure download for gene: {gene_name}")
         
         gene_dir = self.sequences_dir / gene_name
@@ -873,9 +855,9 @@ class SequenceSimilarityStructureDownloader:
         
         return None
     
-    def download_structures_for_gene(self, gene_name, max_structures=20, include_alphafold=True, 
+    def download_structures_for_gene(self, gene_name, max_structures=20, include_alphafold=True,
                                    identity_cutoff=0.3, evalue_cutoff=0.1, min_experimental=5):
-        """Main function to download structures for a gene (uses fallback method)"""
+        """Main function to download all available structures for a gene"""
         return self.download_structures_for_gene_with_fallback(
             gene_name, max_structures, include_alphafold, 
             identity_cutoff, evalue_cutoff, min_experimental
@@ -896,10 +878,10 @@ class SequenceSimilarityStructureDownloader:
         # Download structures (both experimental and AlphaFold from PDB search)
         if similar_structures:
             logging.info(f"Downloading {len(similar_structures)} structures from PDB search...")
-            
+
             with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
                 future_to_struct = {}
-                
+
                 for struct in similar_structures:
                     if struct['type'] == 'experimental':
                         # Download structure to central directory
@@ -911,7 +893,7 @@ class SequenceSimilarityStructureDownloader:
                         download_func = partial(self.download_alphafold_structure, structures_dir=self.structures_dir)
                         future = executor.submit(download_func, struct['alphafold_id'])
                         future_to_struct[future] = struct
-                
+
                 for future in concurrent.futures.as_completed(future_to_struct):
                     struct = future_to_struct[future]
                     try:
@@ -989,10 +971,10 @@ class SequenceSimilarityStructureDownloader:
             "metadata": metadata
         }
 
-def download_all_genes_from_summary(summary_file, output_base_dir, structures_dir, 
-                                  max_structures=20, identity_cutoff=0.3, evalue_cutoff=0.1, 
+def download_all_genes_from_summary(summary_file, output_base_dir, structures_dir,
+                                  max_structures=20, identity_cutoff=0.3, evalue_cutoff=0.1,
                                   min_experimental=5, include_alphafold=True):
-    """Download structures for all genes in summary file (Snakemake integration)"""
+    """Download all available structures for all genes in summary file"""
     import pandas as pd
     
     # Read summary file to get list of genes

@@ -117,16 +117,31 @@ def run_deeptmhmm_per_gene(sequences: Dict[str, Dict[str, str]], base_output_dir
         for gene, gene_sequences in genes.items():
             gene_output_dir = os.path.join(base_output_dir, f"gram_{group}", gene)
             os.makedirs(gene_output_dir, exist_ok=True)
-            
+
+            # Check if topology analysis was already completed successfully
+            success_file = os.path.join(gene_output_dir, "topology_success.txt")
+            existing_output_files = [f for f in os.listdir(gene_output_dir) if f.endswith(('.gff3', '.3line', '.png'))]
+
+            # Also check biolib_results subdirectory for existing files
+            biolib_results_dir = os.path.join(gene_output_dir, "biolib_results")
+            if os.path.exists(biolib_results_dir):
+                biolib_files = [f for f in os.listdir(biolib_results_dir) if f.endswith(('.gff3', '.3line', '.png'))]
+                existing_output_files.extend(biolib_files)
+
+            if os.path.exists(success_file) and existing_output_files:
+                logger.info(f"Topology analysis already completed for {gene} (gram_{group}), skipping...")
+                results[f"{group}_{gene}"] = True
+                continue
+
             logger.info(f"Running DeepTMHMM for {gene} (gram_{group})...")
-            
+
             # Create FASTA file for this gene
             gene_fasta = os.path.join(gene_output_dir, f"{gene}_topology_input.fasta")
-            
+
             with open(gene_fasta, 'w') as f:
                 for seq_id, seq_info in gene_sequences.items():
                     f.write(f">{seq_id}\n{seq_info['sequence']}\n")
-            
+
             # Run DeepTMHMM for this gene
             success = run_deeptmhmm_biolib_single(gene_fasta, gene_output_dir, gene)
             results[f"{group}_{gene}"] = success
@@ -166,8 +181,24 @@ def run_deeptmhmm_biolib_single(input_fasta: str, output_dir: str, gene_name: st
             logger.info(f"DeepTMHMM completed successfully for {gene_name}")
             logger.info(f"DeepTMHMM stdout: {result.stdout[:200]}...")  # Show first 200 chars
             
-            # Check if output files were created
+            # Check if output files were created (in main directory or biolib_results subdirectory)
             output_files = [f for f in os.listdir(output_dir) if f.endswith(('.gff3', '.3line', '.png'))]
+
+            # Also check biolib_results subdirectory
+            biolib_results_dir = os.path.join(output_dir, "biolib_results")
+            if os.path.exists(biolib_results_dir):
+                biolib_files = [f for f in os.listdir(biolib_results_dir) if f.endswith(('.gff3', '.3line', '.png'))]
+                if biolib_files:
+                    logger.info(f"Found DeepTMHMM output files in biolib_results for {gene_name}: {biolib_files}")
+                    # Move files from biolib_results to main directory for easier parsing
+                    for file_name in biolib_files:
+                        src = os.path.join(biolib_results_dir, file_name)
+                        dst = os.path.join(output_dir, file_name)
+                        import shutil
+                        shutil.copy2(src, dst)
+                        logger.info(f"Copied {file_name} to main directory")
+                    output_files.extend(biolib_files)
+
             if output_files:
                 logger.info(f"DeepTMHMM output files for {gene_name}: {output_files}")
                 return True

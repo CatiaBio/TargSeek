@@ -16,8 +16,8 @@
 
 # Analysis batches - should match those used in download pipeline
 species_batches:
-  - analysis1
-  #- analysis2
+  # analysis1
+  analysis2
   #- analysis3
 
 # QuickGO parameter sets - should match those used in download pipeline
@@ -66,6 +66,14 @@ structure_selection:
   similarity_method: "local_alignment"
   # Random seed for deterministic structure selection (set to null for random behavior)
   random_seed: 42
+
+  # Manual structure overrides - specify exact FASTA files to use for specific genes
+  # If a gene is listed here, it will use the specified file instead of automatic selection
+  # Format: gene_name: "filename.fasta" (relative to data/protein_structures/gene_name/)
+  manual_overrides:
+    bamA: "6QGX_1.fasta"  # Manual selection for bamA
+    # Example: tolC: "1EK9_A.fasta"
+    # Add your manual selections here as needed
 
   # Combined scoring weights (must sum to 1.0)
   scoring_weights:
@@ -145,7 +153,7 @@ conservation:
 # ConSurf analysis configuration
 consurf:
   # Path to ConSurf standalone script
-  script_path: "/home/catia/tools/ConSurf-StandAlone/stand_alone_consurf-1.00/stand_alone_consurf.py"
+  script_path: "/home/catia/Projects/TargSeek/tools/stand_alone_consurf/stand_alone_consurf.py"
   # Enable ConSurf analysis (set to false to skip)
   enabled: true
 
@@ -170,6 +178,8 @@ bepipred:
   top_percentage: 0.5
   # Raw only mode: skip HTML visualizations and extra files for faster processing
   raw_only: true
+  # Enable/disable BepiPred predictions
+  enabled: true
 
 # Topology prediction configuration
 topology:

@@ -76,10 +76,10 @@ class BepiPredPredictor:
                 fasta_unix = str(fasta_file_abs).replace('\\', '/').replace('C:/', '/mnt/c/')
                 output_unix = str(output_dir_abs).replace('\\', '/').replace('C:/', '/mnt/c/')
                 
-                # Use BepiPred virtual environment (simpler and more reliable)
+                # Use direct Python installation (BepiPred dependencies are already installed)
                 cmd = [
                     "bash", "-c",
-                    f"source /home/catia/tools/miniconda3/etc/profile.d/conda.sh && conda activate bepipred && cd '{bepipred_unix}' && python bepipred3_CLI.py -i '{fasta_unix}' -o '{output_unix}' -pred {self.method} -top {self.top_percentage}"
+                    f"cd '{bepipred_unix}' && python bepipred3_CLI.py -i '{fasta_unix}' -o '{output_unix}' -pred {self.method} -top {self.top_percentage}"
                 ]
                 
                 logging.info(f"Running BepiPred from directory: {bepipred_dir}")

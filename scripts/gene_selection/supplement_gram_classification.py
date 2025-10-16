@@ -111,48 +111,115 @@ def save_bacdive_cache(cache_data):
 cache = load_bacdive_cache()
 print(f"Loaded BacDive cache with {len(cache)} entries for updating")
 
+# --- Known gram-negative genera (expanded from analysis1 data) ---
+KNOWN_GRAM_NEGATIVE_GENERA = {
+    'achromobacter', 'acidovorax', 'acinetobacter', 'aeromonas', 'afipia', 'agrobacterium',
+    'alcanivorax', 'aliiglaciecola', 'alishewanella', 'alteromonas', 'aquabacterium',
+    'atlantibacter', 'aureimonas', 'azorhizobium', 'azospira', 'azospirillum',
+    'bacteroides', 'bibersteinia', 'bosea', 'brachymonas', 'bradyrhizobium',
+    'brevundimonas', 'burkholderia', 'campylobacter', 'cardiobacterium', 'cedecea',
+    'chryseobacterium', 'citrobacter', 'comamonas', 'cronobacter', 'cupriavidus', 'curvibacter',
+    'delftia', 'dickeya', 'elizabethkingia', 'empedobacter', 'enterobacter',
+    'erwinia', 'erythrobacter', 'escherichia', 'franconibacter', 'fusobacterium',
+    'gallaecimonas', 'haematobacter', 'haemophilus', 'hydrogenophaga', 'hyphomicrobium',
+    'klebsiella', 'kluyvera', 'kosakonia', 'leclercia', 'luteimonas',
+    'mangrovibacter', 'mannheimia', 'massilia', 'mesorhizobium', 'methylobacterium',
+    'methylophaga', 'methylorubrum', 'microvirga', 'moraxella', 'morganella',
+    'nitratireductor', 'obesumbacterium', 'ornithobacterium', 'pannonibacter', 'pantoea',
+    'paraburkholderia', 'paracoccus', 'paraglaciecola', 'pelomonas', 'pluralibacter', 'porphyromonas',
+    'prevotella', 'proteus', 'pseudescherichia', 'pseudochrobactrum', 'pseudomonas',
+    'pseudopedobacter', 'psychrobacter', 'rahnella', 'ralstonia', 'rheinheimera',
+    'rouxiella', 'salmonella', 'selenomonas', 'serratia', 'shewanella',
+    'shigella', 'shinella', 'siccibacter', 'skermanella', 'sphingobacterium', 'sphingomonas',
+    'spongiibacter', 'stenotrophomonas', 'tepidimonas', 'thauera', 'thermus',
+    'veillonella', 'vibrio', 'weeksella', 'xanthomonas', 'yokenella'
+}
+
+# --- Known gram-positive genera (expanded from analysis1 data) ---
+KNOWN_GRAM_POSITIVE_GENERA = {
+    'actinomyces', 'actinopolyspora', 'aerococcus', 'arthrobacter', 'bacillus',
+    'bavariicoccus', 'bifidobacterium', 'brachybacterium', 'catellicoccus', 'clostridium',
+    'corynebacterium', 'curtobacterium', 'cutibacterium', 'deinococcus', 'dermacoccus',
+    'dolosigranulum', 'enterococcus', 'frigoribacterium', 'gemella', 'geobacillus',
+    'janibacter', 'jeotgalicoccus', 'knoellia', 'kocuria', 'kytococcus',
+    'lactobacillus', 'lactococcus', 'leifsonia', 'leucobacter', 'leuconostoc', 'listeria',
+    'marinococcus', 'microbacterium', 'micrococcus', 'micromonospora', 'mycobacterium',
+    'neisseria', 'paenarthrobacter', 'paenibacillus', 'peptoniphilus', 'psychromicrobium',
+    'rothia', 'staphylococcus', 'streptococcus', 'streptomyces', 'terrabacter',
+    'tessaracoccus', 'trueperella', 'weissella'
+}
+
+# --- All conflicting genera have been resolved and moved to their respective known lists above ---
+
 # --- Only do genus-based search for truly missing species ---
 genus_cache = {}
 updated_gram_data = existing_gram_data.copy()
 
 for species in truly_missing:
-    genus = species.split()[0]
-    try:
-        if genus in genus_cache:
-            records = genus_cache[genus]
-        else:
-            client.search(taxonomy=genus)
-            records = list(client.retrieve())
-            genus_cache[genus] = records
+    genus = species.split()[0].lower()
 
-        strain_grams = set()
+    # Check known genera first (prevents BacDive misclassifications)
+    if genus in KNOWN_GRAM_NEGATIVE_GENERA:
+        gram_result = "negative"
+        updated_gram_data[species] = gram_result
+        print(f"✓ {species} classified as negative (known gram-negative genus: {genus})")
+    elif genus in KNOWN_GRAM_POSITIVE_GENERA:
+        gram_result = "positive"
+        updated_gram_data[species] = gram_result
+        print(f"✓ {species} classified as positive (known gram-positive genus: {genus})")
+    else:
+        # Fall back to BacDive genus search for unknown genera
+        try:
+            if genus in genus_cache:
+                records = genus_cache[genus]
+            else:
+                client.search(taxonomy=genus)
+                records = list(client.retrieve())
+                genus_cache[genus] = records
 
-        def recurse(obj):
-            if isinstance(obj, dict):
-                for k, v in obj.items():
-                    if k.lower() == "gram stain":
-                        if isinstance(v, str):
-                            strain_grams.add(v.lower())
-                        elif isinstance(v, list):
-                            strain_grams.update(x.lower() for x in v if isinstance(x, str))
-                    else:
-                        recurse(v)
-            elif isinstance(obj, list):
-                for item in obj:
-                    recurse(item)
+            strain_grams = set()
 
-        for record in records:
-            recurse(record)
+            def recurse(obj):
+                if isinstance(obj, dict):
+                    for k, v in obj.items():
+                        if k.lower() == "gram stain":
+                            if isinstance(v, str):
+                                strain_grams.add(v.lower())
+                            elif isinstance(v, list):
+                                strain_grams.update(x.lower() for x in v if isinstance(x, str))
+                        else:
+                            recurse(v)
+                elif isinstance(obj, list):
+                    for item in obj:
+                        recurse(item)
 
-        if "positive" in strain_grams:
-            gram_result = "positive"
-            updated_gram_data[species] = gram_result
-        elif "negative" in strain_grams:
-            gram_result = "negative" 
-            updated_gram_data[species] = gram_result
-        else:
+            for record in records:
+                recurse(record)
+
+            # Improved logic: prefer definitive results, avoid ambiguous data
+            positive_count = sum(1 for g in strain_grams if "positive" in g)
+            negative_count = sum(1 for g in strain_grams if "negative" in g)
+
+            if negative_count > positive_count:
+                gram_result = "negative"
+                updated_gram_data[species] = gram_result
+                print(f"✓ {species} classified as negative via BacDive (neg:{negative_count}, pos:{positive_count})")
+            elif positive_count > negative_count:
+                gram_result = "positive"
+                updated_gram_data[species] = gram_result
+                print(f"✓ {species} classified as positive via BacDive (neg:{negative_count}, pos:{positive_count})")
+            else:
+                gram_result = "unknown"
+                updated_gram_data[species] = gram_result
+                print(f"? {species} classification unclear via BacDive (neg:{negative_count}, pos:{positive_count})")
+
+        except Exception as e:
             gram_result = "unknown"
             updated_gram_data[species] = gram_result
+            print(f"✗ BacDive lookup failed for {species}: {e}")
+
+    # Update cache with classification result
+    try:
 
         # Update BacDive cache with genus-based result to prevent future lookups
         if species in cache:
