@@ -1,0 +1,6 @@
+GO_ID	Description	Category
+GO:0005576	extracellular region	cellular_component
+GO:0009279	cell outer membrane	cellular_component
+GO:0009288	bacterial-type flagellum	cellular_component
+GO:0031241	periplasmic space	cellular_component
+GO:0046930	pore complex	cellular_component

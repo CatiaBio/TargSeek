@@ -22,13 +22,16 @@
 config/login/*
 !config/login/*.example.txt
 
-# Species data files (keep only test files)
+# Species lists: track the per-analysis lists so a clone can reproduce a run
 config/species/*
-!config/species/test_*
+!config/species/*.txt
 
-# QuickGO data files (keep only test params)
+# QuickGO inputs: track the small files that define an analysis so a clone
+# can reproduce a run. Credentials stay ignored (config/login/*.txt).
 config/quickgo/*
-!config/quickgo/test_params*
+!config/quickgo/*.json
+!config/quickgo/*.tsv
+!config/quickgo/*.txt
 
 # ------------------------------------------------------------------------------
 # PIPELINE DATA AND OUTPUTS
