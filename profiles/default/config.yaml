@@ -1,0 +1,88 @@
+# TargSeek resource profile
+# =============================================================================
+# Snakemake picks this up automatically (it looks for profiles/default/), so
+# plain `snakemake -s Snakefile_analysis all_analysis` already uses it.
+#
+# The point of the memory budget: each rule declares how much RAM it needs, and
+# Snakemake will not start a set of jobs whose declared memory exceeds
+# `resources.mem_mb`. The three ESM-model tools each declare nearly the whole
+# budget, so they can never run at the same time as each other. That is the
+# "run one at a time if it needs too many resources" behaviour, enforced by the
+# scheduler rather than by remembering to be careful.
+#
+# Tuned for this machine: WSL2, 12 cores, ~7.7 GB RAM.
+# On a bigger machine raise `cores` and `resources.mem_mb` (keep the per-rule
+# values; they describe the tools, not the machine).
+# =============================================================================
+
+# Leave cores for the desktop; most download steps wait on APIs anyway
+cores: 2
+
+# One failing step (a flaky API, say) should not stop the rest of the run
+keep-going: true
+
+# Total memory the workflow may commit at once.
+# ~7.7 GB total, leaving ~2.5 GB for the OS, VS Code and the browser.
+resources:
+  mem_mb: 5000
+
+# Rules that do not say otherwise are assumed light (API calls, file shuffling)
+default-resources:
+  mem_mb: 500
+
+# Per-rule memory, in MB. These describe what each tool actually needs.
+set-resources:
+  # --- heavy: protein language models. 4500 of a 5000 budget, so only one of
+  # --- these runs at a time, with nothing else heavy beside it.
+  predict_epitopes_bepipred:
+    mem_mb: 4500          # BepiPred 3.0: ESM-2 650M
+  predict_localization_deeplocpro:
+    mem_mb: 4500          # DeepLocPro: ESM-2 650M
+  predict_epitopes_discotope:
+    mem_mb: 4500          # DiscoTope-3.0: ESM-IF1 + XGBoost
+  predict_protein_topology:
+    mem_mb: 3000          # DeepTMHMM via biolib
+
+  # --- medium
+  run_consurf_conservation_analysis:
+    mem_mb: 2000          # rate4site, one gene at a time
+  mafft_msa_filtered:
+    mem_mb: 2000          # scales with sequences per gene
+  mafft_msa_with_3d_sequence:
+    mem_mb: 2000
+  assess_gene_taxa_coverage_unified:
+    mem_mb: 2000          # loads the gene-species cache
+  classify_taxa_by_gram:
+    mem_mb: 2000          # the BacDive cache file is ~150 MB
+  blast_epitope_cross_reactivity:
+    mem_mb: 2000
+  visualize_epitopes_pymol:
+    mem_mb: 2000
+  fetch_quickgo_annotations:
+    mem_mb: 1500          # grows with the annotation set
+  check_alignment_quality:
+    mem_mb: 1000
+  select_3d_sequence_per_protein:
+    mem_mb: 1500          # pairwise alignments
+  integrate_epitope_analysis:
+    mem_mb: 1500
+  create_comprehensive_epitope_visualizations:
+    mem_mb: 1500
+
+# Threads per rule. Keeping these low matters as much as memory: NumPy, PyTorch
+# and XGBoost otherwise start one thread per core (12 here), and each thread
+# costs memory.
+set-threads:
+  predict_epitopes_bepipred: 2
+  predict_localization_deeplocpro: 2
+  predict_epitopes_discotope: 2
+  predict_protein_topology: 2
+  mafft_msa_filtered: 2
+  mafft_msa_with_3d_sequence: 2
+  run_consurf_conservation_analysis: 1
+  blast_epitope_cross_reactivity: 2
+
+# Note: the thread caps above are passed to the rules, but the maths libraries
+# also read environment variables. The wrapper scripts set OMP_NUM_THREADS and
+# friends for the tools they launch. For manual runs outside Snakemake, see
+# docs/running_on_limited_resources.md.

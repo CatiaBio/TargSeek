@@ -117,8 +117,22 @@ def stage_structure(structure_path, structure_id, dest_dir):
     return dest
 
 
+def limited_env(threads):
+    """Environment that stops PyTorch/NumPy/XGBoost grabbing every core.
+
+    They default to one thread per core (12 on this machine), and each thread
+    costs memory. On a 7.7 GB box that is enough to get the run killed.
+    """
+    env = os.environ.copy()
+    n = str(max(1, int(threads or 1)))
+    for var in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS",
+                "NUMEXPR_NUM_THREADS", "TORCH_NUM_THREADS", "VECLIB_MAXIMUM_THREADS"):
+        env[var] = n
+    return env
+
+
 def run_discotope(repo_dir, pdb_dir, out_dir, struc_type, cpu_only=True,
-                  python_bin=None, extra_args=None):
+                  python_bin=None, extra_args=None, threads=2):
     """Run DiscoTope-3.0 over a directory of PDB files."""
     repo_dir = Path(repo_dir)
     main_script = repo_dir / "discotope3" / "main.py"
@@ -142,8 +156,9 @@ def run_discotope(repo_dir, pdb_dir, out_dir, struc_type, cpu_only=True,
     if extra_args:
         cmd.extend(extra_args)
 
-    print("Running: " + " ".join(cmd))
-    result = subprocess.run(cmd, capture_output=True, text=True, cwd=str(repo_dir))
+    print(f"Running (threads={threads}): " + " ".join(cmd))
+    result = subprocess.run(cmd, capture_output=True, text=True, cwd=str(repo_dir),
+                            env=limited_env(threads))
     if result.stdout.strip():
         print(result.stdout.strip()[-4000:])
     if result.returncode != 0:
@@ -232,6 +247,7 @@ def main():
         out_table = snakemake.output.discotope_table
         group = snakemake.params.group
         cfg = dict(snakemake.params.discotope or {})
+        threads = int(getattr(snakemake, "threads", 2) or 2)
     else:
         if len(sys.argv) < 5:
             print("Usage: predict_epitopes_discotope.py <mapping.tsv> "
@@ -245,6 +261,7 @@ def main():
             cfg["repo_dir"] = sys.argv[5]
         if len(sys.argv) > 6:
             cfg["python_bin"] = sys.argv[6]
+        threads = int(os.environ.get("TARGSEEK_THREADS", "2"))
 
     print(f"=== DiscoTope-3.0 epitope prediction (gram_{group}) ===")
 
@@ -298,7 +315,7 @@ def main():
         out_dir = work_root / f"output_{struc_type}"
         run_discotope(repo_dir, pdb_dir, out_dir, struc_type,
                       cpu_only=cpu_only, python_bin=python_bin,
-                      extra_args=cfg.get("extra_args"))
+                      extra_args=cfg.get("extra_args"), threads=threads)
         rows.extend(collect_scores(out_dir, structure_to_gene, struc_type, threshold))
 
     if not rows:

@@ -4,6 +4,26 @@ This machine (WSL2) has **12 cores but only ~7.7 GB of RAM**, which WSL takes as
 about half the host's memory. RAM, not CPU, is the limit — a run was killed when a
 PyTorch-based tool was started while the download pipeline was already going.
 
+## The resource profile does this for you
+
+`profiles/default/config.yaml` is picked up automatically by Snakemake, so
+
+```bash
+snakemake -s Snakefile_analysis all_analysis
+```
+
+already runs with `cores: 2`, `keep-going`, and a **5000 MB memory budget**. Each
+rule declares what it needs, and Snakemake refuses to start jobs whose combined
+declared memory exceeds the budget. The three ESM-model tools each declare 4500 MB,
+so they can never run at the same time as each other — enforced by the scheduler,
+not by remembering.
+
+Verified: with `cores: 3` and three jobs declaring 4500 MB each, they ran strictly
+one after another rather than in parallel.
+
+To change the machine's limits, edit `cores` and `resources.mem_mb` at the top of
+that file. Leave the per-rule numbers alone — they describe the tools, not the box.
+
 ## Rules of thumb
 
 1. **Run one heavy job at a time.** Never start ConSurf, BepiPred, DeepLocPro or
@@ -14,7 +34,9 @@ PyTorch-based tool was started while the download pipeline was already going.
    cores buy nothing and cost memory.
 4. **Be nice to the desktop**: `nice -n 10` keeps VS Code responsive.
 
-## The command to use
+## The command to use (if you want to be explicit)
+
+The profile already applies these, so this is only needed to override it.
 
 ```bash
 cd ~/Projects/TargSeek

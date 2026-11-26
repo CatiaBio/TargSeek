@@ -100,7 +100,21 @@ def build_input_fasta(gene_fasta_map, fasta_out):
     return seq_id_to_gene
 
 
-def run_deeplocpro(deeplocpro_bin, fasta_in, out_dir, group, device="cpu"):
+def limited_env(threads):
+    """Environment that stops PyTorch/NumPy grabbing every core.
+
+    They default to one thread per core (12 on this machine), and each thread
+    costs memory. On a 7.7 GB box that is enough to get the run killed.
+    """
+    env = os.environ.copy()
+    n = str(max(1, int(threads or 1)))
+    for var in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS",
+                "NUMEXPR_NUM_THREADS", "TORCH_NUM_THREADS", "VECLIB_MAXIMUM_THREADS"):
+        env[var] = n
+    return env
+
+
+def run_deeplocpro(deeplocpro_bin, fasta_in, out_dir, group, device="cpu", threads=2):
     """Run DeepLocPro and return the path of the CSV it produced."""
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -116,8 +130,8 @@ def run_deeplocpro(deeplocpro_bin, fasta_in, out_dir, group, device="cpu"):
         "-g", group,          # "positive" or "negative"
         "-d", device,
     ]
-    print("Running: " + " ".join(cmd))
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    print(f"Running (threads={threads}): " + " ".join(cmd))
+    result = subprocess.run(cmd, capture_output=True, text=True, env=limited_env(threads))
     if result.stdout.strip():
         print(result.stdout.strip()[-4000:])
 
@@ -201,6 +215,7 @@ def main():
         work_dir = Path(snakemake.output.localization_table).parent / f"deeplocpro_gram_{snakemake.params.group}"
         group = snakemake.params.group
         cfg = dict(snakemake.params.localization or {})
+        threads = int(getattr(snakemake, "threads", 2) or 2)
     else:
         if len(sys.argv) < 4:
             print("Usage: predict_localization_deeplocpro.py "
@@ -211,6 +226,7 @@ def main():
         cfg = {"enabled": True}
         if len(sys.argv) > 4:
             cfg["deeplocpro_bin"] = sys.argv[4]
+        threads = int(os.environ.get("TARGSEEK_THREADS", "2"))
         work_dir = Path(out_table).parent / f"deeplocpro_gram_{group}"
 
     enabled = bool(cfg.get("enabled", False))
@@ -240,7 +256,8 @@ def main():
     if not seq_id_to_gene:
         raise RuntimeError(f"Could not build any input sequences from {selected_3d_paths}")
 
-    csv_path = run_deeplocpro(deeplocpro_bin, fasta_in, work_dir, group, device)
+    csv_path = run_deeplocpro(deeplocpro_bin, fasta_in, work_dir, group, device,
+                              threads=threads)
     print(f"DeepLocPro results: {csv_path}")
 
     rows = collect_rows(csv_path, seq_id_to_gene, surface_classes)
