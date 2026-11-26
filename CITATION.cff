@@ -3,7 +3,7 @@ message: "If you use this software, please cite it as below."
 authors:
   - family-names: "Baptista"
     given-names: "Cátia"
-    orcid: "https://orcid.org/0000-0000-0000-0000"  # Add your ORCID if you have one
+    orcid: "https://orcid.org/0000-0002-9207-1097"
 title: "TargSeek: Protein Discovery and Epitope Prediction Pipeline"
 version: 1.0.0
 date-released: 2024-07-21
