@@ -107,13 +107,14 @@ def run_blast_search(epitope_seq: str, database_path: str, temp_dir: str) -> Lis
         
         # Write epitope sequence to temporary FASTA file
         with open(query_file, 'w') as f:
-            f.write(f">epitope\\n{epitope_seq}\\n")
+            f.write(f">epitope\n{epitope_seq}\n")
         
         # Run BLAST search
         blast_cmd = [
             "blastp",
             "-query", query_file,
             "-db", database_path,
+            "-task", "blastp-short",  # gap costs/word size tuned for short peptides
             "-outfmt", "6 qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore stitle",
             "-evalue", "1000",  # High evalue to catch weak matches
             "-word_size", "2",   # Lower word size for short sequences

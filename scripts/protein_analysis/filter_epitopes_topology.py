@@ -148,6 +148,107 @@ def check_epitope_extracellular_overlap(
     
     return is_extracellular, coverage
 
+EXTRACELLULAR_REGION_TYPES = {"outside", "signal"}
+
+
+def _normalise_token(value: str) -> str:
+    """Lowercase, strip a trailing chain/copy index and the 'linear' marker."""
+    token = str(value).strip().lower()
+    for suffix in ("_linear", "_epitopes", "_epitope"):
+        if token.endswith(suffix):
+            token = token[: -len(suffix)]
+    # Drop a trailing copy index such as _1 / _2 (5OR1_1 -> 5or1)
+    parts = token.split("_")
+    if len(parts) > 1 and parts[-1].isdigit():
+        parts = parts[:-1]
+    return "_".join(parts)
+
+
+def build_mapping_index(extracellular_mapping: Dict[str, Dict]) -> Dict[Tuple[str, str], str]:
+    """Index the extracellular mapping by (gene, structure core) for lookup.
+
+    The mapping is keyed like "flgH_flgH_7CBL_1" while epitope files are named
+    like "flgH_7CBL_linear_epitopes.tsv". Matching the raw strings silently
+    failed for every protein, so key on normalised (gene, structure) instead.
+    """
+    index = {}
+    for key, entry in extracellular_mapping.items():
+        if not isinstance(entry, dict):
+            continue
+        gene = str(entry.get("gene", "")).strip()
+        structure_id = str(entry.get("structure_id", "")).strip()
+
+        # structure_id is usually "<gene>_<PDB>"; keep just the structure part
+        core = structure_id
+        if gene and core.lower().startswith(gene.lower() + "_"):
+            core = core[len(gene) + 1:]
+
+        gene_norm = gene.lower()
+        for candidate in {_normalise_token(core), _normalise_token(structure_id)}:
+            if candidate:
+                index[(gene_norm, candidate)] = key
+    return index
+
+
+def resolve_mapping_key(protein: str, structure: str,
+                        extracellular_mapping: Dict[str, Dict],
+                        mapping_index: Dict[Tuple[str, str], str]) -> str:
+    """Find the mapping key for an epitope file's protein/structure, or ''."""
+    protein_norm = str(protein).strip().lower()
+    structure_norm = _normalise_token(structure)
+
+    # Exact legacy key first, then the normalised index
+    for candidate in (f"{protein}_{structure}", f"{protein}_{protein}_{structure}"):
+        if candidate in extracellular_mapping:
+            return candidate
+
+    key = mapping_index.get((protein_norm, structure_norm))
+    if key:
+        return key
+
+    # Last resort: the only entry for this gene
+    gene_keys = [k for (g, _), k in mapping_index.items() if g == protein_norm]
+    unique = sorted(set(gene_keys))
+    return unique[0] if len(unique) == 1 else ""
+
+
+def extract_extracellular_spans(protein_mapping: Dict) -> List[Tuple[int, int]]:
+    """Return [(start, end), ...] of extracellular stretches.
+
+    Accepts the 'extracellular_regions' list of dicts that
+    create_extracellular_mapping.py writes, as well as the
+    'sequence_extracellular_spans' pair format.
+    """
+    spans = []
+
+    for span in protein_mapping.get("sequence_extracellular_spans", []) or []:
+        try:
+            if isinstance(span, dict):
+                spans.append((int(span["start"]), int(span["end"])))
+            else:
+                start, end = span
+                spans.append((int(start), int(end)))
+        except (KeyError, TypeError, ValueError):
+            continue
+
+    if spans:
+        return spans
+
+    for region in protein_mapping.get("extracellular_regions", []) or []:
+        if not isinstance(region, dict):
+            continue
+        region_type = str(region.get("type", "")).strip().lower()
+        # Regions are pre-filtered upstream; keep the check for mixed inputs
+        if region_type and region_type not in EXTRACELLULAR_REGION_TYPES:
+            continue
+        try:
+            spans.append((int(region["start"]), int(region["end"])))
+        except (KeyError, TypeError, ValueError):
+            continue
+
+    return spans
+
+
 def filter_epitopes_by_topology(
     epitope_df: pd.DataFrame,
     protein_id: str,
@@ -155,7 +256,7 @@ def filter_epitopes_by_topology(
     min_extracellular_coverage: float = 0.5
 ) -> Tuple[pd.DataFrame, Dict]:
     """Filter epitopes based on extracellular region overlap."""
-    
+
     if protein_id not in extracellular_mapping:
         logger.warning(f"No extracellular mapping found for {protein_id}")
         return pd.DataFrame(), {
@@ -164,10 +265,10 @@ def filter_epitopes_by_topology(
             'filtered_epitopes': 0,
             'coverage_stats': {}
         }
-    
+
     protein_mapping = extracellular_mapping[protein_id]
-    extracellular_spans = protein_mapping.get('sequence_extracellular_spans', [])
-    
+    extracellular_spans = extract_extracellular_spans(protein_mapping)
+
     if not extracellular_spans:
         logger.warning(f"No extracellular spans found for {protein_id}")
         return pd.DataFrame(), {
@@ -259,9 +360,15 @@ def process_all_epitope_files(
         'protein_stats': {},
         'overall_coverage': 0.0
     }
-    
+
     total_coverage = 0.0
-    
+    mapping_index = build_mapping_index(extracellular_mapping)
+    unmatched_files = []
+    logger.info(
+        f"Indexed {len(extracellular_mapping)} extracellular mapping entries "
+        f"({len(mapping_index)} lookup keys)"
+    )
+
     for epitope_file in epitope_files:
         try:
             # Load epitope table
@@ -270,10 +377,20 @@ def process_all_epitope_files(
             if epitope_df.empty:
                 continue
             
-            # Extract protein and structure info
+            # Extract protein and structure info, then resolve it to a key in
+            # the extracellular mapping (the naming conventions differ)
             protein, structure = extract_protein_structure_info(epitope_file)
-            protein_id = f"{protein}_{structure}" if structure else protein
-            
+            protein_id = resolve_mapping_key(
+                protein, structure, extracellular_mapping, mapping_index
+            )
+            if not protein_id:
+                logger.warning(
+                    f"No extracellular mapping entry matches {protein} / {structure} "
+                    f"({os.path.basename(epitope_file)})"
+                )
+                unmatched_files.append(os.path.basename(epitope_file))
+                protein_id = f"{protein}_{structure}" if structure else protein
+
             # Filter epitopes
             filtered_df, filter_stats = filter_epitopes_by_topology(
                 epitope_df, protein_id, extracellular_mapping, min_extracellular_coverage
@@ -302,7 +419,26 @@ def process_all_epitope_files(
     # Calculate overall coverage
     if processing_stats['files_with_epitopes'] > 0:
         processing_stats['overall_coverage'] = total_coverage / processing_stats['files_with_epitopes']
-    
+
+    processing_stats['unmatched_files'] = unmatched_files
+
+    # Losing every epitope almost always means a lookup or numbering problem
+    # rather than a real biological result, so say so loudly instead of
+    # writing an empty report that looks like a finding.
+    if processing_stats['total_epitopes'] > 0 and processing_stats['total_extracellular_epitopes'] == 0:
+        logger.error(
+            f"All {processing_stats['total_epitopes']} epitopes were filtered out. "
+            f"{len(unmatched_files)} epitope file(s) had no matching extracellular "
+            f"mapping entry. Check that gene/structure names agree between the "
+            f"epitope tables and extracellular_mapping.json."
+        )
+    if unmatched_files:
+        logger.warning(
+            f"Epitope files without a mapping entry ({len(unmatched_files)}): "
+            f"{', '.join(unmatched_files[:10])}"
+            + (" ..." if len(unmatched_files) > 10 else "")
+        )
+
     return processing_stats
 
 def create_topology_filter_report(
