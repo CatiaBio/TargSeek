@@ -107,7 +107,9 @@ personal/
 *_backup*
 *_test*
 *_debug*
-*_temp*
+*_temp.*
+*_temp_*
+!*_template.py
 *.log
 *.tmp
 

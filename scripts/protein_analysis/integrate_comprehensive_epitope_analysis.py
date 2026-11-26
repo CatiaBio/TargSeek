@@ -26,6 +26,7 @@ Output:
 
 import os
 import sys
+import re
 import json
 import pandas as pd
 import numpy as np
@@ -287,390 +288,218 @@ def create_comprehensive_report(scored_epitopes: Dict[str, pd.DataFrame],
                               analysis: str,
                               paramset: str,
                               group: str) -> None:
-    """Create comprehensive HTML report with integrated analysis."""
-    
-    html_content = f"""
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Comprehensive Epitope Analysis Report - {analysis}_{paramset} gram_{group}</title>
-        <style>
-            body {{
-                font-family: Arial, sans-serif;
-                margin: 0;
-                padding: 20px;
-                background-color: #f8f9fa;
-            }}
-            .container {{
-                max-width: 1200px;
-                margin: 0 auto;
-                background-color: white;
-                padding: 30px;
-                border-radius: 8px;
-                box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-            }}
-            .header {{
-                text-align: center;
-                border-bottom: 3px solid #007bff;
-                padding-bottom: 20px;
-                margin-bottom: 30px;
-            }}
-            .header h1 {{
-                color: #007bff;
-                margin-bottom: 10px;
-            }}
-            .summary-stats {{
-                display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-                gap: 20px;
-                margin-bottom: 30px;
-            }}
-            .stat-card {{
-                background: linear-gradient(135deg, #007bff, #0056b3);
-                color: white;
-                padding: 20px;
-                border-radius: 8px;
-                text-align: center;
-            }}
-            .stat-number {{
-                font-size: 2em;
-                font-weight: bold;
-                margin-bottom: 5px;
-            }}
-            .stat-label {{
-                font-size: 0.9em;
-                opacity: 0.9;
-            }}
-            .section {{
-                margin-bottom: 40px;
-            }}
-            .section h2 {{
-                color: #333;
-                border-left: 4px solid #007bff;
-                padding-left: 15px;
-                margin-bottom: 20px;
-            }}
-            .protein-section {{
-                background-color: #f8f9fa;
-                padding: 20px;
-                border-radius: 8px;
-                margin-bottom: 20px;
-            }}
-            .protein-header {{
-                background-color: #007bff;
-                color: white;
-                padding: 10px 15px;
-                border-radius: 5px;
-                margin-bottom: 15px;
-            }}
-            .epitope-table {{
-                width: 100%;
-                border-collapse: collapse;
-                margin-bottom: 20px;
-                font-size: 0.9em;
-            }}
-            .epitope-table th {{
-                background-color: #343a40;
-                color: white;
-                padding: 10px;
-                text-align: left;
-            }}
-            .epitope-table td {{
-                padding: 8px 10px;
-                border-bottom: 1px solid #ddd;
-            }}
-            .epitope-table tr:nth-child(even) {{
-                background-color: #f8f9fa;
-            }}
-            .score-cell {{
-                text-align: center;
-                font-weight: bold;
-            }}
-            .score-high {{ color: #28a745; }}
-            .score-medium {{ color: #ffc107; }}
-            .score-low {{ color: #dc3545; }}
-            .recommendation-high {{ 
-                background-color: #d4edda; 
-                color: #155724; 
-                padding: 4px 8px; 
-                border-radius: 4px; 
-                font-weight: bold;
-            }}
-            .recommendation-medium {{ 
-                background-color: #fff3cd; 
-                color: #856404; 
-                padding: 4px 8px; 
-                border-radius: 4px; 
-            }}
-            .recommendation-low {{ 
-                background-color: #f8d7da; 
-                color: #721c24; 
-                padding: 4px 8px; 
-                border-radius: 4px; 
-            }}
-            .analysis-summary {{
-                background-color: #e7f3ff;
-                padding: 20px;
-                border-radius: 8px;
-                margin-bottom: 20px;
-            }}
-            .methodology {{
-                background-color: #f0f0f0;
-                padding: 20px;
-                border-radius: 8px;
-                margin-top: 30px;
-            }}
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <div class="header">
-                <h1>Comprehensive Epitope Analysis Report</h1>
-                <p><strong>Analysis:</strong> {analysis}_{paramset} | <strong>Gram Type:</strong> {group.title()} | <strong>Generated:</strong> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
-            </div>
-    """
-    
-    # Calculate overall statistics
-    total_epitopes = sum(len(df) for df in scored_epitopes.values())
-    total_proteins = len(scored_epitopes)
-    
-    highly_recommended = sum(
-        len(df[df['Recommendation'].str.contains('Highly Recommended', na=False)])
-        for df in scored_epitopes.values()
-    )
-    
-    recommended = sum(
-        len(df[df['Recommendation'].str.contains('^Recommended$', na=False, regex=True)])
-        for df in scored_epitopes.values()
-    )
-    
-    avg_combined_score = np.mean([
-        df['Combined_Score'].mean() 
-        for df in scored_epitopes.values() if not df.empty
-    ]) if scored_epitopes else 0
-    
-    # Summary statistics section
-    html_content += f"""
-            <div class="summary-stats">
-                <div class="stat-card">
-                    <div class="stat-number">{total_proteins}</div>
-                    <div class="stat-label">Proteins Analyzed</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-number">{total_epitopes}</div>
-                    <div class="stat-label">Total Epitopes</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-number">{highly_recommended}</div>
-                    <div class="stat-label">Highly Recommended</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-number">{recommended}</div>
-                    <div class="stat-label">Recommended</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-number">{avg_combined_score:.2f}</div>
-                    <div class="stat-label">Avg Combined Score</div>
-                </div>
-            </div>
+    """Create the integrated HTML report.
 
-            <div class="analysis-summary">
-                <h3>Analysis Overview</h3>
-                <p>This report integrates results from multiple complementary analysis tools:</p>
-                <ul>
-                    <li><strong>BepiPred 3.0:</strong> B-cell epitope immunogenicity prediction</li>
-                    <li><strong>ConSurf:</strong> Evolutionary conservation analysis</li>
-                    <li><strong>DeepTMHMM:</strong> Membrane topology and surface accessibility</li>
-                    <li><strong>BLAST:</strong> Cross-reactivity assessment against host proteomes</li>
-                </ul>
-                <p>Epitopes are ranked using a combined score incorporating all four analyses, with recommendations for diagnostic applications.</p>
-            </div>
+    Layout and styling live in report_template.py; this function only decides
+    what goes in the page.
     """
-    
-    # Top candidates section
-    html_content += """
-            <div class="section">
-                <h2>🏆 Top Epitope Candidates</h2>
-    """
-    
-    # Collect all epitopes and sort by combined score
+    # Snakemake runs this from a temp copy but adds the real script directory to
+    # sys.path; keep a fallback for direct execution.
+    try:
+        import report_template as rt
+    except ImportError:
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import report_template as rt
+
+    group_label = f"Gram-{group}"
+    generated = datetime.now().strftime('%Y-%m-%d %H:%M')
+
+    # --- gather every epitope, best first ---------------------------------
     all_epitopes = []
     for protein_id, df in scored_epitopes.items():
-        for idx, row in df.iterrows():
-            epitope_data = row.to_dict()
-            epitope_data['Protein_ID'] = protein_id
-            all_epitopes.append(epitope_data)
-    
-    all_epitopes.sort(key=lambda x: x['Combined_Score'], reverse=True)
-    top_epitopes = all_epitopes[:20]  # Top 20
-    
-    if top_epitopes:
-        html_content += """
-                <table class="epitope-table">
-                    <tr>
-                        <th>Rank</th>
-                        <th>Protein</th>
-                        <th>Sequence</th>
-                        <th>Length</th>
-                        <th>Position</th>
-                        <th>BepiPred</th>
-                        <th>Conservation</th>
-                        <th>Topology</th>
-                        <th>Specificity</th>
-                        <th>Combined</th>
-                        <th>Recommendation</th>
-                    </tr>
-        """
-        
-        for i, epitope in enumerate(top_epitopes):
-            def score_class(score):
-                if score >= 0.7: return 'score-high'
-                elif score >= 0.4: return 'score-medium'
-                else: return 'score-low'
-            
-            def recommendation_class(rec):
-                if 'Highly Recommended' in rec: return 'recommendation-high'
-                elif 'Recommended' in rec: return 'recommendation-medium'
-                else: return 'recommendation-low'
-            
-            sequence = epitope.get('Epitope_Sequence', epitope.get('sequence', 'Unknown'))[:20]
-            start = epitope.get('Epitope_Start', epitope.get('start', 0))
-            end = epitope.get('Epitope_End', epitope.get('end', 0))
-            
-            html_content += f"""
-                    <tr>
-                        <td><strong>{i+1}</strong></td>
-                        <td>{epitope['Protein_ID']}</td>
-                        <td style="font-family: monospace;">{sequence}{'...' if len(sequence) == 20 else ''}</td>
-                        <td>{len(epitope.get('Epitope_Sequence', epitope.get('sequence', '')))}</td>
-                        <td>{start}-{end}</td>
-                        <td class="score-cell {score_class(epitope['BepiPred_Score'])}">{epitope['BepiPred_Score']:.2f}</td>
-                        <td class="score-cell {score_class(epitope['Conservation_Score'])}">{epitope['Conservation_Score']:.2f}</td>
-                        <td class="score-cell {score_class(epitope['Topology_Score'])}">{epitope['Topology_Score']:.2f}</td>
-                        <td class="score-cell {score_class(epitope['Specificity_Score'])}">{epitope['Specificity_Score']:.2f}</td>
-                        <td class="score-cell {score_class(epitope['Combined_Score'])}">{epitope['Combined_Score']:.2f}</td>
-                        <td><span class="{recommendation_class(epitope['Recommendation'])}">{epitope['Recommendation']}</span></td>
-                    </tr>
-            """
-        
-        html_content += """
-                </table>
-            </div>
-        """
-    
-    # Detailed protein analysis
-    html_content += """
-            <div class="section">
-                <h2>📊 Detailed Protein Analysis</h2>
-    """
-    
-    for protein_id, df in scored_epitopes.items():
-        if df.empty:
+        if df is None or df.empty:
             continue
-            
-        protein_stats = {
-            'total_epitopes': len(df),
-            'avg_combined_score': df['Combined_Score'].mean(),
-            'highly_recommended': len(df[df['Recommendation'].str.contains('Highly Recommended', na=False)]),
-            'recommended': len(df[df['Recommendation'].str.contains('^Recommended$', na=False, regex=True)])
-        }
-        
-        html_content += f"""
-                <div class="protein-section">
-                    <div class="protein-header">
-                        <h3>{protein_id}</h3>
-                    </div>
-                    <p><strong>Total Epitopes:</strong> {protein_stats['total_epitopes']} | 
-                       <strong>Avg Score:</strong> {protein_stats['avg_combined_score']:.2f} | 
-                       <strong>Highly Recommended:</strong> {protein_stats['highly_recommended']} | 
-                       <strong>Recommended:</strong> {protein_stats['recommended']}</p>
-        """
-        
-        # Show top 10 epitopes for this protein
-        top_protein_epitopes = df.head(10)
-        
-        html_content += """
-                    <table class="epitope-table">
-                        <tr>
-                            <th>Rank</th>
-                            <th>Sequence</th>
-                            <th>Position</th>
-                            <th>Length</th>
-                            <th>Combined Score</th>
-                            <th>Recommendation</th>
-                        </tr>
-        """
-        
-        for idx, row in top_protein_epitopes.iterrows():
-            sequence = str(row.get('Epitope_Sequence', row.get('sequence', 'Unknown')))
-            start = row.get('Epitope_Start', row.get('start', 0))
-            end = row.get('Epitope_End', row.get('end', 0))
-            
-            def recommendation_class(rec):
-                if 'Highly Recommended' in rec: return 'recommendation-high'
-                elif 'Recommended' in rec: return 'recommendation-medium'
-                else: return 'recommendation-low'
-            
-            def score_class(score):
-                if score >= 0.7: return 'score-high'
-                elif score >= 0.4: return 'score-medium'
-                else: return 'score-low'
-            
-            html_content += f"""
-                        <tr>
-                            <td><strong>{row['Rank']}</strong></td>
-                            <td style="font-family: monospace;">{sequence[:30]}{'...' if len(sequence) > 30 else ''}</td>
-                            <td>{start}-{end}</td>
-                            <td>{len(sequence)}</td>
-                            <td class="score-cell {score_class(row['Combined_Score'])}">{row['Combined_Score']:.2f}</td>
-                            <td><span class="{recommendation_class(row['Recommendation'])}">{row['Recommendation']}</span></td>
-                        </tr>
-            """
-        
-        html_content += """
-                    </table>
-                </div>
-        """
-    
-    # Methodology section
-    html_content += f"""
-            <div class="methodology">
-                <h2>🔬 Methodology</h2>
-                <h3>Scoring System</h3>
-                <ul>
-                    <li><strong>BepiPred Score (30%):</strong> B-cell epitope immunogenicity prediction from BepiPred 3.0</li>
-                    <li><strong>Conservation Score (25%):</strong> Evolutionary conservation from ConSurf analysis (inverse of amino acid variability)</li>
-                    <li><strong>Topology Score (25%):</strong> Surface accessibility based on DeepTMHMM membrane topology predictions</li>
-                    <li><strong>Specificity Score (20%):</strong> Cross-reactivity avoidance based on BLAST similarity to host proteomes</li>
-                </ul>
-                
-                <h3>Recommendation Categories</h3>
-                <ul>
-                    <li><strong>Highly Recommended (≥0.8):</strong> Excellent candidates for diagnostic applications</li>
-                    <li><strong>Recommended (≥0.6):</strong> Good candidates worth further investigation</li>
-                    <li><strong>Moderate Candidate (≥0.4):</strong> May be useful but require careful evaluation</li>
-                    <li><strong>Low Priority (<0.4):</strong> Not recommended for diagnostic use</li>
-                </ul>
-                
-                <h3>Data Sources</h3>
-                <p><strong>Analysis ID:</strong> {analysis}_{paramset}<br>
-                <strong>Gram Classification:</strong> {group.title()}<br>
-                <strong>Proteins Analyzed:</strong> {', '.join(scored_epitopes.keys())}<br>
-                <strong>Generation Date:</strong> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
-            </div>
-        </div>
-    </body>
-    </html>
+        for _, row in df.iterrows():
+            rec = row.to_dict()
+            rec['Protein_ID'] = protein_id
+            all_epitopes.append(rec)
+    all_epitopes.sort(key=lambda r: r.get('Combined_Score', 0), reverse=True)
+
+    def seq_of(rec):
+        return str(rec.get('Epitope_Sequence', rec.get('sequence', '')) or '')
+
+    def pos_of(rec):
+        start = rec.get('Epitope_Start', rec.get('start', ''))
+        end = rec.get('Epitope_End', rec.get('end', ''))
+        return f"{start}-{end}" if start != '' or end != '' else '-'
+
+    total_proteins = len([d for d in scored_epitopes.values() if d is not None and not d.empty])
+    total_epitopes = len(all_epitopes)
+    highly = sum(1 for r in all_epitopes
+                 if 'highly recommended' in str(r.get('Recommendation', '')).lower())
+    recommended = sum(1 for r in all_epitopes
+                      if str(r.get('Recommendation', '')).strip().lower() == 'recommended')
+    avg_score = (sum(r.get('Combined_Score', 0) for r in all_epitopes) / total_epitopes
+                 if total_epitopes else 0.0)
+
+    sections = []
+    nav_main = [('overview', 'Overview', None)]
+
+    # --- overview ---------------------------------------------------------
+    tiles = rt.stat_row([
+        rt.stat_tile(total_proteins, 'Proteins'),
+        rt.stat_tile(total_epitopes, 'Epitopes'),
+        rt.stat_tile(highly, 'Highly recommended'),
+        rt.stat_tile(recommended, 'Recommended'),
+        rt.stat_tile(f"{avg_score:.2f}", 'Mean combined score', 'of 1.00'),
+    ])
+
+    overview_body = tiles
+    if total_epitopes == 0:
+        overview_body += rt.note(
+            'warning', 'No extracellular epitopes to report',
+            '<p>Every predicted epitope was removed by the topology filter, so there is '
+            'nothing to rank. That is usually worth checking rather than accepting: look at '
+            '<code>epitope_filter_report.json</code> for how many epitopes went in, and at '
+            'the extracellular mapping for the proteins involved.</p>')
+    else:
+        overview_body += (
+            '<h3>How a candidate is scored</h3>'
+            '<p>Each epitope carries four independent scores, combined into one ranking '
+            'value. The table columns below show all of them, so a high combined score '
+            'built on one strong component is visible rather than hidden.</p>'
+            '<div class="chiprow">'
+            '<span class="chip">BepiPred 3.0 &mdash; immunogenicity (30%)</span>'
+            '<span class="chip">ConSurf &mdash; conservation (25%)</span>'
+            '<span class="chip">DeepTMHMM &mdash; surface accessibility (25%)</span>'
+            '<span class="chip">BLAST &mdash; specificity vs host proteomes (20%)</span>'
+            '</div>')
+    sections.append(rt.section('overview', f'{group_label} epitope candidates',
+                               overview_body,
+                               subtitle=f'{analysis}_{paramset} | generated {generated}'))
+
+    # --- top candidates ---------------------------------------------------
+    if all_epitopes:
+        top = all_epitopes[:25]
+        rows = []
+        for i, rec in enumerate(top, 1):
+            seq = seq_of(rec)
+            rows.append([
+                f'<strong>{i}</strong>',
+                rt.esc(rec.get('Protein_ID', '')),
+                f'<span class="seq">{rt.esc(seq)}</span>',
+                rt.esc(len(seq)),
+                rt.esc(pos_of(rec)),
+                rt.score_num(rec.get('BepiPred_Score')),
+                rt.score_num(rec.get('Conservation_Score')),
+                rt.score_num(rec.get('Topology_Score')),
+                rt.score_num(rec.get('Specificity_Score')),
+                rt.score_meter(rec.get('Combined_Score')),
+                rt.recommendation_badge(rec.get('Recommendation')),
+            ])
+        headers = ['#', 'Protein', 'Sequence', 'Len', 'Position', 'BepiPred',
+                   'Conservation', 'Topology', 'Specificity', 'Combined', 'Assessment']
+        body = (f'<p class="muted">The {len(top)} highest-scoring of {total_epitopes} '
+                f'epitopes. Click a column heading to re-sort; use the filter box above '
+                f'to narrow by gene or sequence.</p>'
+                + rt.table(headers, rows, table_id='top-candidates', numeric_from=3))
+        sections.append(rt.section('top-candidates', 'Top candidates', body))
+        nav_main.append(('top-candidates', 'Top candidates', len(top)))
+
+    # --- cross-reactivity -------------------------------------------------
+    if blast_data:
+        summary = blast_data.get('summary', {}) if isinstance(blast_data, dict) else {}
+        if summary:
+            items = ''.join(
+                f'<dt>{rt.esc(k.replace("_", " ").capitalize())}</dt><dd>{rt.esc(v)}</dd>'
+                for k, v in summary.items() if not isinstance(v, (dict, list)))
+            sections.append(rt.section(
+                'cross-reactivity', 'Cross-reactivity screen',
+                f'<p class="muted">BLAST of each epitope against the reference proteomes '
+                f'in <code>data/blast_databases/</code>. A hit in a host proteome lowers '
+                f'the specificity score.</p><dl class="dl">{items}</dl>'))
+            nav_main.append(('cross-reactivity', 'Cross-reactivity', None))
+
+    # --- per protein ------------------------------------------------------
+    nav_proteins = []
+    for protein_id, df in sorted(scored_epitopes.items()):
+        if df is None or df.empty:
+            continue
+        anchor = 'p-' + re.sub(r'[^A-Za-z0-9_-]', '-', str(protein_id))
+        p_high = len(df[df['Recommendation'].astype(str).str.contains('Highly Recommended', na=False)])
+        p_mean = df['Combined_Score'].mean()
+        rows = []
+        for i, (_, row) in enumerate(df.head(15).iterrows(), 1):
+            rec = row.to_dict()
+            seq = seq_of(rec)
+            rows.append([
+                f'<strong>{i}</strong>',
+                f'<span class="seq">{rt.esc(seq)}</span>',
+                rt.esc(pos_of(rec)),
+                rt.esc(len(seq)),
+                rt.score_num(rec.get('BepiPred_Score')),
+                rt.score_num(rec.get('Conservation_Score')),
+                rt.score_num(rec.get('Topology_Score')),
+                rt.score_num(rec.get('Specificity_Score')),
+                rt.score_meter(rec.get('Combined_Score')),
+                rt.recommendation_badge(rec.get('Recommendation')),
+            ])
+        headers = ['#', 'Sequence', 'Position', 'Len', 'BepiPred', 'Conservation',
+                   'Topology', 'Specificity', 'Combined', 'Assessment']
+        chips = (f'<div class="chiprow"><span class="chip">{len(df)} epitopes</span>'
+                 f'<span class="chip">mean {p_mean:.2f}</span>'
+                 f'<span class="chip">{p_high} highly recommended</span></div>')
+        body = chips + rt.table(headers, rows, table_id=anchor + '-t', numeric_from=3)
+        if len(df) > 15:
+            body += f'<p class="muted">Showing the top 15 of {len(df)} epitopes.</p>'
+        sections.append(rt.section(anchor, str(protein_id), body, level=2))
+        nav_proteins.append((anchor, str(protein_id), len(df)))
+
+    # --- methods ----------------------------------------------------------
+    proteins_listed = ', '.join(sorted(scored_epitopes.keys())) or 'none'
+    methods = f"""
+    <h3>Scoring</h3>
+    <p>The combined score is a weighted sum of four normalised components:</p>
+    <ul>
+      <li><strong>BepiPred 3.0 (30%)</strong> &mdash; B-cell epitope immunogenicity.</li>
+      <li><strong>ConSurf (25%)</strong> &mdash; evolutionary conservation, taken as the
+          inverse of amino-acid variability across the alignment.</li>
+      <li><strong>DeepTMHMM (25%)</strong> &mdash; surface accessibility from the predicted
+          membrane topology.</li>
+      <li><strong>BLAST (20%)</strong> &mdash; specificity: similarity to host and
+          reference proteomes reduces this score.</li>
+    </ul>
+    <h3>Assessment thresholds</h3>
+    <ul>
+      <li>{rt.recommendation_badge('Highly Recommended')} combined score &ge; 0.80</li>
+      <li>{rt.recommendation_badge('Recommended')} &ge; 0.60</li>
+      <li>{rt.recommendation_badge('Moderate')} &ge; 0.40</li>
+      <li>{rt.recommendation_badge('Low Priority')} below 0.40</li>
+    </ul>
+    <p class="muted">These are ranking aids, not evidence of immunogenicity. Any candidate
+    taken forward needs experimental validation.</p>
+    <h3>This run</h3>
+    <dl class="dl">
+      <dt>Analysis</dt><dd>{rt.esc(analysis)}_{rt.esc(paramset)}</dd>
+      <dt>Group</dt><dd>{rt.esc(group_label)}</dd>
+      <dt>Proteins</dt><dd>{rt.esc(proteins_listed)}</dd>
+      <dt>Generated</dt><dd>{rt.esc(generated)}</dd>
+    </dl>
     """
-    
-    # Write HTML report
+    sections.append(rt.section('methods', 'Methods', methods))
+    nav_main.append(('methods', 'Methods', None))
+
+    nav_groups = [('Report', nav_main)]
+    if nav_proteins:
+        nav_groups.append((f'Proteins ({len(nav_proteins)})', nav_proteins))
+
+    page = rt.render_page(
+        title=f'Epitope analysis | {group_label}',
+        subtitle=f'{group_label} epitope report',
+        meta_items=[('Analysis', f'{analysis}_{paramset}'),
+                    ('Group', group_label),
+                    ('Epitopes', total_epitopes)],
+        nav_groups=nav_groups,
+        sections_html='\n'.join(sections),
+        footer_note=f'TargSeek | {generated}',
+    )
+
     os.makedirs(os.path.dirname(output_file), exist_ok=True)
     with open(output_file, 'w', encoding='utf-8') as f:
-        f.write(html_content)
-    
+        f.write(page)
+
     logger.info(f"Created comprehensive HTML report: {output_file}")
+
 
 def main():
     """Main function to integrate comprehensive epitope analysis."""
