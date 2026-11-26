@@ -15,8 +15,8 @@
 
 # Species analysis batches - each analysis represents a different dataset
 species_batches:
-  #analysis1
-  analysis2
+  - analysis1
+  # - analysis2
   #analysis3
 
 # Species input files for each analysis batch

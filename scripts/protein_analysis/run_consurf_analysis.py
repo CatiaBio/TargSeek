@@ -112,7 +112,8 @@ def run_consurf_analysis(msa_file, structure_file, chain, possible_queries, outp
             
             # Construct ConSurf command with conda environment and predefined model to avoid ProtTest dependency
             # Run from ConSurf directory and use absolute paths
-            consurf_dir = Path("/home/catia/tools/stand_alone_consurf/stand_alone_consurf-1.00")
+            # Run from the ConSurf install directory (derived from the configured script path)
+            consurf_dir = Path(consurf_script).resolve().parent
             conda_cmd = f"cd {consurf_dir} && source /home/catia/tools/miniconda3/etc/profile.d/conda.sh && conda activate targseek && python3 stand_alone_consurf.py --dir {gene_output_dir} --msa {msa_file} --pdb {structure_file} --chain {chain} --query '{query}' --model LG"
             cmd = ['bash', '-c', conda_cmd]
             
@@ -134,9 +135,9 @@ def run_consurf_analysis(msa_file, structure_file, chain, possible_queries, outp
 
 def main():
     # Configuration
-    base_dir = Path('/home/catia/Projects/TargSeek')
+    base_dir = Path(__file__).resolve().parents[2]  # repository root
     results_dir = base_dir / 'results' / 'analysis1_params1' / 'protein_analysis'
-    consurf_script = Path('/home/catia/tools/stand_alone_consurf/stand_alone_consurf-1.00/stand_alone_consurf.py')
+    consurf_script = Path('/home/catia/tools/ConSurf-StandAlone/stand_alone_consurf-1.00/stand_alone_consurf.py')
     
     # Structure directories to search
     structure_dirs = [
@@ -334,7 +335,7 @@ def snakemake_main():
                 
                 # Find corresponding PDB structure using original function
                 structure_dirs = [
-                    Path("/home/catia/Projects/TargSeek/data/protein_structures/pdb_files"),
+                    Path("data/protein_structures/pdb_files").resolve(),
                 ]
                 
                 pdb_file = find_structure_file(pdb, structure_dirs)

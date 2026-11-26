@@ -16,8 +16,8 @@
 
 # Analysis batches - should match those used in download pipeline
 species_batches:
-  # analysis1
-  analysis2
+  - analysis1
+  # - analysis2
   #- analysis3
 
 # QuickGO parameter sets - should match those used in download pipeline
@@ -153,7 +153,7 @@ conservation:
 # ConSurf analysis configuration
 consurf:
   # Path to ConSurf standalone script
-  script_path: "/home/catia/Projects/TargSeek/tools/stand_alone_consurf/stand_alone_consurf.py"
+  script_path: "/home/catia/tools/ConSurf-StandAlone/stand_alone_consurf-1.00/stand_alone_consurf.py"
   # Enable ConSurf analysis (set to false to skip)
   enabled: true
 
@@ -167,7 +167,7 @@ conserved:
 # BepiPred 3.0 epitope prediction configuration
 bepipred:
   # Path to BepiPred 3.0 installation
-  path: "/home/catia/tools/BepiPred3.0-Predictor"
+  path: "/home/catia/tools/BepiPred"
   # Prediction method: 'vt_pred' (recommended) or 'mjv_pred'
   method: "vt_pred"
   # Epitope score threshold (0.0-1.0, higher = more confident predictions)
