@@ -74,6 +74,10 @@ snakemake -s Snakefile_analysis all_analysis --cores 4
 Interrupted? Run the same command again — finished work is skipped and downloads
 resume. Add `--keep-going` so one failing step doesn't stop the others.
 
+On a laptop (or anything with limited RAM) use `--cores 2`, cap the maths libraries
+to a couple of threads, and run only one heavy job at a time — see
+[docs/running_on_limited_resources.md](docs/running_on_limited_resources.md).
+
 Run a single stage if you prefer:
 
 ```bash
@@ -125,6 +129,7 @@ you should not need to edit the Snakefiles. The ones you are most likely to chan
 - [USAGE_ANALYSIS.txt](USAGE_ANALYSIS.txt) — analysis pipeline guide
 - [BLAST_DATABASES.md](BLAST_DATABASES.md) — reference proteomes
 - [docs/external_tools_setup.md](docs/external_tools_setup.md) — external tool setup
+- [docs/running_on_limited_resources.md](docs/running_on_limited_resources.md) — low-RAM machines
 
 ## External tools and databases
 
