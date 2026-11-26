@@ -92,9 +92,8 @@ tools/*.deb
 # ------------------------------------------------------------------------------
 # DEVELOPMENT AND TESTING FILES
 # ------------------------------------------------------------------------------
-# Archive and backup folders (ignore all except tracked Snakefiles)
+# Archive and backup folders
 archive/
-!archive/Snakefile*
 
 # Utils directory - development/testing scripts (not part of pipeline)
 utils/
@@ -118,8 +117,8 @@ scripts/protein_analysis_test/
 results/*/protein_analysis_test/
 scripts_test/
 
-# Note: scripts/archived_unused/ is currently tracked in git for historical reference
-# These are deprecated scripts not part of the active pipeline
+# Deprecated scripts not part of the active pipeline (kept locally only)
+scripts/archived_unused/
 
 # Specific test patterns
 analysis_*.tsv
@@ -396,6 +395,13 @@ config/config_analysis.local.yaml
 
 # Claude Code settings (user-specific)
 .claude/
+
+# Internal/personal notes and machine-specific files (kept locally only)
+CLAUDE.md
+GIT_TRACKING_SUMMARY.md
+REORGANIZATION_SUMMARY.md
+FOLDER_ORGANIZATION.md
+activate_pipeline.sh
 
 # Temporary downloads and processing
 downloads/
