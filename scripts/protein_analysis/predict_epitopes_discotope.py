@@ -128,8 +128,11 @@ def run_discotope(repo_dir, pdb_dir, out_dir, struc_type, cpu_only=True,
             f"Set discotope.repo_dir in config/config_analysis.yaml."
         )
 
+    # Run as a module: "python discotope3/main.py" puts the script's own
+    # directory on sys.path, so its "from discotope3 import ..." fails. Running
+    # -m from the repo root works without needing the package installed.
     cmd = [
-        python_bin or sys.executable, str(main_script),
+        python_bin or sys.executable, "-m", "discotope3.main",
         "--pdb_dir", str(Path(pdb_dir).resolve()),
         "--out_dir", str(Path(out_dir).resolve()),
         "--struc_type", struc_type,
@@ -166,22 +169,35 @@ def collect_scores(out_dir, structure_to_gene, struc_type, threshold):
             print(f"Warning: unexpected columns in {csv_path}: {list(df.columns)}")
             continue
 
-        # The "pdb" column is <structure>_<chain>, e.g. 7c4s_A
-        for chain_label, chain_df in df.groupby(df.get("pdb", csv_path.stem)):
-            label = str(chain_label)
-            structure_id, _, chain = label.rpartition("_")
-            if not structure_id:
-                structure_id, chain = label, ""
-            gene = structure_to_gene.get(structure_id.upper(), "")
-            if not gene:
-                gene = structure_to_gene.get(structure_id, "")
+        # The "pdb" column is <structure>_<chain>, e.g. 7c4s_A; recent versions
+        # also provide an explicit "chain" column, which is more reliable.
+        for label, chain_df in df.groupby(df.get("pdb", csv_path.stem)):
+            label = str(label)
+            chain_values = chain_df.get("chain")
+            if chain_values is not None and len(chain_values):
+                chain = str(chain_values.iloc[0]).strip()
+                structure_id = label[: -(len(chain) + 1)] if (
+                    chain and label.endswith(f"_{chain}")) else label
+            else:
+                structure_id, _, chain = label.rpartition("_")
+                if not structure_id:
+                    structure_id, chain = label, ""
+
+            gene = (structure_to_gene.get(structure_id.upper())
+                    or structure_to_gene.get(structure_id, ""))
 
             for _, record in chain_df.iterrows():
-                score = record[score_col]
                 try:
-                    score = float(score)
+                    score = float(record[score_col])
                 except (TypeError, ValueError):
                     continue
+
+                # Prefer DiscoTope's own calibrated call when present
+                if "epitope" in df.columns:
+                    predicted = str(record["epitope"]).strip().lower() == "true"
+                else:
+                    predicted = score >= threshold
+
                 rows.append({
                     "gene": gene,
                     "structure_id": structure_id,
@@ -190,7 +206,7 @@ def collect_scores(out_dir, structure_to_gene, struc_type, threshold):
                     "residue": record.get("residue", ""),
                     "discotope_score": score,
                     "rsa": record.get("rsa", ""),
-                    "predicted_epitope": score >= threshold,
+                    "predicted_epitope": predicted,
                     "struc_type": struc_type,
                 })
     return rows
@@ -220,13 +236,15 @@ def main():
         if len(sys.argv) < 5:
             print("Usage: predict_epitopes_discotope.py <mapping.tsv> "
                   "<selected_3d_paths.txt> <out_table.tsv> <positive|negative> "
-                  "[repo_dir]")
+                  "[repo_dir] [python_bin]")
             sys.exit(1)
         mapping_path, selected_paths_file, out_table, group = sys.argv[1:5]
         summary_path = None
         cfg = {"enabled": True}
         if len(sys.argv) > 5:
             cfg["repo_dir"] = sys.argv[5]
+        if len(sys.argv) > 6:
+            cfg["python_bin"] = sys.argv[6]
 
     print(f"=== DiscoTope-3.0 epitope prediction (gram_{group}) ===")
 

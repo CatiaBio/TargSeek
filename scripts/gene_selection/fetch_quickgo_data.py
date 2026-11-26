@@ -25,9 +25,45 @@ with open(params_file, "r", encoding="utf-8") as f:
 base_url = "https://www.ebi.ac.uk/QuickGO/services/annotation/search"
 headers = {"Accept": "application/json"}
 
-response = requests.get(base_url, params=params, headers=headers)
-response.raise_for_status()
-data = response.json()
+# QuickGO occasionally returns 500/502/503 for a few minutes at a time. A single
+# transient error used to abort the whole download pipeline, so retry with
+# exponential backoff before giving up.
+RETRY_STATUS = {429, 500, 502, 503, 504}
+MAX_ATTEMPTS = 5
+BACKOFF_SECONDS = 5
+
+
+def quickgo_get(query_params, what="request"):
+    """GET from QuickGO, retrying transient server errors."""
+    last_error = None
+    for attempt in range(1, MAX_ATTEMPTS + 1):
+        try:
+            response = requests.get(base_url, params=query_params,
+                                    headers=headers, timeout=120)
+            if response.status_code in RETRY_STATUS and attempt < MAX_ATTEMPTS:
+                wait = BACKOFF_SECONDS * (2 ** (attempt - 1))
+                print(f"QuickGO {what}: HTTP {response.status_code}, "
+                      f"retrying in {wait}s (attempt {attempt}/{MAX_ATTEMPTS})")
+                time.sleep(wait)
+                continue
+            response.raise_for_status()
+            return response.json()
+        except (requests.exceptions.Timeout,
+                requests.exceptions.ConnectionError) as e:
+            last_error = e
+            if attempt < MAX_ATTEMPTS:
+                wait = BACKOFF_SECONDS * (2 ** (attempt - 1))
+                print(f"QuickGO {what}: {type(e).__name__}, retrying in {wait}s "
+                      f"(attempt {attempt}/{MAX_ATTEMPTS})")
+                time.sleep(wait)
+                continue
+            raise
+    if last_error:
+        raise last_error
+    raise RuntimeError(f"QuickGO {what} failed after {MAX_ATTEMPTS} attempts")
+
+
+data = quickgo_get(params, what="page count")
 total_results = data.get("pageInfo", {}).get("total", 0)
 limit = int(params.get("limit", 200))
 total_pages = (total_results // limit) + (1 if total_results % limit else 0)
@@ -42,9 +78,7 @@ def fetch_page(page_num):
         total_results % limit if page_num == total_pages and total_results % limit != 0 else limit
     )
     
-    response = requests.get(base_url, params=page_params, headers=headers)
-    response.raise_for_status()
-    return response.json().get("results", [])
+    return quickgo_get(page_params, what=f"page {page_num}").get("results", [])
 
 # -------------------------
 # Download annotations concurrently

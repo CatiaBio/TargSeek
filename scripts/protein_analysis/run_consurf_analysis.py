@@ -438,9 +438,27 @@ def snakemake_main():
     # sentinel regardless would make Snakemake treat an empty stage as done
     # and never retry it.
     if total_count == 0:
+        if skipped_qc:
+            # Every candidate was excluded for a documented reason (recorded in
+            # the alignment QC report). That is a real outcome, not a failure,
+            # so record it explicitly and let the other group continue.
+            print(
+                f"WARNING: no ConSurf analyses ran for gram_{group}: all "
+                f"{len(skipped_qc)} candidate gene(s) failed alignment QC "
+                f"({', '.join(skipped_qc)}). No conservation results for this group."
+            )
+            with open(sentinel_file, 'w') as f:
+                f.write(f"ConSurf produced NO results for {group} group\n")
+                f.write(f"Analysis: {analysis}\n")
+                f.write(f"Paramset: {paramset}\n")
+                f.write(f"Successful: 0/0\n")
+                f.write(f"All candidates failed alignment QC: {','.join(skipped_qc)}\n")
+            return True
+
         raise RuntimeError(
             f"ConSurf had nothing to run for gram_{group}: no gene in "
-            f"{selected_3d_tsv} had both an alignment and a PDB structure."
+            f"{selected_3d_tsv} had both an alignment and a PDB structure. "
+            f"This usually means a naming or path problem rather than a real result."
         )
 
     min_fraction = float(snakemake.params.get("min_success_fraction", 1.0))

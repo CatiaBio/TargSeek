@@ -215,13 +215,13 @@ bepipred:
 # DeepLocPro is a separate install (needs PyTorch + ESM-2); see docs.
 localization:
   # false -> localization is skipped and only topology is used
-  enabled: false
+  enabled: true
   # How to combine topology and localization evidence:
   #   topology_only      ignore localization
   #   intersect          surface only if BOTH agree (strictest, fewest targets)
   #   union              surface if EITHER agrees (most targets)
   #   localization_only  use localization alone
-  mode: "topology_only"
+  mode: "intersect"
   # A non-surface call only overrides topology when the predicted class
   # probability reaches this. DeepLocPro always returns a class, so weak
   # calls (e.g. bamC, a real outer-membrane lipoprotein, at p=0.42) would
@@ -229,7 +229,7 @@ localization:
   min_confidence: 0.7
   # Executable; use the full path if it is in its own conda environment, e.g.
   # /home/catia/tools/miniconda3/envs/deeplocpro/bin/deeplocpro
-  deeplocpro_bin: "deeplocpro"
+  deeplocpro_bin: "/home/catia/tools/miniconda3/envs/deeplocpro/bin/deeplocpro"
   # cpu, cuda or mps
   device: "cpu"
   # Classes counted as reachable by an antibody
@@ -254,7 +254,7 @@ quality_control:
   # Minimum alignment length after trimming
   min_alignment_length: 50
   # Minimum number of species per alignment
-  min_species_per_alignment: 3
+  min_species_per_alignment: 10
   # Maximum gap percentage allowed in final alignment
   max_gap_percentage: 0.8
 

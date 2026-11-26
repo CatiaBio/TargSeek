@@ -1,0 +1,47 @@
+{
+  "// note": "Keeps VS Code/Pylance from indexing the ~13k data, result and cache files. Only scripts/, utils/ and the Snakefiles are code.",
+
+  "python.analysis.exclude": [
+    "**/data/**",
+    "**/results/**",
+    "**/cache/**",
+    "**/archive/**",
+    "**/tools/**",
+    "**/logs/**",
+    "**/env/**",
+    "**/.snakemake/**",
+    "**/scripts/archived_unused/**",
+    "**/scripts/protein_analysis_test/**"
+  ],
+  "python.analysis.indexing": true,
+  "python.analysis.userFileIndexingLimit": 2000,
+
+  "files.watcherExclude": {
+    "**/data/**": true,
+    "**/results/**": true,
+    "**/cache/**": true,
+    "**/archive/**": true,
+    "**/tools/**": true,
+    "**/logs/**": true,
+    "**/.snakemake/**": true,
+    "**/env/**": true
+  },
+
+  "search.exclude": {
+    "**/data/**": true,
+    "**/results/**": true,
+    "**/cache/**": true,
+    "**/archive/**": true,
+    "**/tools/**": true,
+    "**/.snakemake/**": true
+  },
+
+  "files.exclude": {
+    "**/__pycache__": true,
+    "**/.snakemake": true
+  },
+
+  "// R": "This project has no R code. The reditorsupport.r extension fails on startup because no R path is set; disable it for this workspace.",
+  "r.lsp.enabled": false,
+  "r.alwaysUseActiveTerminal": false
+}

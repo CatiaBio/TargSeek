@@ -288,8 +288,10 @@ envs/
 # PyCharm
 .idea/
 
-# VS Code
-.vscode/
+# VS Code (shared workspace settings are tracked; see the rule near the top)
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
 *.code-workspace
 
 # Spyder
