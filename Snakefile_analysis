@@ -191,9 +191,24 @@ rule predict_protein_topology:
         config["scripts"]["topology"]["predict_topology"]
 
 # Create filtered protein list containing only proteins with surface topology
+# Predict subcellular localization with DeepLocPro (second line of evidence
+# for surface exposure, alongside DeepTMHMM topology)
+rule predict_localization_deeplocpro:
+    input:
+        selected_3d_paths="results/{analysis}_{paramset}/protein_analysis/stage1_sequence_preparation_3d_selection/3d_structure_selection_results/selected_3d_paths_gram_{group}.txt"
+    output:
+        localization_table="results/{analysis}_{paramset}/protein_analysis/stage2_multiple_sequence_alignments_topology/localization_predictions/localization_deeplocpro_gram_{group}.tsv"
+    params:
+        group="{group}",
+        localization=config.get("localization", {})
+    script:
+        config["scripts"]["topology"]["predict_localization_deeplocpro"]
+
 rule create_surface_protein_list:
     input:
-        topology_results="results/{analysis}_{paramset}/protein_analysis/stage2_multiple_sequence_alignments_topology/topology_prediction_results/topology_predictions.json"
+        topology_results="results/{analysis}_{paramset}/protein_analysis/stage2_multiple_sequence_alignments_topology/topology_prediction_results/topology_predictions.json",
+        localization_positive="results/{analysis}_{paramset}/protein_analysis/stage2_multiple_sequence_alignments_topology/localization_predictions/localization_deeplocpro_gram_positive.tsv",
+        localization_negative="results/{analysis}_{paramset}/protein_analysis/stage2_multiple_sequence_alignments_topology/localization_predictions/localization_deeplocpro_gram_negative.tsv"
     output:
         surface_proteins_positive="results/{analysis}_{paramset}/protein_analysis/stage2_multiple_sequence_alignments_topology/topology_prediction_results/surface_proteins_gram_positive.txt",
         surface_proteins_negative="results/{analysis}_{paramset}/protein_analysis/stage2_multiple_sequence_alignments_topology/topology_prediction_results/surface_proteins_gram_negative.txt",
@@ -202,7 +217,8 @@ rule create_surface_protein_list:
         analysis="{analysis}",
         paramset="{paramset}",
         min_extracellular_coverage=config.get("topology", {}).get("min_extracellular_coverage", 0.05),
-        min_extracellular_aa=config.get("topology", {}).get("min_extracellular_aa", 30)
+        min_extracellular_aa=config.get("topology", {}).get("min_extracellular_aa", 30),
+        localization_mode=config.get("localization", {}).get("mode", "topology_only")
     script:
         config["scripts"]["topology"]["create_surface_protein_list"]
 

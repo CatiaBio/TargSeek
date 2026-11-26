@@ -139,6 +139,95 @@ def identify_surface_genes(topology_data: Dict, min_extracellular_coverage: floa
     
     return surface_genes, filter_stats
 
+def load_localization_calls(table_path: str) -> Dict[str, bool]:
+    """Read a DeepLocPro localization table -> {gene: surface_exposed}.
+
+    Returns an empty dict when the table is absent or holds no predictions
+    (e.g. DeepLocPro disabled), which means "no localization evidence".
+    """
+    calls = {}
+    if not table_path or not os.path.exists(table_path):
+        return calls
+
+    with open(table_path) as handle:
+        header = None
+        for line in handle:
+            line = line.rstrip("\n")
+            if not line or line.startswith("#"):
+                continue
+            fields = line.split("\t")
+            if header is None:
+                header = fields
+                continue
+            row = dict(zip(header, fields))
+            gene = row.get("gene")
+            if gene:
+                calls[gene] = str(row.get("surface_exposed", "")).strip().lower() == "true"
+    return calls
+
+
+def apply_localization_filter(surface_genes: Dict[str, Set[str]],
+                              topology_data: Dict,
+                              localization_by_group: Dict[str, Dict[str, bool]],
+                              mode: str) -> Dict[str, Set[str]]:
+    """Combine topology-based and localization-based surface calls.
+
+    mode:
+      topology_only      ignore localization (previous behaviour)
+      intersect          keep genes called surface by BOTH methods
+      union              keep genes called surface by EITHER method
+      localization_only  use localization alone
+    """
+    if mode == "topology_only":
+        return surface_genes
+
+    combined = {}
+    for group, genes in topology_data.items():
+        topo_set = surface_genes.get(group, set())
+        calls = localization_by_group.get(group, {})
+
+        if not calls:
+            logger.warning(
+                f"gram_{group}: no localization predictions available, "
+                f"falling back to topology only (mode was '{mode}')"
+            )
+            combined[group] = topo_set
+            continue
+
+        loc_set = {gene for gene, is_surface in calls.items() if is_surface}
+        all_genes = set(genes.keys())
+
+        if mode == "intersect":
+            # Genes without a localization prediction keep their topology call,
+            # so a missing prediction never silently drops a candidate.
+            undecided = all_genes - set(calls.keys())
+            kept = (topo_set & loc_set) | (topo_set & undecided)
+        elif mode == "union":
+            kept = topo_set | loc_set
+        elif mode == "localization_only":
+            kept = loc_set
+        else:
+            raise ValueError(
+                f"Unknown localization.mode '{mode}'. Use topology_only, "
+                f"intersect, union or localization_only."
+            )
+
+        added = kept - topo_set
+        removed = topo_set - kept
+        logger.info(
+            f"gram_{group}: localization mode '{mode}' -> {len(kept)} surface genes "
+            f"(topology alone: {len(topo_set)}; added {len(added)}, removed {len(removed)})"
+        )
+        for gene in sorted(added):
+            logger.info(f"  + {gene}: added on localization evidence")
+        for gene in sorted(removed):
+            logger.info(f"  - {gene}: dropped, localization says not surface-exposed")
+
+        combined[group] = kept
+
+    return combined
+
+
 def save_gene_lists(surface_genes: Dict[str, Set[str]], output_positive: str, output_negative: str):
     """Save gene lists to text files."""
     
@@ -164,6 +253,7 @@ def save_filter_summary(filter_stats: Dict, surface_genes: Dict, output_file: st
         'filter_parameters': {
             'min_extracellular_coverage': snakemake.params.min_extracellular_coverage,
             'min_extracellular_aa': getattr(snakemake.params, 'min_extracellular_aa', 30),
+            'localization_mode': getattr(snakemake.params, 'localization_mode', 'topology_only'),
             'analysis': snakemake.params.analysis,
             'paramset': snakemake.params.paramset
         },
@@ -214,7 +304,42 @@ def main():
     
     # Identify genes with sufficient surface topology
     surface_genes, filter_stats = identify_surface_genes(topology_data, min_extracellular_coverage, min_extracellular_aa)
-    
+
+    # Second line of evidence: DeepLocPro subcellular localization
+    localization_mode = getattr(snakemake.params, "localization_mode", "topology_only")
+    localization_by_group = {}
+    for group in ("positive", "negative"):
+        table = getattr(snakemake.input, f"localization_{group}", None)
+        calls = load_localization_calls(table)
+        if calls:
+            localization_by_group[group] = calls
+            logger.info(f"Loaded {len(calls)} localization calls for gram_{group} from {table}")
+
+    topology_only_genes = {g: set(s) for g, s in surface_genes.items()}
+    surface_genes = apply_localization_filter(
+        surface_genes, topology_data, localization_by_group, localization_mode
+    )
+
+    # Record what each line of evidence contributed
+    filter_stats['localization'] = {
+        'mode': localization_mode,
+        'groups_with_predictions': sorted(localization_by_group.keys()),
+        'by_group': {
+            group: {
+                'topology_only': sorted(topology_only_genes.get(group, set())),
+                'final': sorted(surface_genes.get(group, set())),
+                'added_by_localization': sorted(
+                    surface_genes.get(group, set()) - topology_only_genes.get(group, set())),
+                'removed_by_localization': sorted(
+                    topology_only_genes.get(group, set()) - surface_genes.get(group, set())),
+            }
+            for group in topology_data
+        },
+    }
+    # Keep the headline counts consistent with the final selection
+    filter_stats['surface_genes'] = sum(len(g) for g in surface_genes.values())
+    filter_stats['filtered_out_genes'] = filter_stats['total_genes'] - filter_stats['surface_genes']
+
     total_surface_genes = sum(len(genes) for genes in surface_genes.values())
     
     if total_surface_genes == 0:

@@ -186,6 +186,29 @@ bepipred:
   enabled: true
 
 # Topology prediction configuration
+# Subcellular localization prediction (DeepLocPro)
+# Second line of evidence for surface exposure, next to DeepTMHMM topology.
+# DeepLocPro is a separate install (needs PyTorch + ESM-2); see docs.
+localization:
+  # false -> localization is skipped and only topology is used
+  enabled: false
+  # How to combine topology and localization evidence:
+  #   topology_only      ignore localization
+  #   intersect          surface only if BOTH agree (strictest, fewest targets)
+  #   union              surface if EITHER agrees (most targets)
+  #   localization_only  use localization alone
+  mode: "topology_only"
+  # Executable; use the full path if it is in its own conda environment, e.g.
+  # /home/catia/tools/miniconda3/envs/deeplocpro/bin/deeplocpro
+  deeplocpro_bin: "deeplocpro"
+  # cpu, cuda or mps
+  device: "cpu"
+  # Classes counted as reachable by an antibody
+  surface_classes:
+    - "Cell wall & surface"
+    - "Extracellular"
+    - "Outer Membrane"
+
 topology:
   # Topology prediction method: "deeptmhmm" (recommended) or "topcons"
   method: "deeptmhmm"
@@ -392,6 +415,7 @@ scripts:
   # -------------------------------------------------------------------------
   topology:
     predict_topology: "scripts/protein_analysis/predict_topology.py"
+    predict_localization_deeplocpro: "scripts/protein_analysis/predict_localization_deeplocpro.py"
     create_surface_protein_list: "scripts/protein_analysis/create_surface_protein_list.py"
     create_extracellular_mapping: "scripts/protein_analysis/create_extracellular_mapping.py"
     filter_surface_proteins: "scripts/protein_analysis/filter_surface_proteins.py"
