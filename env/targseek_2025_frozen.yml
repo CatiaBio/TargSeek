@@ -22,6 +22,7 @@ dependencies:
   - binutils_impl_linux-64=2.44
   - binutils_linux-64=2.44
   - biopython=1.85
+  - blast=2.17.0
   - blosc=1.21.6
   - boto3=1.40.11
   - botocore=1.40.11
@@ -30,11 +31,11 @@ dependencies:
   - brotli-python=1.1.0
   - bzip2=1.0.8
   - c-ares=1.34.5
-  - ca-certificates=2025.8.3
+  - ca-certificates=2026.11.20
   - cachetools=5.5.2
   - cairo=1.18.4
   - cd-hit=4.8.1
-  - certifi=2025.8.3
+  - certifi=2026.11.20
   - cffi=1.17.1
   - charset-normalizer=3.4.3
   - click=8.2.1
@@ -53,6 +54,7 @@ dependencies:
   - connection_pool=0.0.3
   - contourpy=1.3.2
   - cryptography=45.0.6
+  - curl=8.14.1
   - cycler=0.12.1
   - cyrus-sasl=2.1.28
   - datrie=0.8.2
@@ -63,6 +65,7 @@ dependencies:
   - dpath=2.2.0
   - dropbox=12.0.2
   - eido=0.2.4
+  - entrez-direct=24.0
   - exceptiongroup=1.3.0
   - filechunkio=1.8
   - font-ttf-dejavu-sans-mono=2.37
@@ -176,6 +179,7 @@ dependencies:
   - libgpg-error=1.55
   - libgrpc=1.74.1
   - libiconv=1.18
+  - libidn2=2.3.8
   - libjpeg-turbo=3.1.0
   - liblapack=3.9.0
   - liblapacke=3.9.0
@@ -204,6 +208,7 @@ dependencies:
   - libstdcxx-ng=15.1.0
   - libsystemd0=257.7
   - libtiff=4.7.0
+  - libunistring=0.9.10
   - libuuid=2.38.1
   - libvorbis=1.3.7
   - libwebp-base=1.6.0
@@ -228,6 +233,7 @@ dependencies:
   - munkres=1.1.4
   - muscle=5.3
   - nbformat=5.10.4
+  - ncbi-vdb=3.4.1
   - ncurses=6.5
   - nspr=4.37
   - nss=3.115
@@ -236,7 +242,7 @@ dependencies:
   - openjdk=23.0.2
   - openjpeg=2.5.3
   - openldap=2.6.10
-  - openssl=3.5.2
+  - openssl=3.6.5
   - packaging=25.0
   - pandas=2.3.1
   - paramiko=4.0.0
@@ -244,6 +250,27 @@ dependencies:
   - pcre2=10.45
   - pephubclient=0.4.4
   - peppy=0.40.7
+  - perl=5.32.1
+  - perl-archive-tar=3.14
+  - perl-carp=1.50
+  - perl-common-sense=3.75
+  - perl-compress-raw-bzip2=2.214
+  - perl-compress-raw-zlib=2.214
+  - perl-encode=3.24
+  - perl-exporter=5.74
+  - perl-exporter-tiny=1.002002
+  - perl-extutils-makemaker=7.70
+  - perl-io-compress=2.216
+  - perl-io-zlib=1.15
+  - perl-json=4.11
+  - perl-json-xs=4.04
+  - perl-list-moreutils=0.430
+  - perl-list-moreutils-xs=0.430
+  - perl-parent=0.243
+  - perl-pathtools=3.75
+  - perl-scalar-list-utils=1.70
+  - perl-storable=3.15
+  - perl-types-serialiser=1.01
   - pillow=11.3.0
   - pip=25.2
   - pixman=0.46.4
@@ -340,6 +367,7 @@ dependencies:
   - veracitools=0.1.3
   - wayland=1.24.0
   - wcwidth=0.2.13
+  - wget=1.25.0
   - wheel=0.45.1
   - wrapt=1.17.3
   - xcb-util=0.4.1
@@ -374,4 +402,5 @@ dependencies:
   - zstandard=0.23.0
   - zstd=1.5.7
   - pip:
+      - bacdive==2.0.0
       - logomaker==0.8.7
