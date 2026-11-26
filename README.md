@@ -1,167 +1,146 @@
-# 🎯 TargSeek: Surface Protein Discovery & Epitope Prediction Pipeline
+# TargSeek
 
-A **Snakemake-based protein discovery pipeline** that identifies conserved, functionally relevant proteins within specific microbial groups. The pipeline processes taxonomic data and Gene Ontology (GO) terms to extract candidate proteins for downstream analysis such as diagnostic marker discovery, target validation, or phylogenomic studies.
+A Snakemake pipeline that finds conserved, surface-exposed bacterial proteins and
+predicts B-cell epitopes on them — for diagnostic markers, vaccine candidates and
+target validation.
 
-## 🚀 Quick Start
+It works in two steps: a **download** pipeline that collects the data, and an
+**analysis** pipeline that studies it.
+
+## What it does
+
+**Download pipeline** (`Snakefile_download`)
+
+1. Classifies your species as Gram-positive or Gram-negative (BacDive)
+2. Finds candidate genes for surface/extracellular GO terms (QuickGO)
+3. Counts how many of your species carry each gene (NCBI), keeps those above the
+   coverage threshold
+4. Downloads protein sequences (NCBI) and 3D structures (PDB / AlphaFold)
+
+**Analysis pipeline** (`Snakefile_analysis`)
+
+1. Picks sequences for alignment and the best 3D structure per protein
+2. Predicts membrane topology (DeepTMHMM) and keeps surface proteins
+3. Aligns sequences (MAFFT) and checks alignment quality
+4. Scores conservation (ConSurf)
+5. Predicts epitopes (BepiPred 3.0), filters them to extracellular regions, and
+   checks cross-reactivity against reference proteomes (BLAST)
+
+## Install
 
 ```bash
-# Clone and setup
-git clone https://github.com/CatiaBio/TargSeek.git
-cd TargSeek
 conda env create -f env.yml
 conda activate targseek
-
-# Configure API credentials
-cp config/login/bacdive_info.example.txt config/login/bacdive_info.txt
-cp config/login/ncbi_info.example.txt config/login/ncbi_info.txt
-# Edit with your credentials
-
-# Run complete pipelines
-snakemake -s Snakefile_download all_download_data --cores 8
-snakemake -s Snakefile_analysis all_analysis --cores 8
 ```
 
-### Running individual stages
+Some tools install separately: **ConSurf**, **BepiPred 3.0** and **DeepTMHMM** are
+required; **DeepLocPro** (localization) and **DiscoTope-3.0** (structure-based
+epitopes) are optional. See [docs/external_tools_setup.md](docs/external_tools_setup.md)
+and set their paths in `config/config_analysis.yaml`.
+
+## Set up your input
+
+These files are not in the repository — create them before running:
+
+| File | What it is |
+|---|---|
+| `config/login/bacdive_info.txt` | BacDive email (line 1), password (line 2) |
+| `config/login/ncbi_info.txt` | NCBI email, API key recommended |
+| `config/species/<batch>.txt` | your species, one per line |
+| `config/quickgo/<paramset>.json` | the GO terms to search |
+
+Example credential files are provided as `*.example.txt`.
+
+Then choose which dataset to run, in **both** config files:
+
+```yaml
+species_batches:
+  - analysis1          # which species list
+quickgo_paramsets:
+  - params1            # which GO term set
+```
+
+## Run
 
 ```bash
-# Download pipeline
-snakemake -s Snakefile_download stage1_species_classification --cores 4  # BacDive Gram classification
-snakemake -s Snakefile_download stage2_gene_discovery --cores 4          # QuickGO genes + taxa coverage
-snakemake -s Snakefile_download stage3_protein_selection --cores 4       # Protein selection
-snakemake -s Snakefile_download stage4_downloads --cores 4               # Sequences + 3D structures
+# always check first - shows what would run, changes nothing
+snakemake -s Snakefile_download all_download_data -n
 
-# Analysis pipeline
+# download, then analyse
+snakemake -s Snakefile_download all_download_data --cores 4
+snakemake -s Snakefile_analysis all_analysis --cores 4
+```
+
+Interrupted? Run the same command again — finished work is skipped and downloads
+resume. Add `--keep-going` so one failing step doesn't stop the others.
+
+Run a single stage if you prefer:
+
+```bash
+snakemake -s Snakefile_download stage1_species_classification --cores 4
+snakemake -s Snakefile_download stage2_gene_discovery --cores 4
+snakemake -s Snakefile_download stage3_protein_selection --cores 4
+snakemake -s Snakefile_download stage4_downloads --cores 4
+
 snakemake -s Snakefile_analysis stage1_sequence_preparation --cores 4
-snakemake -s Snakefile_analysis stage2_alignments_topology --cores 4     # MAFFT + DeepTMHMM topology
-snakemake -s Snakefile_analysis stage3_conservation_analysis --cores 4   # ConSurf
-snakemake -s Snakefile_analysis stage4_epitope_predictions --cores 4     # BepiPred 3.0 + reports
-
-# Dry run (show what would be executed)
-snakemake -s Snakefile_analysis all_analysis --dry-run
+snakemake -s Snakefile_analysis stage2_alignments_topology --cores 4
+snakemake -s Snakefile_analysis stage3_conservation_analysis --cores 4
+snakemake -s Snakefile_analysis stage4_epitope_predictions --cores 4
 ```
 
-## 🎯 Overview
+## Results
 
-TargSeek identifies candidate proteins for vaccine development, diagnostics, and therapeutic targets through:
-
-- Taxonomic classification and gene coverage assessment
-- Transmembrane topology prediction with DeepTMHMM
-- 3D structure integration from PDB
-- Conservation analysis with ConSurf and BepiPred 3.0 epitope prediction
-
-## 🏗️ Pipeline Architecture
-
-### Two-Stage System:
-
-1. **Download Pipeline** (`Snakefile_download`): Data collection, classification, sequence/structure downloads
-2. **Analysis Pipeline** (`Snakefile_analysis`): MSA, conservation analysis, topology prediction, epitope prediction
-
-### Key Features:
-
-- **Coverage threshold**: ≥50% species coverage for gene selection
-- **Intelligent caching**: Persistent API call caching to avoid re-downloads
-- **3D structure priority**: Structures selected first for MSA
-- **Dual analysis**: With and without 3D structures
-- **Epitope conservation**: Maps epitopes to MSA positions and scores conservation
-
-## 📁 Project Structure
+Everything lands under `results/{batch}_{paramset}/`:
 
 ```
-TargSeek/
-├── Snakefile_download           # Download pipeline workflow
-├── Snakefile_analysis           # Analysis pipeline workflow
-├── env.yml                      # Conda environment specification
-├── config/                      # Configuration files
-│   ├── config_download.yaml    # Download pipeline configuration
-│   ├── config_analysis.yaml    # Analysis pipeline configuration
-│   ├── login/                  # API credentials
-│   ├── species/               # Species lists per analysis batch
-│   └── quickgo/               # GO terms and parameters
-├── scripts/                     # Pipeline scripts (organized by function)
-│   ├── gene_selection/        # Download pipeline scripts
-│   └── protein_analysis/      # Analysis pipeline scripts
-├── cache/                      # Persistent API call caches
-├── data/                       # Raw and intermediate data
-├── results/                    # Pipeline analysis outputs
-└── tools/                      # External tools (not included; see below)
+gene_selection/              coverage table, selected genes, HTML report
+protein_analysis/
+  stage1_..._3d_selection/   sequences for alignment, chosen structures
+  stage2_..._topology/       topology, surface proteins, alignments, QC report
+  stage3_..._conservation/   ConSurf scores
+  stage4_..._reports/        epitopes, cross-reactivity, final reports
 ```
 
-## 📊 Output Organization
+Downloaded data is shared between runs: `data/protein_sequences/`,
+`data/protein_structures/`, `data/blast_databases/`.
 
-```
-results/{analysis}_{paramset}/
-├── gene_selection/
-│   ├── coverage_count.tsv
-│   ├── selected_genes_gram_*.txt
-│   └── protein_structures/
-└── protein_analysis/
-    ├── stage1_sequence_preparation_3d_selection/      # MSA input sequences, 3D structure selection
-    ├── stage2_multiple_sequence_alignments_topology/  # DeepTMHMM topology, MAFFT alignments
-    ├── stage3_quality_assessment_conservation_analysis/  # ConSurf conservation
-    └── stage4_epitope_predictions_and_reports/        # BepiPred epitopes, final reports
-```
+`cache/` holds API results and can take hours to rebuild — don't delete it.
 
-## 🔧 Configuration
+## Settings
 
-- **Download**: `config/config_download.yaml`
-- **Analysis**: `config/config_analysis.yaml`
-- Modify thresholds, protein counts, and paths without editing Snakefiles
+Everything is in `config/config_download.yaml` and `config/config_analysis.yaml`;
+you should not need to edit the Snakefiles. The ones you are most likely to change:
 
-## 🧬 Dependencies
+| Setting | Meaning |
+|---|---|
+| `gram_thresholds` | minimum % of species that must carry a gene (default 50) |
+| `topology.min_extracellular_aa` | residues needed to count as surface-exposed |
+| `quality_control.min_species_per_alignment` | smallest alignment used for conservation |
+| `bepipred.threshold` | epitope score cut-off |
+| `localization.mode` | how topology and localization evidence combine |
 
-**Core** (via conda):
+## Documentation
 
-- Snakemake, Biopython, pandas, MAFFT, ClipKIT
+- [USAGE_DOWNLOAD.txt](USAGE_DOWNLOAD.txt) — download pipeline guide
+- [USAGE_ANALYSIS.txt](USAGE_ANALYSIS.txt) — analysis pipeline guide
+- [BLAST_DATABASES.md](BLAST_DATABASES.md) — reference proteomes
+- [docs/external_tools_setup.md](docs/external_tools_setup.md) — external tool setup
 
-**APIs**:
+## External tools and databases
 
-- BacDive, QuickGO, UniProt, NCBI, PDB
+This pipeline calls third-party tools that are **not included** here. Install them
+yourself and follow their licences — several (ConSurf, BepiPred 3.0, DeepLocPro,
+DeepTMHMM) are academic / non-commercial only.
 
-**Optional**:
+Tools: MAFFT, ConSurf (+rate4site), DeepTMHMM, BepiPred 3.0, BLAST+, PyMOL,
+optionally DeepLocPro and DiscoTope-3.0.
 
-- BepiPred 3.0 (Ubuntu), AliStat (manual compilation)
+Databases: NCBI, UniProt, PDB, AlphaFold DB, BacDive, QuickGO (EBI/GOA). Please cite
+them when publishing.
 
-## 📚 Documentation
+## Licence and citation
 
-- [USAGE\_DOWNLOAD.txt](USAGE_DOWNLOAD.txt) - Download pipeline guide
-- [USAGE\_ANALYSIS.txt](USAGE_ANALYSIS.txt) - Analysis pipeline guide
-
-## 📦 External Tools & Licenses
-
-This pipeline orchestrates several third-party tools which are **not included** in this repository.\
-Users must install them separately and comply with their licenses:
-
-- **MAFFT** (Multiple sequence alignment) – [License](https://mafft.cbrc.jp/alignment/software/source.html)
-- **ConSurf** (Conservation analysis) – academic/non-commercial use only
-- **DeepTMHMM** (Transmembrane topology prediction) – [DTU License](https://dtu.biolib.com/DeepTMHMM/)
-- **BepiPred 3.0** (Epitope prediction) – academic/non-commercial use only
-- **AliStat, ClipKIT, Biopython, pandas** – see their respective repositories
-
-⚠️ These tools remain under their **original licenses**. This repository only provides wrappers/workflow rules to call them.
-
----
-
-## 🗄️ Databases & Data Usage
-
-This pipeline fetches data from publicly available biological databases. Each database has its own citation/usage requirements:
-
-- **NCBI** – free use, cite [NCBI Resource Coordinators, 2018](https://www.ncbi.nlm.nih.gov/)
-- **UniProt** – cite [UniProt Consortium, 2023](https://www.uniprot.org/)
-- **PDB** – cite [Berman et al., 2000](https://www.rcsb.org/)
-- **BacDive** – cite [Reimer et al., 2019](https://bacdive.dsmz.de/)
-- **QuickGO (EBI/GOA)** – cite [Gene Ontology Consortium, 2021](http://geneontology.org/)
-
-Please follow the recommended citations when publishing results.
-
----
-
-## 📝 License & Attribution
-
-- This repository’s **original code** is released under the [MIT License](LICENSE).
-- Third-party tools and databases used in this pipeline remain under their **own licenses** and terms of use.
-- If you use this pipeline in research, please cite both this repository and the external resources/tools.
-
-**Citation for TargSeek:**
+Original code: [MIT](LICENSE). Third-party tools and databases keep their own terms.
 
 ```bibtex
 @software{baptista2025targseek,
@@ -172,3 +151,4 @@ Please follow the recommended citations when publishing results.
 }
 ```
 
+See also [CITATION.cff](CITATION.cff).
