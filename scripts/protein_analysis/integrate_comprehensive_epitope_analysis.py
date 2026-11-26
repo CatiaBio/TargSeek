@@ -158,6 +158,29 @@ def load_topology_mapping(topology_mapping_file: str) -> Dict[str, Any]:
     
     return topology_data
 
+def _field(row, *names, default=None):
+    """First present, non-empty value among several possible column names.
+
+    The epitope tables written by create_epitope_tables_from_bepipred.py use
+    Peptide / Start / End / Score; earlier code looked only for
+    Epitope_Sequence / Epitope_Start / Max_Score and so silently fell back to
+    defaults for every row.
+    """
+    for name in names:
+        if name in row:
+            value = row[name]
+            if value is None:
+                continue
+            try:
+                if pd.isna(value):
+                    continue
+            except (TypeError, ValueError):
+                pass
+            if value != '':
+                return value
+    return default
+
+
 def calculate_epitope_scores(epitope_data: Dict[str, pd.DataFrame],
                            consurf_data: Dict[str, Dict],
                            blast_data: Dict[str, Any],
@@ -183,13 +206,15 @@ def calculate_epitope_scores(epitope_data: Dict[str, pd.DataFrame],
         scored_df['Recommendation'] = 'Unknown'
         
         for idx, row in scored_df.iterrows():
-            epitope_seq = row.get('Epitope_Sequence', row.get('sequence', ''))
-            epitope_start = int(row.get('Epitope_Start', row.get('start', 0)))
-            epitope_end = int(row.get('Epitope_End', row.get('end', 0)))
+            epitope_seq = str(_field(row, 'Peptide', 'Epitope_Sequence', 'sequence',
+                                     default='') or '')
+            epitope_start = int(_field(row, 'Start', 'Epitope_Start', 'start', default=0) or 0)
+            epitope_end = int(_field(row, 'End', 'Epitope_End', 'end', default=0) or 0)
             epitope_length = len(epitope_seq)
-            
+
             # 1. BepiPred Score (immunogenicity prediction)
-            bepipred_score = float(row.get('Max_Score', row.get('max_score', 0.5)))
+            bepipred_score = float(_field(row, 'Score', 'Max_Score', 'max_score',
+                                          default=0.5) or 0.5)
             scored_df.at[idx, 'BepiPred_Score'] = bepipred_score
             
             # 2. Conservation Score (from ConSurf)
@@ -304,6 +329,17 @@ def create_comprehensive_report(scored_epitopes: Dict[str, pd.DataFrame],
     group_label = f"Gram-{group}"
     generated = datetime.now().strftime('%Y-%m-%d %H:%M')
 
+    # Which score components were actually measured. When a tool did not run,
+    # calculate_epitope_scores falls back to a neutral default; printing that as
+    # a number would pass an assumption off as a measurement.
+    has_conservation = bool(consurf_data)
+    has_specificity = bool(
+        (blast_data or {}).get('detail') or (blast_data or {}).get('protein_summaries'))
+    has_topology = bool((topology_data or {}).get('mapping'))
+
+    def comp(value, measured):
+        return rt.score_num(value) if measured else '<span class="muted" title="not measured">n/m</span>'
+
     # --- gather every epitope, best first ---------------------------------
     all_epitopes = []
     for protein_id, df in scored_epitopes.items():
@@ -316,12 +352,14 @@ def create_comprehensive_report(scored_epitopes: Dict[str, pd.DataFrame],
     all_epitopes.sort(key=lambda r: r.get('Combined_Score', 0), reverse=True)
 
     def seq_of(rec):
-        return str(rec.get('Epitope_Sequence', rec.get('sequence', '')) or '')
+        return str(_field(rec, 'Peptide', 'Epitope_Sequence', 'sequence', default='') or '')
 
     def pos_of(rec):
-        start = rec.get('Epitope_Start', rec.get('start', ''))
-        end = rec.get('Epitope_End', rec.get('end', ''))
-        return f"{start}-{end}" if start != '' or end != '' else '-'
+        start = _field(rec, 'Start', 'Epitope_Start', 'start', default='')
+        end = _field(rec, 'End', 'Epitope_End', 'end', default='')
+        if start == '' and end == '':
+            return '-'
+        return f"{start}-{end}"
 
     total_proteins = len([d for d in scored_epitopes.values() if d is not None and not d.empty])
     total_epitopes = len(all_epitopes)
@@ -364,6 +402,17 @@ def create_comprehensive_report(scored_epitopes: Dict[str, pd.DataFrame],
             '<span class="chip">DeepTMHMM &mdash; surface accessibility (25%)</span>'
             '<span class="chip">BLAST &mdash; specificity vs host proteomes (20%)</span>'
             '</div>')
+    missing = [n for n, ok in (('ConSurf conservation', has_conservation),
+                              ('DeepTMHMM topology', has_topology),
+                              ('BLAST specificity', has_specificity)) if not ok]
+    if missing and total_epitopes:
+        overview_body += rt.note(
+            'warning', 'Some scores were not measured',
+            '<p>' + ', '.join(missing) + ' did not run for this analysis, so those columns '
+            'show <strong>n/m</strong> (not measured). The combined score still uses the '
+            'pipeline\'s neutral defaults for them, so treat the ranking as provisional '
+            'until those steps have run.</p>')
+
     sections.append(rt.section('overview', f'{group_label} epitope candidates',
                                overview_body,
                                subtitle=f'{analysis}_{paramset} | generated {generated}'))
@@ -381,9 +430,9 @@ def create_comprehensive_report(scored_epitopes: Dict[str, pd.DataFrame],
                 rt.esc(len(seq)),
                 rt.esc(pos_of(rec)),
                 rt.score_num(rec.get('BepiPred_Score')),
-                rt.score_num(rec.get('Conservation_Score')),
-                rt.score_num(rec.get('Topology_Score')),
-                rt.score_num(rec.get('Specificity_Score')),
+                comp(rec.get('Conservation_Score'), has_conservation),
+                comp(rec.get('Topology_Score'), has_topology),
+                comp(rec.get('Specificity_Score'), has_specificity),
                 rt.score_meter(rec.get('Combined_Score')),
                 rt.recommendation_badge(rec.get('Recommendation')),
             ])
@@ -503,9 +552,9 @@ def create_comprehensive_report(scored_epitopes: Dict[str, pd.DataFrame],
                 rt.esc(pos_of(rec)),
                 rt.esc(len(seq)),
                 rt.score_num(rec.get('BepiPred_Score')),
-                rt.score_num(rec.get('Conservation_Score')),
-                rt.score_num(rec.get('Topology_Score')),
-                rt.score_num(rec.get('Specificity_Score')),
+                comp(rec.get('Conservation_Score'), has_conservation),
+                comp(rec.get('Topology_Score'), has_topology),
+                comp(rec.get('Specificity_Score'), has_specificity),
                 rt.score_meter(rec.get('Combined_Score')),
                 rt.recommendation_badge(rec.get('Recommendation')),
             ])
