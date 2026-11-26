@@ -373,6 +373,73 @@ def create_comprehensive_report(scored_epitopes: Dict[str, pd.DataFrame],
     sections = []
     nav_main = [('overview', 'Overview', None)]
 
+    # PyMOL renders (epitopes coloured on the structure) live beside the
+    # BepiPred output; the report embeds them per protein.
+    viz_dirs = [
+        Path(output_file).resolve().parent / '..' / '..' / 'epitope_prediction_results'
+        / f'gram_{group}' / '3d_visualizations',
+        Path('results') / f'{analysis}_{paramset}' / 'protein_analysis'
+        / 'stage4_epitope_predictions_and_reports' / 'epitope_prediction_results'
+        / f'gram_{group}' / '3d_visualizations',
+        Path('results') / f'{analysis}_{paramset}' / 'protein_analysis'
+        / 'bepipred_epitope_predictions' / f'gram_{group}' / '3d_visualizations',
+    ]
+    viz_dir = next((d.resolve() for d in viz_dirs if d.exists()), None)
+    if viz_dir:
+        logger.info(f"Using PyMOL figures from {viz_dir}")
+    else:
+        logger.warning("No PyMOL 3d_visualizations directory found; report will have no figures")
+
+    # Which bacteria actually carry each gene (from the coverage assessment)
+    coverage_by_gene = {}
+    cov_path = Path('results') / f'{analysis}_{paramset}' / 'gene_selection' / 'coverage_count.tsv'
+    if cov_path.exists():
+        try:
+            cov = pd.read_csv(cov_path, sep='\t')
+            for _, row in cov.iterrows():
+                if str(row.get('gram', '')).strip().lower() not in (group, ''):
+                    continue
+                names = str(row.get('species_names_with_gene', '') or '')
+                coverage_by_gene[str(row['gene'])] = {
+                    'n': row.get('species_with_gene'),
+                    'total': row.get('total_species'),
+                    'pct': row.get('coverage_percentage'),
+                    'species': [n.strip() for n in names.split(',') if n.strip()],
+                }
+            logger.info(f"Loaded species coverage for {len(coverage_by_gene)} genes")
+        except Exception as e:
+            logger.warning(f"Could not read {cov_path}: {e}")
+    else:
+        logger.warning(f"No coverage table at {cov_path}; species lists will be omitted")
+
+    def species_for(gene):
+        info = coverage_by_gene.get(gene)
+        if not info or not info['species']:
+            return "", ""
+        try:
+            chip = (f'<span class="chip">{int(info["n"])}/{int(info["total"])} species '
+                    f'({float(info["pct"]):.0f}%)</span>')
+        except (TypeError, ValueError):
+            chip = f'<span class="chip">{len(info["species"])} species</span>'
+        fold = rt.collapsible(f'Bacteria carrying {gene}',
+                              rt.species_list(info['species']),
+                              count=len(info['species']))
+        return chip, fold
+
+    def figure_for(gene):
+        if not viz_dir:
+            return ""
+        pngs = sorted(viz_dir.glob(f"{gene}_*_epitopes.png"))
+        if not pngs:
+            return ""
+        png = pngs[0]
+        legend = png.with_name(png.name.replace('_epitopes.png', '_legend.txt'))
+        rows = rt.parse_pymol_legend(legend) if legend.exists() else []
+        return rt.structure_figure(
+            png, rows,
+            caption=f"{gene}: predicted epitopes highlighted on the 3D structure "
+                    f"(PyMOL). Grey is the rest of the chain.")
+
     # --- overview ---------------------------------------------------------
     tiles = rt.stat_row([
         rt.stat_tile(total_proteins, 'Proteins'),
@@ -563,7 +630,12 @@ def create_comprehensive_report(scored_epitopes: Dict[str, pd.DataFrame],
         chips = (f'<div class="chiprow"><span class="chip">{len(df)} epitopes</span>'
                  f'<span class="chip">mean {p_mean:.2f}</span>'
                  f'<span class="chip">{p_high} highly recommended</span></div>')
-        body = chips + rt.table(headers, rows, table_id=anchor + '-t', numeric_from=3)
+        gene_only = str(protein_id).split('_')[0]
+        species_chip, species_fold = species_for(gene_only)
+        if species_chip:
+            chips = chips.replace('</div>', species_chip + '</div>', 1)
+        body = chips + figure_for(gene_only) + species_fold
+        body += rt.table(headers, rows, table_id=anchor + '-t', numeric_from=3)
         if len(df) > 15:
             body += f'<p class="muted">Showing the top 15 of {len(df)} epitopes.</p>'
         sections.append(rt.section(anchor, str(protein_id), body, level=2))

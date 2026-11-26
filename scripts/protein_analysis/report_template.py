@@ -17,6 +17,7 @@ reports can reuse the same shell.
 """
 
 import html
+from pathlib import Path
 from datetime import datetime
 
 # --- status palette (fixed, never themed) -----------------------------------
@@ -306,6 +307,28 @@ th[aria-sort="descending"] .sort-ind::after { content: "\\2193"; opacity: 1; }
   :root:where(:not([data-theme="light"])) .badge-critical { color: var(--text); }
 }
 
+/* structure figures */
+.structure { margin: 14px 0 6px; padding: 0; }
+.structure img { width: 100%; max-width: 760px; height: auto; display: block; border: 1px solid var(--hairline); border-radius: 10px; background: #ffffff; }
+.structure figcaption { font-size: 12.5px; margin-top: 7px; }
+.colorkey { list-style: none; display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 4px 18px; margin: 10px 0 0; padding: 0; font-size: 12.5px; }
+.colorkey li { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.colorkey .seq { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.swatch { width: 11px; height: 11px; border-radius: 3px; flex: none; border: 1px solid var(--border); }
+
+/* folds and species lists */
+.fold { margin: 10px 0 2px; border: 1px solid var(--hairline); border-radius: 8px; background: var(--plane); }
+.fold > summary { cursor: pointer; padding: 9px 12px; font-size: 13px; font-weight: 600; list-style: none; display: flex; align-items: center; gap: 8px; }
+.fold > summary::-webkit-details-marker { display: none; }
+.fold > summary::before { content: "\25B8"; color: var(--text-2); transition: transform .12s; }
+.fold[open] > summary::before { transform: rotate(90deg); }
+.fold > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: 8px; }
+.fold-body { padding: 2px 12px 12px; }
+.species { list-style: none; margin: 0; padding: 0; columns: 3; column-gap: 24px; font-size: 12.5px; }
+.species li { break-inside: avoid; color: var(--text-2); }
+@media (max-width: 900px) { .species { columns: 2; } }
+@media print { .fold { break-inside: avoid; } .fold-body { display: block !important; } }
+
 /* notes */
 .note { border: 1px solid var(--border); border-left-width: 3px; border-radius: 8px; padding: 12px 14px; margin: 12px 0; background: var(--plane); }
 .note-head { display: flex; align-items: center; gap: 7px; margin-bottom: 4px; }
@@ -505,3 +528,93 @@ def render_page(title, subtitle, meta_items, nav_groups, sections_html,
 </body>
 </html>
 """
+
+# --- PyMOL figures ----------------------------------------------------------
+
+PYMOL_COLORS = {
+    "red": "#e8352c", "blue": "#2f5fe0", "green": "#1f9e3a", "yellow": "#e6c200",
+    "magenta": "#d6219c", "cyan": "#15b5c4", "orange": "#ef8a22", "purple": "#8a4fd3",
+    "brown": "#9c6134", "pink": "#ee7fac", "lime": "#78c71f", "teal": "#0f9b8e",
+    "salmon": "#f18a59", "olive": "#8a8a1f", "slate": "#6e7f99", "wheat": "#c9a86b",
+}
+
+
+def embed_image(path, max_width=760):
+    """Inline an image as a data URI so the report stays one shareable file.
+
+    Downscaled first: a full-resolution PyMOL render is ~350 KB, and twenty of
+    them would make the page unopenable by email.
+    """
+    import base64
+    import io
+    try:
+        from PIL import Image
+    except ImportError:
+        return None
+    try:
+        with Image.open(path) as im:
+            im = im.convert("RGB")
+            if im.width > max_width:
+                h = round(im.height * max_width / im.width)
+                im = im.resize((max_width, h), Image.LANCZOS)
+            buf = io.BytesIO()
+            im.save(buf, format="JPEG", quality=82, optimize=True)
+        return "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode()
+    except Exception:
+        return None
+
+
+def parse_pymol_legend(path):
+    """Read a *_legend.txt written by visualize_epitopes_pymol.py."""
+    rows, in_table = [], False
+    try:
+        lines = Path(path).read_text(errors="replace").splitlines()
+    except OSError:
+        return rows
+    for line in lines:
+        if line.startswith("No.") and "Color" in line:
+            in_table = True
+            continue
+        if not in_table or not line.strip() or line.startswith("-"):
+            continue
+        parts = line.split()
+        if len(parts) < 7 or not parts[0].rstrip(".").isdigit():
+            continue
+        rows.append({
+            "no": parts[0], "color": parts[1], "start": parts[2], "end": parts[3],
+            "length": parts[4], "score": parts[5], "peptide": parts[6],
+        })
+    return rows
+
+
+def structure_figure(image_path, legend_rows, caption=None):
+    """Figure + colour key, so a colour in the render maps to a sequence."""
+    src = embed_image(image_path)
+    if not src:
+        return ""
+    cap = f'<figcaption class="muted">{esc(caption)}</figcaption>' if caption else ""
+    key = ""
+    if legend_rows:
+        items = []
+        for r in legend_rows:
+            hexc = PYMOL_COLORS.get(r["color"].lower(), "#888888")
+            items.append(
+                f'<li><span class="swatch" style="background:{hexc}"></span>'
+                f'<span class="seq">{esc(r["peptide"])}</span>'
+                f'<span class="muted">{esc(r["start"])}-{esc(r["end"])}'
+                f' &middot; {esc(r["color"])}</span></li>')
+        key = f'<ul class="colorkey">{"".join(items)}</ul>'
+    return (f'<figure class="structure"><img src="{src}" alt="3D structure with '
+            f'predicted epitopes highlighted" loading="lazy">{cap}{key}</figure>')
+
+def collapsible(summary_text, body_html, count=None):
+    """<details> block - long species lists shouldn't dominate the page."""
+    badge = f' <span class="count">{esc(count)}</span>' if count is not None else ""
+    return (f'<details class="fold"><summary>{esc(summary_text)}{badge}</summary>'
+            f'<div class="fold-body">{body_html}</div></details>')
+
+
+def species_list(names):
+    """Compact multi-column list of organism names."""
+    items = "".join(f'<li><em>{esc(n)}</em></li>' for n in names)
+    return f'<ul class="species">{items}</ul>'
