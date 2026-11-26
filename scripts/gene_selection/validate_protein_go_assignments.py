@@ -16,6 +16,7 @@ Creates:
 import requests
 import json
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import pandas as pd
 from pathlib import Path
 from urllib.parse import urlencode
@@ -366,50 +367,58 @@ def main():
     proteins_with_go = 0
     proteins_found_via_alias = 0
     cache_hits = 0
-    
-    for i, protein in enumerate(all_proteins, 1):
-        print(f"Processing protein {i}/{len(all_proteins)}: {protein}", end='... ')
-        
-        # Check if we'll use cache
+
+    # UniProt lookups are network-bound and independent per protein, so run a
+    # few at a time instead of strictly one after another. Was ~1.8 s/protein
+    # serial; the pool keeps the same cache and alias behaviour.
+    max_workers = int(os.environ.get("TARGSEEK_UNIPROT_WORKERS", "8"))
+    total = len(all_proteins)
+    print(f"Validating {total} proteins with {max_workers} parallel workers")
+
+    def _lookup(protein):
         cached_file = os.path.join(cache_dir, f"{protein}.json")
         will_use_cache = os.path.exists(cached_file)
-        
-        # Get aliases for this protein
         protein_aliases = protein_aliases_dict.get(protein, [])
-        
-        # Get comprehensive protein information with caching
         result = get_comprehensive_protein_info(protein, protein_aliases, cache_dir)
-        
-        # Store comprehensive info
+        if not will_use_cache:
+            # be polite to the API; concurrency is capped by the pool size
+            time.sleep(0.2)
+        return protein, result, will_use_cache
+
+    results_by_protein = {}
+    done = 0
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {executor.submit(_lookup, p): p for p in all_proteins}
+        for future in as_completed(futures):
+            protein = futures[future]
+            try:
+                protein, result, will_use_cache = future.result()
+            except Exception as e:
+                print(f"Error validating {protein}: {e}")
+                result, will_use_cache = {
+                    'go_cellular_component': 'NA', 'found_in_uniprot': False}, False
+            results_by_protein[protein] = result
+            if will_use_cache:
+                cache_hits += 1
+            done += 1
+            if done % 100 == 0 or done == total:
+                print(f"  {done}/{total} proteins validated "
+                      f"({cache_hits} from cache)", flush=True)
+
+    # Keep the original protein order in the outputs
+    for protein in all_proteins:
+        result = results_by_protein.get(
+            protein, {'go_cellular_component': 'NA', 'found_in_uniprot': False})
         all_protein_info[protein] = result
-        
-        # Count cache hits
-        if will_use_cache:
-            cache_hits += 1
-        
-        # Create simple two-column output for GO validation report
         final_results.append({
-            'protein': protein,  # Always the original protein name
+            'protein': protein,
             'go_cellular_component': result['go_cellular_component']
         })
-        
         if result.get('found_in_uniprot') and result['go_cellular_component'] != 'NA':
             proteins_with_go += 1
             if result.get('found_via_alias'):
                 proteins_found_via_alias += 1
-                print(f"✓ (via alias '{result['found_via_alias']}')")  
-            else:
-                print("✓")
-        else:
-            if protein_aliases:
-                print(f"✗ (tried {len(protein_aliases)} aliases)")
-            else:
-                print("✗")
-        
-        # Rate limiting (skip for cached results)
-        if not will_use_cache:
-            time.sleep(0.2)
-    
+
     # Save comprehensive protein information to JSON in data directory
     uniprot_json_file = os.path.join(uniprot_data_dir, "protein_info.json")
     with open(uniprot_json_file, 'w') as f:
