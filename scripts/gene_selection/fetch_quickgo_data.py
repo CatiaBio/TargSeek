@@ -64,9 +64,31 @@ def quickgo_get(query_params, what="request"):
 
 
 data = quickgo_get(params, what="page count")
-total_results = data.get("pageInfo", {}).get("total", 0)
+
+# QuickGO's pageInfo.total is the number of PAGES, not the number of results.
+# (Verified: the same query reports total=1903 at limit=1, 381 at limit=5 and
+# 10 at limit=200 for ~1903 actual results.) This code used to treat it as a
+# result count and divide by limit, so it fetched only total/limit pages -
+# about 0.5% of the available annotations.
+page_info = data.get("pageInfo", {})
 limit = int(params.get("limit", 200))
-total_pages = (total_results // limit) + (1 if total_results % limit else 0)
+available_pages = int(page_info.get("total", 0))
+
+# Fetching every page of an all-bacteria query means millions of annotations,
+# so cap it. The cap is recorded in the metadata file next to the output.
+max_pages_cfg = params.pop("maxPages", None)
+max_pages = int(max_pages_cfg) if max_pages_cfg else 0
+total_pages = min(available_pages, max_pages) if max_pages else available_pages
+truncated = total_pages < available_pages
+
+print(f"QuickGO reports {available_pages:,} pages at limit={limit} "
+      f"(~{available_pages * limit:,} annotations)")
+if truncated:
+    print(f"WARNING: fetching only the first {total_pages:,} pages "
+          f"(~{total_pages * limit:,} annotations) because maxPages={max_pages} "
+          f"is set in the parameter file. Results are a subset, not the full set.")
+else:
+    print(f"Fetching all {total_pages:,} pages")
 
 # -------------------------
 # Function to fetch a single page
@@ -74,29 +96,34 @@ total_pages = (total_results // limit) + (1 if total_results % limit else 0)
 def fetch_page(page_num):
     page_params = params.copy()
     page_params["page"] = page_num
-    page_params["limit"] = (
-        total_results % limit if page_num == total_pages and total_results % limit != 0 else limit
-    )
-    
+    page_params["limit"] = limit  # the last page simply returns fewer rows
     return quickgo_get(page_params, what=f"page {page_num}").get("results", [])
 
 # -------------------------
 # Download annotations concurrently
 # -------------------------
 all_results = []
-max_workers = min(5, total_pages)  # Limit concurrent requests to avoid overwhelming API
+max_workers = min(5, total_pages)
+# 0.2s per page would add hours to a 12k-page fetch; concurrency is already
+# capped at 5 in-flight requests, which is the real politeness control.
+sleep_between = 0.2 if total_pages <= 200 else 0.02  # Limit concurrent requests to avoid overwhelming API
 
 with ThreadPoolExecutor(max_workers=max_workers) as executor:
     # Submit all page requests
     future_to_page = {executor.submit(fetch_page, page): page for page in range(1, total_pages + 1)}
     
     # Collect results as they complete
+    done = 0
     for future in as_completed(future_to_page):
         page_num = future_to_page[future]
         try:
             page_data = future.result()
             all_results.extend(page_data)
-            time.sleep(0.2)  # Reduced sleep to prevent API overload
+            done += 1
+            if done % 100 == 0 or done == total_pages:
+                print(f"  fetched {done:,}/{total_pages:,} pages "
+                      f"({len(all_results):,} annotations)", flush=True)
+            time.sleep(sleep_between)
         except Exception as e:
             print(f"Error fetching page {page_num}: {e}")
             raise
@@ -104,8 +131,9 @@ with ThreadPoolExecutor(max_workers=max_workers) as executor:
 # -------------------------
 # Save results and gene symbols
 # -------------------------
+# indent=4 on millions of entries wastes a lot of disk; keep it compact
 with open(annotations_output, "w", encoding="utf-8") as f:
-    json.dump(all_results, f, indent=4)
+    json.dump(all_results, f)
 
 # Extract unique symbols more efficiently
 symbols = set()
@@ -117,3 +145,26 @@ for entry in all_results:
 with open(symbols_output, "w", encoding="utf-8") as f:
     for symbol in sorted(symbols):
         f.write(symbol + "\n")
+
+# Record exactly what was fetched, so a truncated run is never mistaken for a
+# complete one when the results are interpreted later.
+taxa = {e.get("taxonId") for e in all_results if e.get("taxonId")}
+metadata = {
+    "fetched_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
+    "query": {k: v for k, v in params.items() if k != "page"},
+    "pages_available": available_pages,
+    "pages_fetched": total_pages,
+    "max_pages_setting": max_pages or None,
+    "truncated": truncated,
+    "annotations_fetched": len(all_results),
+    "distinct_symbols": len(symbols),
+    "distinct_taxa": len(taxa),
+}
+with open(os.path.join(output_dir, "annotations_fetch_metadata.json"), "w",
+          encoding="utf-8") as f:
+    json.dump(metadata, f, indent=2)
+
+print(f"\nAnnotations: {len(all_results):,} | symbols: {len(symbols):,} "
+      f"| taxa: {len(taxa):,}")
+if truncated:
+    print("NOTE: this is a TRUNCATED subset (see annotations_fetch_metadata.json)")

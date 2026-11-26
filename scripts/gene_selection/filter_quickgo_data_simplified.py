@@ -78,8 +78,15 @@ matches_found = 0
 
 for entry in annotations:
     symbol = entry.get("symbol", "")
-    taxon_name = entry.get("taxonName", "")
-    
+    # QuickGO's includeFields=taxonName now makes the API return HTTP 500, so
+    # taxonName can be absent. taxonId identifies a taxon just as well (they
+    # were 1:1 in the 2025 data: 375 ids, 375 names), and this filter only
+    # counts distinct taxa per gene.
+    taxon_name = entry.get("taxonName") or ""
+    if not taxon_name:
+        taxon_id = entry.get("taxonId")
+        taxon_name = f"taxon:{taxon_id}" if taxon_id else ""
+
     if symbol and taxon_name:
         for gene in input_genes:
             if gene_matches_symbol(gene, symbol, gene_aliases):
