@@ -1,165 +1,103 @@
-# TargSeek Download Pipeline Usage Guide
-# ==========================================
+TargSeek - Download Pipeline (Snakefile_download)
+==================================================
 
-## Overview
-The download pipeline (Snakefile_download) handles data collection, species classification, 
-gene selection, and protein/structure downloads for the TargSeek project.
+What it does: classifies your species by Gram stain, finds candidate genes
+from GO terms, checks how many species have each gene, selects proteins,
+and downloads their sequences and 3D structures.
 
-## Prerequisites
-- Conda environment 'targseek' must be activated: `conda activate targseek`
-- API credentials must be configured in config/login/
-- Species input files must be present in config/species/
-- QuickGO parameter files must be present in config/quickgo/
+Run it BEFORE the analysis pipeline (see USAGE_ANALYSIS.txt).
 
-## Basic Usage
 
-### 1. Run Complete Download Pipeline
-```bash
-snakemake -s Snakefile_download all_download_data --cores 4
-```
+1. BEFORE YOU START
+-------------------
+  conda activate targseek
 
-### 2. Run with More Cores and Quiet Output
-```bash
-snakemake -s Snakefile_download all_download_data --cores 8 --quiet
-```
+  You need these files:
+    config/login/bacdive_info.txt     BacDive login (line 1: email, line 2: password)
+    config/login/ncbi_info.txt        NCBI email (+ API key recommended)
+    config/species/<batch>.txt        one species name per line
+    config/quickgo/<paramset>.json    GO terms / QuickGO search parameters
 
-### 3. Dry Run (Check What Would Be Executed)
-```bash
-snakemake -s Snakefile_download all_download_data --dry-run
-```
+  Copy the *.example.txt files in config/login/ to get started.
 
-### 4. Suppress NumPy Warnings
-```bash
-PYTHONWARNINGS="ignore" snakemake -s Snakefile_download all_download_data --cores 4
-```
+  Choose which batch and parameter set to run in config/config_download.yaml:
+    species_batches:
+      - analysis1
+    quickgo_paramsets:
+      - params1
 
-## Pipeline Stages (For Testing/Debugging)
 
-### Run Individual Stages
-```bash
-# Species classification only
-snakemake -s Snakefile_download all_species_classification --cores 4
+2. RUN IT
+---------
+  Check first (shows what would run, changes nothing):
+    snakemake -s Snakefile_download all_download_data -n
 
-# Gene selection stage (includes species classification as dependency)
-snakemake -s Snakefile_download all_gene_selection --cores 4
+  Run everything:
+    snakemake -s Snakefile_download all_download_data --cores 4
 
-# Downloads only (requires gene selection to be completed first)
-snakemake -s Snakefile_download all_downloads --cores 4
-```
+  Interrupted? Run the same command again. Finished steps are skipped and
+  downloads resume where they stopped.
 
-## Troubleshooting
 
-### Force Re-run Specific Rules
-```bash
-snakemake -s Snakefile_download all_download_data --cores 4 --forcerun classify_taxa_by_gram
-```
+3. STAGES (run one at a time if you want)
+-----------------------------------------
+  Target                          What it does
+  ------------------------------  ---------------------------------------------
+  stage1_species_classification   Gram +/- classification (BacDive),
+                                  BLAST reference databases
+  stage2_gene_discovery           Genes from GO terms (QuickGO), aliases,
+                                  surface-accessible filter
+  stage3_protein_selection        Species coverage per gene (NCBI),
+                                  final protein selection
+  stage4_downloads                Protein sequences, 3D structures (PDB/AlphaFold),
+                                  structure metadata, HTML report
 
-### Clean Up Failed Downloads
-```bash
-# Remove sentinel files to restart downloads
-rm data/protein_sequences/.analysis1_params1_*_download_complete
-rm data/protein_structures/.analysis1_params1_*_structures_complete
-```
+  Example:
+    snakemake -s Snakefile_download stage1_species_classification --cores 4
 
-### Check Rule Dependencies
-```bash
-snakemake -s Snakefile_download all_download_data --dry-run --printshellcmds
-```
+  Each stage also runs the stages before it if they are not done yet.
 
-## Visualization
 
-### Generate Workflow Diagram
-```bash
-# PNG format
-snakemake -s Snakefile_download --dag | dot -Tpng > workflow.png
+4. WHERE THE RESULTS GO
+-----------------------
+  {analysis} = species batch (e.g. analysis1), {paramset} = e.g. params1
 
-# SVG format  
-snakemake -s Snakefile_download --dag | dot -Tsvg > workflow.svg
+  Gram classification   data/bacdive/{analysis}/gram_positive.txt
+                        data/bacdive/{analysis}/gram_negative.txt
+  Candidate genes       data/quickgo/{paramset}/protein_to_be_tested.txt
+  Coverage table        results/{analysis}_{paramset}/gene_selection/coverage_count.tsv
+  Selected proteins     results/{analysis}_{paramset}/gene_selection/summary.tsv
+  Download report       results/{analysis}_{paramset}/gene_selection_report.html
+  Protein sequences     data/protein_sequences/
+  3D structures         data/protein_structures/pdb_files/
+  BLAST databases       data/blast_databases/   (see BLAST_DATABASES.md)
 
-# Rule graph (simplified)
-snakemake -s Snakefile_download --rulegraph | dot -Tpng > rulegraph.png
-```
 
-## Output Locations
+5. SETTINGS (config/config_download.yaml)
+-----------------------------------------
+  gram_thresholds         minimum % of species that must have a gene
+                          (default 50 for both groups)
+  protein_selection       how many proteins to keep per group
+  blast_databases         which reference proteomes to download (true/false)
 
-### Species Classification
-- Raw data: `data/bacdive/{analysis}/`
-- Gram-positive species: `data/bacdive/{analysis}/gram_positive.txt`
-- Gram-negative species: `data/bacdive/{analysis}/gram_negative.txt`
+  You don't need to edit the Snakefile.
 
-### Gene Selection
-- Coverage analysis: `results/{analysis}_{paramset}/gene_selection/coverage_count.tsv`
-- Selected proteins: `results/{analysis}_{paramset}/gene_selection/summary.tsv`
-- Gene lists: `results/{analysis}_{paramset}/gene_selection/selected_genes_gram_*.txt`
 
-### Downloaded Data
-- Protein sequences: `data/protein_sequences/{gene}/{species}.fasta`
-- 3D structures: `data/protein_structures/{gene}/`
-- Structure metadata: `data/protein_structures/{analysis}_{paramset}_downloaded_structures.tsv`
+6. COMMON PROBLEMS
+------------------
+  Force one step to run again:
+    snakemake -s Snakefile_download all_download_data --cores 4 \
+        --forcerun classify_taxa_by_gram
 
-### Reports
-- Download report: `results/{analysis}_{paramset}/gene_selection_report.html`
+  Running out of memory:  use fewer cores, e.g. --cores 2
 
-## Configuration
+  Hide NumPy/pandas warnings:
+    PYTHONWARNINGS="ignore" snakemake -s Snakefile_download all_download_data --cores 4
 
-### Main Configuration File
-Edit `config/config_download.yaml` to modify:
-- Species batches and input files
-- QuickGO parameter sets
-- Coverage thresholds
-- Download settings
-- File paths
+  The cache/ folder stores API results and takes hours to rebuild.
+  Don't delete it.
 
-### API Credentials
-- BacDive: `config/login/bacdive_info.txt`
-- NCBI: `config/login/ncbi_info.txt`
 
-## Common Issues
-
-### Download Interruptions
-Downloads use sentinel files for smart resumption. If interrupted, simply re-run the same command - it will automatically resume from where it left off.
-
-### Memory Issues
-Reduce the number of cores if running out of memory:
-```bash
-snakemake -s Snakefile_download all_download_data --cores 2
-```
-
-### Cache Issues
-If experiencing cache-related problems:
-```bash
-# Backup cache before clearing
-python utils/cache/backup_cache.py backup
-
-# Check cache status
-ls -la cache/*/
-```
-
-## Performance Tips
-
-1. **Use more cores** for CPU-intensive tasks: `--cores 8`
-2. **Use quiet mode** to reduce output: `--quiet`
-3. **Monitor progress** with: `--printshellcmds`
-4. **Batch similar jobs** by letting Snakemake handle parallelization
-
-## Examples for Different Scenarios
-
-### Quick Test Run
-```bash
-# Test with dry run first
-snakemake -s Snakefile_download all_species_classification --dry-run
-# Then run for real
-snakemake -s Snakefile_download all_species_classification --cores 2
-```
-
-### Production Run
-```bash
-# Full pipeline with optimal settings
-PYTHONWARNINGS="ignore" snakemake -s Snakefile_download all_download_data --cores 8 --quiet
-```
-
-### Development/Debugging
-```bash
-# Run with detailed output and shell commands shown
-snakemake -s Snakefile_download all_gene_selection --cores 4 --printshellcmds --verbose
-```
+7. WORKFLOW DIAGRAM (optional, needs graphviz)
+----------------------------------------------
+  snakemake -s Snakefile_download all_download_data --rulegraph | dot -Tpng > download_rules.png
