@@ -16,15 +16,28 @@ cp config/login/bacdive_info.example.txt config/login/bacdive_info.txt
 cp config/login/ncbi_info.example.txt config/login/ncbi_info.txt
 # Edit with your credentials
 
-# Run pipelines
+# Run complete pipelines
 snakemake -s Snakefile_download all_download_data --cores 8
 snakemake -s Snakefile_analysis all_analysis --cores 8
+```
 
-# Run ConSurf conservation analysis
-snakemake -s Snakefile_analysis all_consurf_analysis --cores 4
+### Running individual stages
 
-# Run topology prediction with DeepTMHMM
-snakemake -s Snakefile_analysis all_topology_prediction --cores 4
+```bash
+# Download pipeline
+snakemake -s Snakefile_download stage1_species_classification --cores 4  # BacDive Gram classification
+snakemake -s Snakefile_download stage2_gene_discovery --cores 4          # QuickGO genes + taxa coverage
+snakemake -s Snakefile_download stage3_protein_selection --cores 4       # Protein selection
+snakemake -s Snakefile_download stage4_downloads --cores 4               # Sequences + 3D structures
+
+# Analysis pipeline
+snakemake -s Snakefile_analysis stage1_sequence_preparation --cores 4
+snakemake -s Snakefile_analysis stage2_alignments_topology --cores 4     # MAFFT + DeepTMHMM topology
+snakemake -s Snakefile_analysis stage3_conservation_analysis --cores 4   # ConSurf
+snakemake -s Snakefile_analysis stage4_epitope_predictions --cores 4     # BepiPred 3.0 + reports
+
+# Dry run (show what would be executed)
+snakemake -s Snakefile_analysis all_analysis --dry-run
 ```
 
 ## 🎯 Overview
@@ -58,24 +71,19 @@ TargSeek/
 ├── Snakefile_download           # Download pipeline workflow
 ├── Snakefile_analysis           # Analysis pipeline workflow
 ├── env.yml                      # Conda environment specification
-├── CLAUDE.md                    # Project guidance
 ├── config/                      # Configuration files
 │   ├── config_download.yaml    # Download pipeline configuration
 │   ├── config_analysis.yaml    # Analysis pipeline configuration
 │   ├── login/                  # API credentials
-│   ├── microbiome/            # Species lists by analysis
+│   ├── species/               # Species lists per analysis batch
 │   └── quickgo/               # GO terms and parameters
 ├── scripts/                     # Pipeline scripts (organized by function)
-│   ├── gene_selection/        # Download pipeline scripts (14 scripts)
-│   └── protein_analysis/      # Analysis pipeline scripts (8 scripts)
-├── utils/                      # Utility scripts
-│   ├── cache/                 # Cache management utilities
-│   ├── setup/                 # Installation and setup scripts
-│   └── migration/             # Data migration utilities
+│   ├── gene_selection/        # Download pipeline scripts
+│   └── protein_analysis/      # Analysis pipeline scripts
 ├── cache/                      # Persistent API call caches
 ├── data/                       # Raw and intermediate data
 ├── results/                    # Pipeline analysis outputs
-└── tools/                      # External tools (BepiPred, ConSurf, etc.)
+└── tools/                      # External tools (not included; see below)
 ```
 
 ## 📊 Output Organization
@@ -87,12 +95,10 @@ results/{analysis}_{paramset}/
 │   ├── selected_genes_gram_*.txt
 │   └── protein_structures/
 └── protein_analysis/
-    ├── main_msa/              # Primary MSA directory
-    ├── msa_3d_structures/     # 3D-selected sequences
-    ├── conservation/
-    ├── consurf_analysis/      # ConSurf conservation analysis
-    ├── topology_predictions/  # DeepTMHMM topology predictions
-    └── epitope_predictions_bepipred/
+    ├── stage1_sequence_preparation_3d_selection/      # MSA input sequences, 3D structure selection
+    ├── stage2_multiple_sequence_alignments_topology/  # DeepTMHMM topology, MAFFT alignments
+    ├── stage3_quality_assessment_conservation_analysis/  # ConSurf conservation
+    └── stage4_epitope_predictions_and_reports/        # BepiPred epitopes, final reports
 ```
 
 ## 🔧 Configuration
@@ -117,7 +123,6 @@ results/{analysis}_{paramset}/
 
 ## 📚 Documentation
 
-- [CLAUDE.md](CLAUDE.md) - Technical documentation
 - [USAGE\_DOWNLOAD.txt](USAGE_DOWNLOAD.txt) - Download pipeline guide
 - [USAGE\_ANALYSIS.txt](USAGE_ANALYSIS.txt) - Analysis pipeline guide
 
@@ -159,7 +164,7 @@ Please follow the recommended citations when publishing results.
 **Citation for TargSeek:**
 
 ```bibtex
-@software{baptista2024targseek,
+@software{baptista2025targseek,
   title={TargSeek: Surface Protein Discovery and Epitope Prediction Pipeline},
   author={Cátia Baptista},
   year={2025},
