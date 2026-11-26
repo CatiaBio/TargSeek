@@ -15,20 +15,20 @@
 
 # Species analysis batches - each analysis represents a different dataset
 species_batches:
-  - analysis1
-  # - analysis2
+  # - analysis1   (frozen 2025 results)
+  - analysis2
   #analysis3
 
 # Species input files for each analysis batch
 species_files:
-  #analysis1: "config/species/analysis1.txt"
+  analysis1: "config/species/analysis1.txt"
   analysis2: "config/species/analysis2.txt"
   #analysis3: "config/species/analysis3.txt"
 
 # QuickGO parameter sets - different GO term configurations
 quickgo_paramsets:
-  - params1
-  #- params2
+  # - params1     (frozen 2025 results)
+  - params2
   #- params3
 
 # =============================================================================

@@ -16,14 +16,14 @@
 
 # Analysis batches - should match those used in download pipeline
 species_batches:
-  - analysis1
-  # - analysis2
+  # - analysis1   (frozen 2025 results)
+  - analysis2
   #- analysis3
 
 # QuickGO parameter sets - should match those used in download pipeline
 quickgo_paramsets:
-  - params1
-  #- params2
+  # - params1     (frozen 2025 results)
+  - params2
   #- params3
 
 # Defined Gram stain groups - should match download config
@@ -225,8 +225,8 @@ paths:
     # Gene selection results from download pipeline
     gene_lists: "results/{analysis}_{paramset}/gene_selection/genes_species/gram_{group}"
     protein_sequences: "data/protein_sequences"
-    protein_download_sentinel: "data/protein_sequences/.{analysis}_{paramset}_{group}_download_complete"
-    structures_download_sentinel: "data/protein_structures/.{analysis}_{paramset}_{group}_structures_complete"
+    protein_download_sentinel: "data/protein_sequences/{analysis}_{paramset}/.{group}_download_complete"
+    structures_download_sentinel: "data/protein_structures/{analysis}_{paramset}_structures_complete.sentinel"
     coverage_data: "results/{analysis}_{paramset}/gene_selection/coverage_count.tsv"
     proteins_to_study: "results/{analysis}_{paramset}/gene_selection/selected_genes_gram_{group}.txt"
 
