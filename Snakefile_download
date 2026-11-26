@@ -323,7 +323,7 @@ rule assess_gene_taxa_coverage_unified:
         aliases=config["paths"]["quickgo"]["gene_aliases"],
         ncbi_info=config["login"]["ncbi_info"]
     output:
-        directory(config["paths"]["gene_selection"]["base_dir"])
+        coverage=config["paths"]["gene_selection"]["coverage_count"]
     priority: 10
     log:
         config["paths"]["logs"]["coverage_unified"]

@@ -432,10 +432,9 @@ coverage_df = pd.DataFrame(coverage_stats)
 coverage_df = coverage_df.sort_values(['gram', 'coverage_percentage'], ascending=[True, False])
 
 # Ensure output directory exists  
-output_dir = Path(snakemake.output[0])
+output_file = Path(snakemake.output.coverage)
+output_dir = output_file.parent
 output_dir.mkdir(parents=True, exist_ok=True)
-# Save as coverage_count.tsv in the organized folder structure
-output_file = output_dir / "coverage_count.tsv"
 
 # Save results
 print(f"Saving unified results to: {output_file}")

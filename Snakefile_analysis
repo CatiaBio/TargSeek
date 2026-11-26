@@ -131,7 +131,7 @@ rule all_analysis:
 rule select_sequences_for_msa:
     input:
         gene_lists="results/{analysis}_{paramset}/gene_selection/genes_species/gram_{group}",
-        protein_download_sentinel="data/protein_sequences/.{analysis}_{paramset}_{group}_download_complete"
+        protein_download_sentinel="data/protein_sequences/{analysis}_{paramset}/.{group}_download_complete"
     output:
         sequences_dir=directory("results/{analysis}_{paramset}/protein_analysis/stage1_sequence_preparation_3d_selection/msa_fasta_sequences/gram_{group}")
     params:
@@ -144,8 +144,8 @@ rule select_sequences_for_msa:
 rule select_3d_sequence_per_protein:
     input:
         reference_dir="results/{analysis}_{paramset}/protein_analysis/stage1_sequence_preparation_3d_selection/msa_fasta_sequences/gram_{group}",
-        protein_download_sentinel="data/protein_sequences/.{analysis}_{paramset}_{group}_download_complete",
-        structures_download_sentinel="data/protein_structures/.{analysis}_{paramset}_{group}_structures_complete"
+        protein_download_sentinel="data/protein_sequences/{analysis}_{paramset}/.{group}_download_complete",
+        structures_download_sentinel="data/protein_structures/{analysis}_{paramset}_structures_complete.sentinel"
     output:
         selected_3d_paths="results/{analysis}_{paramset}/protein_analysis/stage1_sequence_preparation_3d_selection/3d_structure_selection_results/selected_3d_paths_gram_{group}.txt",
         selected_3d_tsv="results/{analysis}_{paramset}/protein_analysis/stage1_sequence_preparation_3d_selection/3d_structure_selection_results/selected_3d_fasta_gram_{group}.tsv"
@@ -250,7 +250,7 @@ rule run_consurf_conservation_analysis:
     input:
         alignments_with_3d_dir="results/{analysis}_{paramset}/protein_analysis/stage2_multiple_sequence_alignments_topology/mafft_alignments_with_3d/gram_{group}",
         selected_3d_tsv="results/{analysis}_{paramset}/protein_analysis/stage1_sequence_preparation_3d_selection/3d_structure_selection_results/selected_3d_fasta_gram_{group}.tsv",
-        structures_download_sentinel="data/protein_structures/.{analysis}_{paramset}_{group}_structures_complete",
+        structures_download_sentinel="data/protein_structures/{analysis}_{paramset}_structures_complete.sentinel",
         protein_filter_summary="results/{analysis}_{paramset}/protein_analysis/stage2_multiple_sequence_alignments_topology/topology_prediction_results/protein_filter_summary.json"
     output:
         consurf_results_dir=directory("results/{analysis}_{paramset}/protein_analysis/stage3_quality_assessment_conservation_analysis/consurf_analysis/gram_{group}"),
