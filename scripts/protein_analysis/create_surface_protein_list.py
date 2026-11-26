@@ -139,11 +139,12 @@ def identify_surface_genes(topology_data: Dict, min_extracellular_coverage: floa
     
     return surface_genes, filter_stats
 
-def load_localization_calls(table_path: str) -> Dict[str, bool]:
-    """Read a DeepLocPro localization table -> {gene: surface_exposed}.
+def load_localization_calls(table_path: str) -> Dict[str, Dict]:
+    """Read a DeepLocPro localization table.
 
-    Returns an empty dict when the table is absent or holds no predictions
-    (e.g. DeepLocPro disabled), which means "no localization evidence".
+    Returns {gene: {"surface": bool, "confidence": float, "localization": str}}.
+    Empty when the table is absent or holds no predictions (e.g. DeepLocPro
+    disabled), which means "no localization evidence".
     """
     calls = {}
     if not table_path or not os.path.exists(table_path):
@@ -161,15 +162,25 @@ def load_localization_calls(table_path: str) -> Dict[str, bool]:
                 continue
             row = dict(zip(header, fields))
             gene = row.get("gene")
-            if gene:
-                calls[gene] = str(row.get("surface_exposed", "")).strip().lower() == "true"
+            if not gene:
+                continue
+            try:
+                confidence = float(row.get("confidence", "") or 0.0)
+            except ValueError:
+                confidence = 0.0
+            calls[gene] = {
+                "surface": str(row.get("surface_exposed", "")).strip().lower() == "true",
+                "confidence": confidence,
+                "localization": row.get("localization", ""),
+            }
     return calls
 
 
 def apply_localization_filter(surface_genes: Dict[str, Set[str]],
                               topology_data: Dict,
-                              localization_by_group: Dict[str, Dict[str, bool]],
-                              mode: str) -> Dict[str, Set[str]]:
+                              localization_by_group: Dict[str, Dict[str, Dict]],
+                              mode: str,
+                              min_confidence: float = 0.7) -> Dict[str, Set[str]]:
     """Combine topology-based and localization-based surface calls.
 
     mode:
@@ -177,6 +188,14 @@ def apply_localization_filter(surface_genes: Dict[str, Set[str]],
       intersect          keep genes called surface by BOTH methods
       union              keep genes called surface by EITHER method
       localization_only  use localization alone
+
+    min_confidence guards against weak predictions overriding topology.
+    DeepLocPro always returns a class, so a low probability means it had to
+    pick something. Observed on real data: bamC, a known outer-membrane
+    lipoprotein, was called cytoplasmic-membrane at only p=0.42, while correct
+    calls such as cheZ (cytoplasmic) came in at p=0.99. Only confident
+    non-surface calls are allowed to drop a gene; weaker ones are reported and
+    the topology call stands.
     """
     if mode == "topology_only":
         return surface_genes
@@ -194,18 +213,21 @@ def apply_localization_filter(surface_genes: Dict[str, Set[str]],
             combined[group] = topo_set
             continue
 
-        loc_set = {gene for gene, is_surface in calls.items() if is_surface}
-        all_genes = set(genes.keys())
+        confident = {g: c for g, c in calls.items() if c["confidence"] >= min_confidence}
+        loc_surface = {g for g, c in calls.items() if c["surface"]}
+        # A gene is only rejected on confident non-surface evidence
+        loc_reject = {g for g, c in confident.items() if not c["surface"]}
+        low_conf_reject = {
+            g for g, c in calls.items()
+            if not c["surface"] and c["confidence"] < min_confidence and g in topo_set
+        }
 
         if mode == "intersect":
-            # Genes without a localization prediction keep their topology call,
-            # so a missing prediction never silently drops a candidate.
-            undecided = all_genes - set(calls.keys())
-            kept = (topo_set & loc_set) | (topo_set & undecided)
+            kept = topo_set - loc_reject
         elif mode == "union":
-            kept = topo_set | loc_set
+            kept = topo_set | loc_surface
         elif mode == "localization_only":
-            kept = loc_set
+            kept = loc_surface
         else:
             raise ValueError(
                 f"Unknown localization.mode '{mode}'. Use topology_only, "
@@ -215,13 +237,24 @@ def apply_localization_filter(surface_genes: Dict[str, Set[str]],
         added = kept - topo_set
         removed = topo_set - kept
         logger.info(
-            f"gram_{group}: localization mode '{mode}' -> {len(kept)} surface genes "
-            f"(topology alone: {len(topo_set)}; added {len(added)}, removed {len(removed)})"
+            f"gram_{group}: localization mode '{mode}' (min confidence {min_confidence}) "
+            f"-> {len(kept)} surface genes (topology alone: {len(topo_set)}; "
+            f"added {len(added)}, removed {len(removed)})"
         )
         for gene in sorted(added):
-            logger.info(f"  + {gene}: added on localization evidence")
+            call = calls.get(gene, {})
+            logger.info(f"  + {gene}: added, localization = {call.get('localization')} "
+                        f"(p={call.get('confidence')})")
         for gene in sorted(removed):
-            logger.info(f"  - {gene}: dropped, localization says not surface-exposed")
+            call = calls.get(gene, {})
+            logger.info(f"  - {gene}: dropped, localization = {call.get('localization')} "
+                        f"(p={call.get('confidence')})")
+        for gene in sorted(low_conf_reject):
+            call = calls.get(gene, {})
+            logger.warning(
+                f"  ? {gene}: kept despite localization = {call.get('localization')} "
+                f"(p={call.get('confidence')} below {min_confidence}) - check manually"
+            )
 
         combined[group] = kept
 
@@ -254,6 +287,7 @@ def save_filter_summary(filter_stats: Dict, surface_genes: Dict, output_file: st
             'min_extracellular_coverage': snakemake.params.min_extracellular_coverage,
             'min_extracellular_aa': getattr(snakemake.params, 'min_extracellular_aa', 30),
             'localization_mode': getattr(snakemake.params, 'localization_mode', 'topology_only'),
+            'localization_min_confidence': getattr(snakemake.params, 'localization_min_confidence', 0.7),
             'analysis': snakemake.params.analysis,
             'paramset': snakemake.params.paramset
         },
@@ -315,14 +349,18 @@ def main():
             localization_by_group[group] = calls
             logger.info(f"Loaded {len(calls)} localization calls for gram_{group} from {table}")
 
+    localization_min_confidence = float(
+        getattr(snakemake.params, "localization_min_confidence", 0.7))
     topology_only_genes = {g: set(s) for g, s in surface_genes.items()}
     surface_genes = apply_localization_filter(
-        surface_genes, topology_data, localization_by_group, localization_mode
+        surface_genes, topology_data, localization_by_group, localization_mode,
+        localization_min_confidence
     )
 
     # Record what each line of evidence contributed
     filter_stats['localization'] = {
         'mode': localization_mode,
+        'min_confidence': localization_min_confidence,
         'groups_with_predictions': sorted(localization_by_group.keys()),
         'by_group': {
             group: {

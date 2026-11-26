@@ -224,7 +224,8 @@ rule create_surface_protein_list:
         paramset="{paramset}",
         min_extracellular_coverage=config.get("topology", {}).get("min_extracellular_coverage", 0.05),
         min_extracellular_aa=config.get("topology", {}).get("min_extracellular_aa", 30),
-        localization_mode=config.get("localization", {}).get("mode", "topology_only")
+        localization_mode=config.get("localization", {}).get("mode", "topology_only"),
+        localization_min_confidence=config.get("localization", {}).get("min_confidence", 0.7)
     script:
         config["scripts"]["topology"]["create_surface_protein_list"]
 

@@ -38,7 +38,8 @@ CLASSES = [
 # antibody could reach it. Overridable via localization.surface_classes.
 DEFAULT_SURFACE_CLASSES = ["Cell wall & surface", "Extracellular", "Outer Membrane"]
 
-OUTPUT_COLUMNS = ["gene", "seq_id", "localization", "surface_exposed"] + CLASSES
+OUTPUT_COLUMNS = ["gene", "seq_id", "localization", "surface_exposed",
+                  "confidence"] + CLASSES
 
 
 def parse_selected_3d_paths(paths_file):
@@ -180,6 +181,15 @@ def collect_rows(csv_path, seq_id_to_gene, surface_classes):
                     row[cls] = float(record[cls])
                 except (TypeError, ValueError):
                     row[cls] = ""
+
+        # Confidence = probability of the predicted class. DeepLocPro always
+        # returns a class, so a low value means "it had to pick something" and
+        # the call should not override other evidence.
+        try:
+            row["confidence"] = round(float(record[localization]), 4)
+        except (KeyError, TypeError, ValueError):
+            row["confidence"] = ""
+
         rows.append(row)
     return rows
 
