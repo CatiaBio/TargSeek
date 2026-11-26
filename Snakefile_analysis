@@ -45,6 +45,9 @@ rule stage2_alignments_topology:
                analysis=config["species_batches"], paramset=config["quickgo_paramsets"], group=["positive", "negative"]),
         # Stage 2: MAFFT alignments (filtered by surface proteins)
         expand("results/{analysis}_{paramset}/protein_analysis/stage2_multiple_sequence_alignments_topology/mafft_alignments/gram_{group}",
+               analysis=config["species_batches"], paramset=config["quickgo_paramsets"], group=["positive", "negative"]),
+        # Stage 2: alignment quality gate
+        expand("results/{analysis}_{paramset}/protein_analysis/stage2_multiple_sequence_alignments_topology/alignment_qc/alignment_qc_gram_{group}.tsv",
                analysis=config["species_batches"], paramset=config["quickgo_paramsets"], group=["positive", "negative"])
 
 rule stage3_conservation_analysis:
@@ -106,6 +109,9 @@ rule all_analysis:
         expand("results/{analysis}_{paramset}/protein_analysis/stage2_multiple_sequence_alignments_topology/topology_prediction_results/surface_proteins_gram_{group}.txt",
                analysis=config["species_batches"], paramset=config["quickgo_paramsets"], group=["positive", "negative"]),
         expand("results/{analysis}_{paramset}/protein_analysis/stage2_multiple_sequence_alignments_topology/mafft_alignments/gram_{group}",
+               analysis=config["species_batches"], paramset=config["quickgo_paramsets"], group=["positive", "negative"]),
+        # Stage 2: alignment quality gate
+        expand("results/{analysis}_{paramset}/protein_analysis/stage2_multiple_sequence_alignments_topology/alignment_qc/alignment_qc_gram_{group}.tsv",
                analysis=config["species_batches"], paramset=config["quickgo_paramsets"], group=["positive", "negative"]),
         # Stage 3: ConSurf conservation analysis
         expand("results/{analysis}_{paramset}/protein_analysis/stage3_quality_assessment_conservation_analysis/consurf_analysis/gram_{group}/.consurf_complete.sentinel",
@@ -246,12 +252,26 @@ rule mafft_msa_with_3d_sequence:
 # Output Directory: stage3_quality_assessment_conservation_analysis/
 # =============================================================================
 
+rule check_alignment_quality:
+    input:
+        alignments_dir="results/{analysis}_{paramset}/protein_analysis/stage2_multiple_sequence_alignments_topology/mafft_alignments_with_3d/gram_{group}"
+    output:
+        qc_report="results/{analysis}_{paramset}/protein_analysis/stage2_multiple_sequence_alignments_topology/alignment_qc/alignment_qc_gram_{group}.tsv",
+        passed_list="results/{analysis}_{paramset}/protein_analysis/stage2_multiple_sequence_alignments_topology/alignment_qc/alignments_passed_gram_{group}.txt"
+    params:
+        group="{group}",
+        quality_control=config.get("quality_control", {})
+    script:
+        config["scripts"]["quality"]["check_alignment_quality"]
+
+
 rule run_consurf_conservation_analysis:
     input:
         alignments_with_3d_dir="results/{analysis}_{paramset}/protein_analysis/stage2_multiple_sequence_alignments_topology/mafft_alignments_with_3d/gram_{group}",
         selected_3d_tsv="results/{analysis}_{paramset}/protein_analysis/stage1_sequence_preparation_3d_selection/3d_structure_selection_results/selected_3d_fasta_gram_{group}.tsv",
         structures_download_sentinel="data/protein_structures/{analysis}_{paramset}_structures_complete.sentinel",
-        protein_filter_summary="results/{analysis}_{paramset}/protein_analysis/stage2_multiple_sequence_alignments_topology/topology_prediction_results/protein_filter_summary.json"
+        protein_filter_summary="results/{analysis}_{paramset}/protein_analysis/stage2_multiple_sequence_alignments_topology/topology_prediction_results/protein_filter_summary.json",
+        alignment_qc_passed="results/{analysis}_{paramset}/protein_analysis/stage2_multiple_sequence_alignments_topology/alignment_qc/alignments_passed_gram_{group}.txt"
     output:
         consurf_results_dir=directory("results/{analysis}_{paramset}/protein_analysis/stage3_quality_assessment_conservation_analysis/consurf_analysis/gram_{group}"),
         consurf_sentinel="results/{analysis}_{paramset}/protein_analysis/stage3_quality_assessment_conservation_analysis/consurf_analysis/gram_{group}/.consurf_complete.sentinel"
@@ -259,7 +279,8 @@ rule run_consurf_conservation_analysis:
         analysis="{analysis}",
         paramset="{paramset}",
         group="{group}",
-        consurf_script=config.get("consurf", {}).get("script_path", "tools/stand_alone_consurf/stand_alone_consurf.py")
+        consurf_script=config.get("consurf", {}).get("script_path", "tools/stand_alone_consurf/stand_alone_consurf.py"),
+        min_success_fraction=config.get("consurf", {}).get("min_success_fraction", 1.0)
     script:
         config["scripts"]["conservation"]["run_consurf_analysis"]
 

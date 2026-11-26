@@ -156,6 +156,10 @@ consurf:
   script_path: "/home/catia/tools/ConSurf-StandAlone/stand_alone_consurf-1.00/stand_alone_consurf.py"
   # Enable ConSurf analysis (set to false to skip)
   enabled: true
+  # Fraction of genes that must produce ConSurf grades for the stage to
+  # count as successful. 1.0 = all of them; lower it to accept partial
+  # results. The stage used to be marked complete even with 0 successes.
+  min_success_fraction: 1.0
 
 # Conserved sequence extraction configuration
 conserved:
@@ -358,6 +362,7 @@ scripts:
   # -------------------------------------------------------------------------
   quality:
     assess_alignment_quality: "scripts/protein_analysis/assess_alignment_quality_comparison.py"
+    check_alignment_quality: "scripts/protein_analysis/check_alignment_quality.py"
 
   # -------------------------------------------------------------------------
   # STAGE 4: Conservation Analysis Scripts

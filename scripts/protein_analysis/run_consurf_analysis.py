@@ -96,11 +96,29 @@ def decompress_if_needed(structure_file):
     else:
         return structure_file
 
+def consurf_output_is_valid(gene_output_dir):
+    """ConSurf only counts as successful if it wrote a non-empty grades file.
+
+    The standalone script can exit 0 without producing results, so the exit
+    code alone is not a reliable success signal.
+    """
+    gene_output_dir = Path(gene_output_dir)
+    for name in ("consurf_grades.txt", "consurf.grades"):
+        grades = gene_output_dir / name
+        if grades.exists() and grades.stat().st_size > 0:
+            return True
+    return False
+
+
 def run_consurf_analysis(msa_file, structure_file, chain, possible_queries, output_dir, consurf_script):
     """Run ConSurf analysis for a single protein, trying different query formats."""
+    gene_name = Path(msa_file).stem
     try:
-        # Create output directory for this analysis
-        gene_name = Path(msa_file).stem
+        # Create output directory for this analysis.
+        # Strip the "_aligned" suffix so the directory is named after the gene
+        # and matches the directory the caller creates.
+        if gene_name.endswith("_aligned"):
+            gene_name = gene_name[: -len("_aligned")]
         gene_output_dir = output_dir / gene_name
         gene_output_dir.mkdir(parents=True, exist_ok=True)
         
@@ -110,21 +128,34 @@ def run_consurf_analysis(msa_file, structure_file, chain, possible_queries, outp
         for i, query in enumerate(possible_queries):
             print(f"  Attempt {i+1}: Trying query format '{query}'")
             
-            # Construct ConSurf command with conda environment and predefined model to avoid ProtTest dependency
-            # Run from ConSurf directory and use absolute paths
-            # Run from the ConSurf install directory (derived from the configured script path)
+            # Run from the ConSurf install directory (derived from the configured
+            # script path). Use the interpreter of the currently active
+            # environment instead of activating a hardcoded conda env.
+            # --model LG avoids the ProtTest dependency.
             consurf_dir = Path(consurf_script).resolve().parent
-            conda_cmd = f"cd {consurf_dir} && source /home/catia/tools/miniconda3/etc/profile.d/conda.sh && conda activate targseek && python3 stand_alone_consurf.py --dir {gene_output_dir} --msa {msa_file} --pdb {structure_file} --chain {chain} --query '{query}' --model LG"
-            cmd = ['bash', '-c', conda_cmd]
-            
+            cmd = [
+                sys.executable, str(Path(consurf_script).resolve()),
+                "--dir", str(gene_output_dir),
+                "--msa", str(Path(msa_file).resolve()),
+                "--pdb", str(Path(structure_file).resolve()),
+                "--chain", str(chain),
+                "--query", str(query),
+                "--model", "LG",
+            ]
+
             # Run the command
-            result = subprocess.run(cmd, capture_output=True, text=True)
-            
-            if result.returncode == 0 and "The query sequence is not in the msa" not in result.stdout:
+            result = subprocess.run(cmd, capture_output=True, text=True, cwd=str(consurf_dir))
+
+            if (result.returncode == 0
+                    and "The query sequence is not in the msa" not in result.stdout
+                    and consurf_output_is_valid(gene_output_dir)):
                 print(f"  ✓ ConSurf analysis completed for {gene_name} with query '{query}'")
                 return True
             else:
-                print(f"  ✗ Query '{query}' failed: {result.stdout.strip()}")
+                detail = result.stdout.strip() or result.stderr.strip()
+                if result.returncode == 0 and not consurf_output_is_valid(gene_output_dir):
+                    detail = f"exited 0 but wrote no grades file. {detail}"
+                print(f"  ✗ Query '{query}' failed: {detail[-2000:]}")
         
         print(f"✗ All query formats failed for {gene_name}")
         return False
@@ -282,120 +313,158 @@ def run_single_consurf_analysis(alignment_file, pdb_file, gene_name, output_dir,
 
 def snakemake_main():
     """Main function for Snakemake integration"""
-    try:
-        # Get inputs from Snakemake
-        alignments_with_3d_dir = snakemake.input.alignments_with_3d_dir
-        selected_3d_tsv = snakemake.input.selected_3d_tsv
-        protein_filter_summary = snakemake.input.protein_filter_summary
-        
-        # Get outputs
-        output_dir = Path(snakemake.output.consurf_results_dir)
-        sentinel_file = snakemake.output.consurf_sentinel
-        
-        # Get parameters
-        analysis = snakemake.params.analysis
-        paramset = snakemake.params.paramset
-        group = snakemake.params.group
-        consurf_script_path = snakemake.params.consurf_script
-        
-        print(f"=== ConSurf Conservation Analysis ===")
-        print(f"Group: {group}")
-        print(f"Alignments directory: {alignments_with_3d_dir}")
-        print(f"Selected 3D TSV: {selected_3d_tsv}")
-        print(f"ConSurf script: {consurf_script_path}")
-        
-        # Create output directory
-        output_dir.mkdir(parents=True, exist_ok=True)
-        
-        # Check if ConSurf script exists
-        if not Path(consurf_script_path).exists():
-            raise FileNotFoundError(f"ConSurf script not found at {consurf_script_path}")
-            
-        # Run actual ConSurf analysis
-        success_count = 0
-        total_count = 0
-        
-        # Read the TSV file to get structure mappings
-        import pandas as pd
-        try:
-            df = pd.read_csv(selected_3d_tsv, sep='\t')
-            print(f"Found {len(df)} entries in TSV file")
-            
-            # Process each gene with structure
-            for _, row in df.iterrows():
-                gene = row['gene']
-                pdb = row['pdb']
-                file_name = row.get('file_name', f"{pdb}.fasta")
-                
-                # Check if we have alignment for this gene
-                alignment_file = Path(alignments_with_3d_dir) / f"{gene}_aligned.fasta"
-                if not alignment_file.exists():
-                    print(f"Warning: No alignment file for {gene}, skipping")
-                    continue
-                
-                # Find corresponding PDB structure using original function
-                structure_dirs = [
-                    Path("data/protein_structures/pdb_files").resolve(),
-                ]
-                
-                pdb_file = find_structure_file(pdb, structure_dirs)
-                if not pdb_file:
-                    print(f"Warning: No PDB structure found for {gene} ({pdb}), skipping")
-                    continue
-                
-                # Decompress if needed
-                pdb_file = decompress_if_needed(pdb_file)
-                
-                total_count += 1
-                print(f"Running ConSurf analysis for {gene} ({pdb})")
-                
-                # Create gene-specific output directory
-                gene_output_dir = output_dir / gene
-                gene_output_dir.mkdir(parents=True, exist_ok=True)
-                
-                # ConSurf needs the directory to exist before running
-                (gene_output_dir / "temp").mkdir(exist_ok=True)
-                
-                # Determine chain - default to A, but try to get from TSV if available
-                chain = row.get('chain', 'A')
-                if pd.isna(chain) or chain == '':
-                    chain = 'A'
-                
-                # Use cleaned PDB ID as query (matches the simplified header we created)
-                # Remove _1, _2 suffixes but keep names with - (like AF-C5D794)
-                import re
-                query_id = file_name.replace('.fasta', '') if file_name else pdb
-                query_id = re.sub(r'_[0-9]+$', '', query_id)  # Remove _1, _2 etc.
-                
-                possible_queries = [query_id, query_id.upper(), query_id.lower()]
-                print(f"  Expected query ID: {query_id} (cleaned from filename: {file_name})")
-                
-                # Run ConSurf analysis using original function
-                if run_consurf_analysis(alignment_file, pdb_file, chain, possible_queries, output_dir, consurf_script_path):
-                    success_count += 1
-                    print(f"✓ ConSurf analysis completed for {gene}")
-                else:
-                    print(f"✗ ConSurf analysis failed for {gene}")
-            
-        except Exception as e:
-            print(f"Error processing TSV file: {e}")
-            
-        print(f"ConSurf analysis completed: {success_count}/{total_count} analyses successful")
-        
-        # Create sentinel file
-        with open(sentinel_file, 'w') as f:
-            f.write(f"ConSurf analysis completed for {group} group\n")
-            f.write(f"Analysis: {analysis}\n")
-            f.write(f"Paramset: {paramset}\n")
-            
-        return True
-        
-    except NameError:
+    if "snakemake" not in globals():
         # Not running under Snakemake, run standalone
         main()
-    except Exception as e:
-        print(f"Error in ConSurf analysis: {e}")
-        return False
+        return
+
+    # Get inputs from Snakemake
+    alignments_with_3d_dir = snakemake.input.alignments_with_3d_dir
+    selected_3d_tsv = snakemake.input.selected_3d_tsv
+    protein_filter_summary = snakemake.input.protein_filter_summary
+    
+    # Get outputs
+    output_dir = Path(snakemake.output.consurf_results_dir)
+    sentinel_file = snakemake.output.consurf_sentinel
+    
+    # Get parameters
+    analysis = snakemake.params.analysis
+    paramset = snakemake.params.paramset
+    group = snakemake.params.group
+    consurf_script_path = snakemake.params.consurf_script
+    
+    print(f"=== ConSurf Conservation Analysis ===")
+    print(f"Group: {group}")
+    print(f"Alignments directory: {alignments_with_3d_dir}")
+    print(f"Selected 3D TSV: {selected_3d_tsv}")
+    print(f"ConSurf script: {consurf_script_path}")
+    
+    # Create output directory
+    output_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Check if ConSurf script exists
+    if not Path(consurf_script_path).exists():
+        raise FileNotFoundError(f"ConSurf script not found at {consurf_script_path}")
+        
+    # Genes whose alignment passed QC (see check_alignment_quality.py).
+    # Genes that failed QC are skipped rather than counted as failures, so a
+    # known-bad alignment does not make the whole stage fail.
+    qc_passed_file = Path(snakemake.input.alignment_qc_passed)
+    qc_passed = {
+        line.strip() for line in qc_passed_file.read_text().splitlines() if line.strip()
+    }
+    print(f"Alignments passing QC: {len(qc_passed)} (from {qc_passed_file})")
+
+    # Run actual ConSurf analysis
+    success_count = 0
+    total_count = 0
+    skipped_qc = []
+    
+    # Read the TSV file to get structure mappings
+    import pandas as pd
+    try:
+        df = pd.read_csv(selected_3d_tsv, sep='\t')
+        print(f"Found {len(df)} entries in TSV file")
+        
+        # Process each gene with structure
+        for _, row in df.iterrows():
+            gene = row['gene']
+            pdb = row['pdb']
+            file_name = row.get('file_name', f"{pdb}.fasta")
+            
+            # Check if we have alignment for this gene
+            alignment_file = Path(alignments_with_3d_dir) / f"{gene}_aligned.fasta"
+            if not alignment_file.exists():
+                print(f"Warning: No alignment file for {gene}, skipping")
+                continue
+
+            if gene not in qc_passed:
+                print(f"Skipping {gene}: alignment did not pass QC")
+                skipped_qc.append(gene)
+                continue
+            
+            # Find corresponding PDB structure using original function
+            structure_dirs = [
+                Path("data/protein_structures/pdb_files").resolve(),
+            ]
+            
+            pdb_file = find_structure_file(pdb, structure_dirs)
+            if not pdb_file:
+                print(f"Warning: No PDB structure found for {gene} ({pdb}), skipping")
+                continue
+            
+            # Decompress if needed
+            pdb_file = decompress_if_needed(pdb_file)
+            
+            total_count += 1
+            print(f"Running ConSurf analysis for {gene} ({pdb})")
+            
+            # Create gene-specific output directory
+            gene_output_dir = output_dir / gene
+            gene_output_dir.mkdir(parents=True, exist_ok=True)
+            
+            # ConSurf needs the directory to exist before running
+            (gene_output_dir / "temp").mkdir(exist_ok=True)
+            
+            # Determine chain - default to A, but try to get from TSV if available
+            chain = row.get('chain', 'A')
+            if pd.isna(chain) or chain == '':
+                chain = 'A'
+            
+            # Use cleaned PDB ID as query (matches the simplified header we created)
+            # Remove _1, _2 suffixes but keep names with - (like AF-C5D794)
+            import re
+            query_id = file_name.replace('.fasta', '') if file_name else pdb
+            query_id = re.sub(r'_[0-9]+$', '', query_id)  # Remove _1, _2 etc.
+            
+            possible_queries = [query_id, query_id.upper(), query_id.lower()]
+            print(f"  Expected query ID: {query_id} (cleaned from filename: {file_name})")
+            
+            # Run ConSurf analysis using original function
+            if run_consurf_analysis(alignment_file, pdb_file, chain, possible_queries, output_dir, consurf_script_path):
+                success_count += 1
+                print(f"✓ ConSurf analysis completed for {gene}")
+            else:
+                print(f"✗ ConSurf analysis failed for {gene}")
+        
+    except FileNotFoundError as e:
+        raise RuntimeError(f"Could not read 3D selection table {selected_3d_tsv}: {e}") from e
+
+    print(f"ConSurf analysis completed: {success_count}/{total_count} analyses successful")
+    if skipped_qc:
+        print(f"Skipped (failed alignment QC): {len(skipped_qc)} -> {', '.join(skipped_qc)}")
+
+    # Only report success if ConSurf actually produced results. Writing the
+    # sentinel regardless would make Snakemake treat an empty stage as done
+    # and never retry it.
+    if total_count == 0:
+        raise RuntimeError(
+            f"ConSurf had nothing to run for gram_{group}: no gene in "
+            f"{selected_3d_tsv} had both an alignment and a PDB structure."
+        )
+
+    min_fraction = float(snakemake.params.get("min_success_fraction", 1.0))
+    success_fraction = success_count / total_count
+    if success_fraction < min_fraction:
+        raise RuntimeError(
+            f"ConSurf produced results for only {success_count}/{total_count} "
+            f"genes in gram_{group} ({success_fraction:.0%}), below the required "
+            f"{min_fraction:.0%}. Failed genes are listed above. "
+            f"Lower consurf.min_success_fraction in config/config_analysis.yaml "
+            f"to accept partial results."
+        )
+
+    # Create sentinel file
+    with open(sentinel_file, 'w') as f:
+        f.write(f"ConSurf analysis completed for {group} group\n")
+        f.write(f"Analysis: {analysis}\n")
+        f.write(f"Paramset: {paramset}\n")
+        f.write(f"Successful: {success_count}/{total_count}\n")
+        if skipped_qc:
+            f.write(f"Skipped (failed alignment QC): {','.join(skipped_qc)}\n")
+
+    return True
+
 
 if __name__ == "__main__":
     snakemake_main()

@@ -46,10 +46,16 @@ if ls "$ALIGNMENTS_DIR"/*.fasta 1> /dev/null 2>&1; then
                 tail -n +2 "$struct_file" >> "$temp_struct_file"
                 
                 echo "  Using simplified header: >${pdb_id}"
-                if mafft --add "$temp_struct_file" --reorder "$aln_file" > "$out_file" 2>/dev/null; then
+                mafft_log="${out_file}.mafft.log"
+                # MAFFT can exit 0 and still write nothing, which silently
+                # produced empty alignments, so check the output too.
+                if mafft --add "$temp_struct_file" --reorder "$aln_file" > "$out_file" 2>"$mafft_log" \
+                   && [ -s "$out_file" ] && grep -q "^>${pdb_id}$" "$out_file"; then
                     echo "  ✓ Successfully added 3D structure to $gene"
+                    rm -f "$mafft_log"
                 else
                     echo "  ✗ Failed to add 3D structure to $gene, copying original alignment"
+                    echo "    (MAFFT output kept in $mafft_log)"
                     cp "$aln_file" "$out_file"
                 fi
                 
