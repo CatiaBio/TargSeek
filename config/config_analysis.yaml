@@ -168,6 +168,30 @@ conserved:
   # Minimum length of conserved sequences to include in output (amino acids)
   min_length: 5
 
+# DiscoTope-3.0 structure-based epitope prediction
+# Cross-check for BepiPred: scores residues from the 3D structure instead of
+# the sequence. Separate install (PyTorch + PyTorch Geometric):
+#   git clone https://github.com/Magnushhoie/DiscoTope-3.0/ && cd DiscoTope-3.0
+#   unzip models.zip && pip install -r requirements.txt && pip install .
+discotope:
+  # false -> the DiscoTope step writes an empty table and the consensus step
+  # reports "no_discotope_data"; BepiPred results are unaffected
+  enabled: false
+  # Directory of the cloned DiscoTope-3.0 repository
+  repo_dir: "/home/catia/tools/DiscoTope-3.0"
+  # Python interpreter that has DiscoTope installed (leave empty to reuse the
+  # pipeline interpreter), e.g.
+  # /home/catia/tools/miniconda3/envs/discotope/bin/python
+  python_bin: ""
+  cpu_only: true
+  # Residue score above which a residue counts as epitope-like (0.0-1.0)
+  score_threshold: 0.9
+  # Fraction of a BepiPred epitope's residues that must clear the threshold
+  # for the two tools to count as agreeing
+  consensus_min_fraction: 0.5
+  # Keep the staged PDB inputs for debugging
+  keep_intermediate: false
+
 # BepiPred 3.0 epitope prediction configuration
 bepipred:
   # Path to BepiPred 3.0 installation
@@ -405,6 +429,8 @@ scripts:
   # -------------------------------------------------------------------------
   epitopes:
     predict_epitopes_bepipred: "scripts/protein_analysis/predict_epitopes_bepipred_3d_only.py"
+    predict_epitopes_discotope: "scripts/protein_analysis/predict_epitopes_discotope.py"
+    epitope_consensus: "scripts/protein_analysis/epitope_consensus_bepipred_discotope.py"
     create_epitope_tables: "scripts/protein_analysis/create_epitope_tables_from_bepipred.py"
     visualize_epitopes_pymol: "scripts/protein_analysis/visualize_epitopes_pymol.py"
     analyze_epitope_conservation: "scripts/protein_analysis/analyze_epitope_conservation.py"

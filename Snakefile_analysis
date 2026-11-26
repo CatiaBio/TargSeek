@@ -63,6 +63,9 @@ rule stage4_epitope_predictions:
                analysis=config["species_batches"], paramset=config["quickgo_paramsets"], group=["positive", "negative"]),
         # Stage 4: Integrated epitope analysis
         expand("results/{analysis}_{paramset}/protein_analysis/stage4_epitope_predictions_and_reports/final_reports/gram_{group}/integrated_analysis_complete.sentinel",
+               analysis=config["species_batches"], paramset=config["quickgo_paramsets"], group=["positive", "negative"]),
+        # Stage 4: BepiPred / DiscoTope consensus
+        expand("results/{analysis}_{paramset}/protein_analysis/stage4_epitope_predictions_and_reports/final_reports/gram_{group}/epitope_consensus_gram_{group}.tsv",
                analysis=config["species_batches"], paramset=config["quickgo_paramsets"], group=["positive", "negative"])
 
 # Legacy target rules for backward compatibility
@@ -120,6 +123,9 @@ rule all_analysis:
         expand("results/{analysis}_{paramset}/protein_analysis/stage4_epitope_predictions_and_reports/epitope_prediction_results/gram_{group}/epitope_tables_complete.sentinel",
                analysis=config["species_batches"], paramset=config["quickgo_paramsets"], group=["positive", "negative"]),
         expand("results/{analysis}_{paramset}/protein_analysis/stage4_epitope_predictions_and_reports/final_reports/gram_{group}/integrated_analysis_complete.sentinel",
+               analysis=config["species_batches"], paramset=config["quickgo_paramsets"], group=["positive", "negative"]),
+        # Stage 4: BepiPred / DiscoTope consensus
+        expand("results/{analysis}_{paramset}/protein_analysis/stage4_epitope_predictions_and_reports/final_reports/gram_{group}/epitope_consensus_gram_{group}.tsv",
                analysis=config["species_batches"], paramset=config["quickgo_paramsets"], group=["positive", "negative"])
 
 
@@ -324,6 +330,34 @@ rule predict_epitopes_bepipred:
         config["scripts"]["epitopes"]["predict_epitopes_bepipred"]
 
 # Create epitope tables from BepiPred 3.0 raw output
+# Structure-based epitope prediction with DiscoTope-3.0 (cross-check for BepiPred)
+rule predict_epitopes_discotope:
+    input:
+        structure_mapping="data/protein_structures/{analysis}_{paramset}_fasta_structure_mapping_final.tsv",
+        selected_3d_paths="results/{analysis}_{paramset}/protein_analysis/stage1_sequence_preparation_3d_selection/3d_structure_selection_results/selected_3d_paths_gram_{group}.txt",
+        protein_filter_summary="results/{analysis}_{paramset}/protein_analysis/stage2_multiple_sequence_alignments_topology/topology_prediction_results/protein_filter_summary.json"
+    output:
+        discotope_table="results/{analysis}_{paramset}/protein_analysis/stage4_epitope_predictions_and_reports/epitope_prediction_results/gram_{group}/discotope_scores_gram_{group}.tsv"
+    params:
+        group="{group}",
+        discotope=config.get("discotope", {})
+    script:
+        config["scripts"]["epitopes"]["predict_epitopes_discotope"]
+
+# Agreement between BepiPred (sequence) and DiscoTope (structure)
+rule epitope_consensus:
+    input:
+        epitope_tables_sentinel="results/{analysis}_{paramset}/protein_analysis/stage4_epitope_predictions_and_reports/epitope_prediction_results/gram_{group}/epitope_tables_complete.sentinel",
+        discotope_table="results/{analysis}_{paramset}/protein_analysis/stage4_epitope_predictions_and_reports/epitope_prediction_results/gram_{group}/discotope_scores_gram_{group}.tsv"
+    output:
+        consensus_table="results/{analysis}_{paramset}/protein_analysis/stage4_epitope_predictions_and_reports/final_reports/gram_{group}/epitope_consensus_gram_{group}.tsv",
+        consensus_summary="results/{analysis}_{paramset}/protein_analysis/stage4_epitope_predictions_and_reports/final_reports/gram_{group}/epitope_consensus_summary_gram_{group}.json"
+    params:
+        group="{group}",
+        discotope=config.get("discotope", {})
+    script:
+        config["scripts"]["epitopes"]["epitope_consensus"]
+
 rule create_epitope_tables:
     input:
         bepipred_sentinel="results/{analysis}_{paramset}/protein_analysis/stage4_epitope_predictions_and_reports/epitope_prediction_results/gram_{group}/bepipred_complete.sentinel",
