@@ -180,8 +180,10 @@ Snakefile_test
 # DOCUMENTATION AND REPORTS
 # ------------------------------------------------------------------------------
 # Generated documentation and temporary docs
-docs/
+# (hand-written docs/*.md are tracked; generated build output is not)
+docs/*
 !docs/.gitkeep
+!docs/*.md
 docs/_build/
 docs/build/
 site/
