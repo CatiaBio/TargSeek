@@ -269,7 +269,8 @@ ipython_config.py
 # Virtual environments
 .env
 .venv
-env/
+env/*
+!env/*.yml
 venv/
 ENV/
 env.bak/

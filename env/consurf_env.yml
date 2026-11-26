@@ -1,0 +1,15 @@
+name: consurf
+channels:
+  - bioconda
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.9
+  - prank
+  - muscle
+  - mafft
+  - blast
+  - cd-hit
+  - hmmer
+  - phyml
+  - java-jdk  # needed for prottest3 if you want it
