@@ -399,16 +399,91 @@ def create_comprehensive_report(scored_epitopes: Dict[str, pd.DataFrame],
     # --- cross-reactivity -------------------------------------------------
     if blast_data:
         summary = blast_data.get('summary', {}) if isinstance(blast_data, dict) else {}
+        detail = blast_data.get('detail', {}) if isinstance(blast_data, dict) else {}
+        per_protein = detail.get('epitope_analysis', {}) if isinstance(detail, dict) else {}
+
+        # Flatten every epitope's BLAST verdict
+        flagged, counts = [], {'highly_specific': 0, 'moderately_specific': 0, 'cross_reactive': 0}
+        for protein_id, pdata in per_protein.items():
+            for _, epi in (pdata.get('epitopes', {}) or {}).items():
+                cls = epi.get('classification', 'unknown')
+                if cls in counts:
+                    counts[cls] += 1
+                if cls == 'highly_specific':
+                    continue
+                # blast_results is keyed by proteome: {db: {significant_hits, best_hit, hits}}
+                per_db = epi.get('blast_results', {}) or {}
+                for db, dbres in per_db.items():
+                    if not isinstance(dbres, dict):
+                        continue
+                    hits = dbres.get('hits') or []
+                    # a hit only counts if it cleared the identity/coverage filter
+                    hit = hits[0] if hits else None
+                    if hit is None:
+                        continue
+                    flagged.append({
+                        'protein': protein_id,
+                        'sequence': epi.get('sequence', ''),
+                        'classification': cls,
+                        'db': str(db).replace('_proteome', ''),
+                        'identity': hit.get('percent_identity'),
+                        'evalue': hit.get('evalue'),
+                        'n_hits': dbres.get('significant_hits', len(hits)),
+                        'subject': (hit.get('subject_title') or hit.get('subject_id') or '')[:70],
+                    })
+
+        body = ('<p class="muted">Every epitope is searched with BLAST against the reference '
+                'proteomes in <code>data/blast_databases/</code>. A strong match to a host '
+                'protein means an antibody raised against that epitope may bind the host too, '
+                'which is what a diagnostic must avoid.</p>')
+
+        if any(counts.values()):
+            body += rt.stat_row([
+                rt.stat_tile(counts['highly_specific'], 'Highly specific', 'no host match'),
+                rt.stat_tile(counts['moderately_specific'], 'Moderately specific'),
+                rt.stat_tile(counts['cross_reactive'], 'Cross-reactive', 'review before use'),
+            ])
+
+        if flagged:
+            flagged.sort(key=lambda r: -(r['identity'] or 0))
+            rows = []
+            for r in flagged[:40]:
+                tag = ('critical' if r['classification'] == 'cross_reactive' else 'warning')
+                label = ('Cross-reactive' if r['classification'] == 'cross_reactive'
+                         else 'Moderate')
+                ident = f"{r['identity']:.0f}%" if isinstance(r['identity'], (int, float)) else '-'
+                ev = f"{r['evalue']:.1e}" if isinstance(r['evalue'], (int, float)) else '-'
+                rows.append([
+                    rt.esc(r['protein']),
+                    f'<span class="seq">{rt.esc(r["sequence"])}</span>',
+                    rt.esc(r['db']),
+                    f'<span class="badge badge-{tag}">{rt.icon("alert")}{label}</span>',
+                    rt.esc(ident),
+                    rt.esc(ev),
+                    rt.esc(r.get('n_hits', '')),
+                    f'<span class="muted">{rt.esc(r["subject"])}</span>',
+                ])
+            body += rt.table(
+                ['Protein', 'Epitope', 'Proteome', 'Verdict', 'Identity', 'E-value',
+                 'Matches', 'Best match'],
+                rows, table_id='xreact', numeric_from=4)
+            if len(flagged) > 40:
+                body += f'<p class="muted">Showing the 40 strongest of {len(flagged)} host matches.</p>'
+        elif per_protein:
+            body += rt.note('good', 'No host matches flagged',
+                            '<p>No epitope matched a reference proteome strongly enough to be '
+                            'classed as cross-reactive.</p>')
+
         if summary:
             items = ''.join(
                 f'<dt>{rt.esc(k.replace("_", " ").capitalize())}</dt><dd>{rt.esc(v)}</dd>'
                 for k, v in summary.items() if not isinstance(v, (dict, list)))
-            sections.append(rt.section(
-                'cross-reactivity', 'Cross-reactivity screen',
-                f'<p class="muted">BLAST of each epitope against the reference proteomes '
-                f'in <code>data/blast_databases/</code>. A hit in a host proteome lowers '
-                f'the specificity score.</p><dl class="dl">{items}</dl>'))
-            nav_main.append(('cross-reactivity', 'Cross-reactivity', None))
+            if items:
+                body += f'<h3>Run summary</h3><dl class="dl">{items}</dl>'
+
+        sections.append(rt.section('cross-reactivity', 'Cross-reactivity screen', body))
+        nav_main.append(('cross-reactivity', 'Cross-reactivity',
+                         counts['cross_reactive'] or None))
 
     # --- per protein ------------------------------------------------------
     nav_proteins = []
@@ -537,6 +612,13 @@ def main():
     logger.info("Loading BLAST cross-reactivity data...")
     blast_summary_file = os.path.join(blast_results_dir, "blast_cross_reactivity_summary.json")
     blast_data = load_blast_results(blast_summary_file)
+    # The detailed file carries the per-epitope hits (which proteome, which
+    # protein, what identity) - that is the part a reader actually needs.
+    blast_detail_file = os.path.join(blast_results_dir, "detailed_blast_analysis.json")
+    blast_detail = load_blast_results(blast_detail_file)
+    if blast_detail:
+        blast_data = dict(blast_data or {})
+        blast_data["detail"] = blast_detail
     
     logger.info("Loading topology mapping data...")
     topology_data = load_topology_mapping(extracellular_mapping)
