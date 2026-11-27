@@ -119,7 +119,10 @@ def run_consurf_analysis(msa_file, structure_file, chain, possible_queries, outp
         # and matches the directory the caller creates.
         if gene_name.endswith("_aligned"):
             gene_name = gene_name[: -len("_aligned")]
-        gene_output_dir = output_dir / gene_name
+        # Resolve to an absolute path: ConSurf is launched with cwd set to its
+        # own install directory, so a relative --dir would make it write there
+        # instead of into results/.
+        gene_output_dir = (output_dir / gene_name).resolve()
         gene_output_dir.mkdir(parents=True, exist_ok=True)
         
         print(f"Running ConSurf for {gene_name}...")

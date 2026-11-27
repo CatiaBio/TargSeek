@@ -196,6 +196,9 @@ discotope:
 bepipred:
   # Path to BepiPred 3.0 installation
   path: "/home/catia/tools/BepiPred"
+  # Interpreter with BepiPred's bp3 module (its own conda env, Python 3.8).
+  # The pipeline env does not have bp3, so this must be set explicitly.
+  python_bin: "/home/catia/tools/miniconda3/envs/bepipred/bin/python"
   # Prediction method: 'vt_pred' (recommended) or 'mjv_pred'
   method: "vt_pred"
   # Epitope score threshold (0.0-1.0, higher = more confident predictions)

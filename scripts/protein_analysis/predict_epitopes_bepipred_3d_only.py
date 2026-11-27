@@ -11,6 +11,7 @@ processes each sequence individually.
 import pandas as pd
 import json
 import subprocess
+import sys
 import time
 from pathlib import Path
 import logging
@@ -26,7 +27,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 class BepiPredPredictor:
     """Interface for BepiPred 3.0 predictions"""
     
-    def __init__(self, bepipred_path="tools/BepiPred3.0", method="vt_pred", top_percentage=0.2, raw_only=False):
+    def __init__(self, bepipred_path="tools/BepiPred3.0", method="vt_pred", top_percentage=0.2, raw_only=False, python_bin=None):
         """
         Initialize BepiPred predictor
         
@@ -37,6 +38,9 @@ class BepiPredPredictor:
             raw_only: If True, skip HTML visualizations and extra files for faster processing
         """
         self.bepipred_path = Path(bepipred_path)
+        # Interpreter that has BepiPred's bp3 module installed (its own conda
+        # env). Falls back to this process's interpreter.
+        self.python_bin = python_bin or os.environ.get("BEPIPRED_PYTHON") or sys.executable
         self.method = method
         self.top_percentage = top_percentage
         self.raw_only = raw_only
@@ -76,10 +80,13 @@ class BepiPredPredictor:
                 fasta_unix = str(fasta_file_abs).replace('\\', '/').replace('C:/', '/mnt/c/')
                 output_unix = str(output_dir_abs).replace('\\', '/').replace('C:/', '/mnt/c/')
                 
-                # Use direct Python installation (BepiPred dependencies are already installed)
+                # BepiPred's bp3 module lives in its own conda environment
+                # (Python 3.8). Bare "python" resolves to whichever env is
+                # active - usually the pipeline's - where bp3 is absent.
+                python_bin = getattr(self, "python_bin", None) or sys.executable
                 cmd = [
                     "bash", "-c",
-                    f"cd '{bepipred_unix}' && python bepipred3_CLI.py -i '{fasta_unix}' -o '{output_unix}' -pred {self.method} -top {self.top_percentage}"
+                    f"cd '{bepipred_unix}' && '{python_bin}' bepipred3_CLI.py -i '{fasta_unix}' -o '{output_unix}' -pred {self.method} -top {self.top_percentage}"
                 ]
                 
                 logging.info(f"Running BepiPred from directory: {bepipred_dir}")
@@ -376,7 +383,8 @@ def main():
             bepipred_path=bepipred_path, 
             method=method, 
             top_percentage=top_percentage,
-            raw_only=raw_only
+            raw_only=raw_only,
+            python_bin=bepipred_config.get('python_bin')
         )
     except FileNotFoundError as e:
         logging.error(f"BepiPred not found: {e}")
