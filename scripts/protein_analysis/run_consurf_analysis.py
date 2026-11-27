@@ -349,6 +349,27 @@ def snakemake_main():
     if not Path(consurf_script_path).exists():
         raise FileNotFoundError(f"ConSurf script not found at {consurf_script_path}")
         
+    # The 3D selection table often leaves 'chain' blank. Defaulting to chain A
+    # is wrong for complexes: flgB/8WK4 is chain 'i', and running ConSurf
+    # against chain A gave 4% identity and a hard failure. Fall back to the
+    # final structure mapping, which records the chain per gene.
+    chain_by_gene = {}
+    mapping_path = Path(
+        f"data/protein_structures/{analysis}_{paramset}_fasta_structure_mapping_final.tsv")
+    if mapping_path.exists():
+        try:
+            mdf = pd.read_csv(mapping_path, sep='\t')
+            for _, mrow in mdf.iterrows():
+                gene = str(mrow.get('gene_name', '')).strip()
+                sid = str(mrow.get('structure_id', '')).strip()
+                ch = str(mrow.get('chain', '')).strip()
+                if gene and ch:
+                    chain_by_gene.setdefault((gene, sid.split('_')[0].upper()), ch)
+                    chain_by_gene.setdefault((gene, ''), ch)
+            print(f"Loaded chain assignments for {len(chain_by_gene)} gene/structure pairs")
+        except Exception as e:
+            print(f"Warning: could not read {mapping_path}: {e}")
+
     # Genes whose alignment passed QC (see check_alignment_quality.py).
     # Genes that failed QC are skipped rather than counted as failures, so a
     # known-bad alignment does not make the whole stage fail.
@@ -410,9 +431,12 @@ def snakemake_main():
             (gene_output_dir / "temp").mkdir(exist_ok=True)
             
             # Determine chain - default to A, but try to get from TSV if available
-            chain = row.get('chain', 'A')
-            if pd.isna(chain) or chain == '':
-                chain = 'A'
+            chain = row.get('chain', '')
+            if pd.isna(chain) or str(chain).strip() == '':
+                chain = (chain_by_gene.get((gene, str(pdb).split('_')[0].upper()))
+                         or chain_by_gene.get((gene, ''))
+                         or 'A')
+                print(f"  Chain not in selection table; using '{chain}' for {gene}")
             
             # Use cleaned PDB ID as query (matches the simplified header we created)
             # Remove _1, _2 suffixes but keep names with - (like AF-C5D794)

@@ -397,8 +397,33 @@ def main():
     # Find epitope table files
     epitope_files = find_epitope_tables(filtered_dir)
     if not epitope_files:
-        logger.error(f"No filtered epitope files found in {filtered_dir}")
-        sys.exit(1)
+        # No epitope survived topology filtering. That is a real outcome for a
+        # group with few surface proteins, not a crash - but it must be stated
+        # plainly rather than written out as an empty success.
+        logger.warning(
+            f"No filtered epitope files in {filtered_dir}: nothing survived "
+            f"topology filtering for gram_{group}, so there is nothing to screen "
+            f"for cross-reactivity. Check epitope_filter_report.json for the counts.")
+        empty = {
+            'summary': {
+                'analysis': f"{analysis}_{paramset}",
+                'group': f"gram_{group}",
+                'total_epitopes_analyzed': 0,
+                'total_proteins_analyzed': 0,
+                'blast_databases_searched': 0,
+                'note': 'No epitopes passed topology filtering; no BLAST searches run',
+            },
+            'epitope_analysis': {}, 'cross_reactive_epitopes': [],
+            'highly_specific_epitopes': [], 'database_summary': {},
+        }
+        os.makedirs(output_dir, exist_ok=True)
+        with open(blast_summary, 'w') as f:
+            json.dump(empty, f, indent=2)
+        os.makedirs(os.path.dirname(blast_results_sentinel), exist_ok=True)
+        with open(blast_results_sentinel, 'w') as f:
+            f.write(f"BLAST skipped for {analysis}_{paramset} gram_{group}: "
+                    f"no epitopes passed topology filtering\n")
+        return
     
     # Load epitope data
     epitope_data = load_epitope_tables(epitope_files)
