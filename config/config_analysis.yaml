@@ -176,13 +176,13 @@ conserved:
 discotope:
   # false -> the DiscoTope step writes an empty table and the consensus step
   # reports "no_discotope_data"; BepiPred results are unaffected
-  enabled: false
+  enabled: true
   # Directory of the cloned DiscoTope-3.0 repository
   repo_dir: "/home/catia/tools/DiscoTope-3.0"
   # Python interpreter that has DiscoTope installed (leave empty to reuse the
   # pipeline interpreter), e.g.
   # /home/catia/tools/miniconda3/envs/discotope/bin/python
-  python_bin: ""
+  python_bin: "/home/catia/tools/miniconda3/envs/discotope/bin/python"
   cpu_only: true
   # Residue score above which a residue counts as epitope-like (0.0-1.0)
   score_threshold: 0.9

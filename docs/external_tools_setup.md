@@ -173,3 +173,14 @@ Report: `stage2_.../alignment_qc/alignment_qc_gram_{group}.tsv`.
 ConSurf now fails the stage unless `consurf.min_success_fraction` of the genes
 produce real grades files; it used to mark itself complete even with zero
 successes.
+
+### Verified on real data (2026-11-27)
+
+Ran against the 2025 Gram-positive structures: 5 genes, 5,560 residues scored,
+1,063 above the 0.9 threshold. Peak memory stayed under 1 GB — ESM-IF1 is far
+lighter than the ESM-2 models BepiPred and DeepLocPro use.
+
+DiscoTope scores **every chain** in the structure, so a multimer yields several
+chains per gene (`pal` 8 chains, `lamB` 3). That is intended: the consensus step
+matches BepiPred epitopes to the chain they were predicted on. It does mean the
+residue table is larger than the monomer length.
