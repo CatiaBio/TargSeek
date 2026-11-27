@@ -80,15 +80,24 @@ def get_available_blast_databases(blast_db_dir: str) -> List[Dict[str, str]]:
     phr_files = glob.glob(os.path.join(blast_db_dir, "*.phr"))
     
     for phr_file in phr_files:
-        db_name = os.path.basename(phr_file).replace('.phr', '')
-        fasta_file = os.path.join(blast_db_dir, f"{db_name}.fasta")
-        
-        if os.path.exists(fasta_file):
+        # The database prefix is whatever precedes .phr. makeblastdb was run
+        # without -out, so the prefix keeps the .fasta suffix
+        # (human_proteome.fasta.phr -> prefix human_proteome.fasta). Older
+        # databases may use the bare name instead, so accept both.
+        db_prefix = os.path.basename(phr_file)[:-len('.phr')]
+        candidates = [os.path.join(blast_db_dir, db_prefix)]
+        if not db_prefix.endswith('.fasta'):
+            candidates.append(os.path.join(blast_db_dir, f"{db_prefix}.fasta"))
+
+        fasta_file = next((c for c in candidates if os.path.exists(c)), None)
+        if fasta_file:
             databases.append({
-                'name': db_name,
-                'path': os.path.join(blast_db_dir, db_name),
+                'name': db_prefix.replace('.fasta', ''),
+                'path': os.path.join(blast_db_dir, db_prefix),
                 'fasta_path': fasta_file
             })
+        else:
+            logger.warning(f"BLAST database {db_prefix} has no matching FASTA; skipping")
     
     logger.info(f"Found {len(databases)} formatted BLAST databases")
     for db in databases[:10]:  # Log first 10
