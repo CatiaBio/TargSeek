@@ -91,7 +91,28 @@ def load_consurf_data(consurf_dir: str, group: str) -> Dict[str, Dict]:
             
             if os.path.exists(conservation_file):
                 try:
-                    conservation_df = pd.read_csv(conservation_file)
+                    # ConSurf writes three description lines and a blank line
+                    # before the real header, which makes a plain read_csv throw
+                    # ParserError. Find the header row ('pos,A,C,...') instead.
+                    header_row = 0
+                    with open(conservation_file, errors='replace') as cf:
+                        for i, line in enumerate(cf):
+                            if line.lower().startswith('pos,'):
+                                header_row = i
+                                break
+                    conservation_df = pd.read_csv(conservation_file, skiprows=header_row)
+                    # Give the columns the names the scorer expects
+                    if 'pos' in conservation_df.columns:
+                        conservation_df = conservation_df.rename(columns={'pos': 'Position'})
+                    if ('Variety_Percentage' not in conservation_df.columns
+                            and 'MAX AA' in conservation_df.columns):
+                        # ConSurf's "MAX AA" is e.g. "V 66.423": the most common
+                        # residue and its share. The remainder is how variable
+                        # the position is.
+                        max_share = (conservation_df['MAX AA'].astype(str)
+                                     .str.extract(r'([0-9.]+)')[0])
+                        conservation_df['Variety_Percentage'] = (
+                            100 - pd.to_numeric(max_share, errors='coerce'))
                     
                     gene_conservation = {
                         'conservation_data': conservation_df,
