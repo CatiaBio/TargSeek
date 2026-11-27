@@ -548,8 +548,13 @@ def main():
         return
     
     # Process all epitope files
+    # Write the filtered tables beside this rule's sentinel, which is where the
+    # integration and BLAST steps look for them. They used to be written into
+    # the stage-2 topology directory, so both readers found nothing and the
+    # final report came out empty even when epitopes had survived.
+    filtered_output_dir = os.path.dirname(filtered_epitopes_sentinel)
     processing_stats = process_all_epitope_files(
-        epitope_files, extracellular_mapping, topology_dir, min_extracellular_coverage
+        epitope_files, extracellular_mapping, filtered_output_dir, min_extracellular_coverage
     )
     
     # Create filter report
