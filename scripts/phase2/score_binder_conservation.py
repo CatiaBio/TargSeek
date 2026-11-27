@@ -37,7 +37,7 @@ from collections import defaultdict
 from pathlib import Path
 
 CONTACT_COLUMNS = ["gene", "pdb_id", "target_chain", "binder_molecule", "binder_type",
-                   "res_seq", "res_name", "min_distance", "consurf_position",
+                   "res_seq", "res_name", "min_distance", "consurf_position", "consurf_residue",
                    "consurf_grade", "consurf_score", "msa_coverage", "residue_variety",
                    "species_identical", "species_total", "species_identity_pct"]
 
@@ -244,6 +244,7 @@ def main():
             "res_name": contact["res_name"],
             "min_distance": contact["min_distance"],
             "consurf_position": info["position"],
+            "consurf_residue": info["seq"],
             "consurf_grade": info["grade"],
             "consurf_score": f"{info['score']:.3f}",
             "msa_coverage": info["coverage"],
