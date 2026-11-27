@@ -745,8 +745,20 @@ def main():
     topology_data = load_topology_mapping(extracellular_mapping)
     
     if not epitope_data:
-        logger.error("No epitope data available for integration")
-        sys.exit(1)
+        # A group can legitimately end up with no epitope surviving the filters.
+        # Still produce the report, which states plainly that there is nothing
+        # to rank, rather than failing the run or writing a silent empty file.
+        logger.warning(
+            f"No epitope data for gram_{group}: nothing survived topology "
+            f"filtering, so the report will record that and rank nothing.")
+        create_comprehensive_report({}, consurf_data, blast_data, topology_data,
+                                    comprehensive_report, analysis, paramset, group)
+        os.makedirs(os.path.dirname(integrated_sentinel), exist_ok=True)
+        with open(integrated_sentinel, 'w') as f:
+            f.write(f"Integrated analysis for {analysis}_{paramset} gram_{group}: "
+                    f"no epitopes passed topology filtering\n")
+        logger.info(f"Wrote empty-state report: {comprehensive_report}")
+        return
     
     # Calculate comprehensive scores
     logger.info("Calculating comprehensive epitope scores...")

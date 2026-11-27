@@ -385,7 +385,6 @@ def snakemake_main():
     skipped_qc = []
     
     # Read the TSV file to get structure mappings
-    import pandas as pd
     try:
         df = pd.read_csv(selected_3d_tsv, sep='\t')
         print(f"Found {len(df)} entries in TSV file")
