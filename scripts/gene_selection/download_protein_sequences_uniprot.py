@@ -88,6 +88,49 @@ class UniProtDownloader:
         else:
             return species, False  # exact species, not genus search
 
+
+    # UniProt returns 429 when queried too fast. Without a retry the caller
+    # recorded "found: False", i.e. "this gene is absent from this species" -
+    # a false negative that would then be cached. Retry transient statuses and
+    # let genuine failures through unchanged.
+    TRANSIENT_STATUS = {429, 500, 502, 503, 504}
+
+    def _get_with_retry(self, url, params, max_attempts=5, base_delay=2.0):
+        """GET that retries throttling and server errors. Raises on real errors."""
+        import time as _time
+        last_exc = None
+        for attempt in range(1, max_attempts + 1):
+            try:
+                response = self.session.get(url, params=params, timeout=60)
+                if response.status_code in self.TRANSIENT_STATUS:
+                    if attempt == max_attempts:
+                        response.raise_for_status()
+                    retry_after = response.headers.get("Retry-After")
+                    try:
+                        wait = float(retry_after) if retry_after else base_delay * (2 ** (attempt - 1))
+                    except ValueError:
+                        wait = base_delay * (2 ** (attempt - 1))
+                    wait = min(wait, 60)
+                    logging.warning(
+                        f"UniProt {response.status_code}; waiting {wait:.0f}s "
+                        f"(attempt {attempt}/{max_attempts})")
+                    _time.sleep(wait)
+                    continue
+                response.raise_for_status()
+                return response
+            except (requests.exceptions.Timeout,
+                    requests.exceptions.ConnectionError) as e:
+                last_exc = e
+                if attempt == max_attempts:
+                    raise
+                wait = min(base_delay * (2 ** (attempt - 1)), 60)
+                logging.warning(f"UniProt {type(e).__name__}; retrying in {wait:.0f}s "
+                                f"(attempt {attempt}/{max_attempts})")
+                _time.sleep(wait)
+        if last_exc:
+            raise last_exc
+        raise RuntimeError("UniProt request failed after retries")
+
     def search_uniprot_with_filters(self, protein_name, species, max_results=50):
         """
         Search UniProt using specific protein_name and taxonomy_name filters
@@ -127,8 +170,7 @@ class UniProtDownloader:
 
         try:
             logging.debug(f"Making UniProt API request for {protein_name} in {species}")
-            response = self.session.get(url, params=params, timeout=30)
-            response.raise_for_status()
+            response = self._get_with_retry(url, params)
 
             data = response.json()
             results = data.get('results', [])
@@ -181,7 +223,11 @@ class UniProtDownloader:
         except Exception as e:
             logging.error(f"Unexpected error for {protein_name} in {species}: {e}")
 
-        # Return failure result
+        # Return failure result.
+        # 'transient' marks a failure caused by the network or the API rather
+        # than by the gene genuinely being absent. These must NOT be cached:
+        # caching one records "this gene does not exist in this species", and a
+        # later run would trust it and never look again.
         result = {
             'found': False,
             'sequences': [],
@@ -189,10 +235,11 @@ class UniProtDownloader:
             'gene': protein_name,
             'species': species,
             'source': 'uniprot',
-            'error': 'Search failed'
+            'error': 'Search failed',
+            'transient': True
         }
 
-        self.session_cache[cache_key] = result
+        # deliberately not cached - see above
         self.persistent_cache[cache_key] = result
         return result
 
