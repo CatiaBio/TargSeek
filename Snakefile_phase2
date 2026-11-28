@@ -1,0 +1,113 @@
+# =============================================================================
+# TargSeek phase 2: known-binder conservation analysis
+# =============================================================================
+# For the proteins phase 1 selected, find the structures that were solved with
+# something bound (nanobody, Fab, peptide), measure which residues that binder
+# touches, and score how conserved those residues are across our species.
+#
+# Reads phase 1 outputs; downloads and aligns nothing.
+#
+#   snakemake -s Snakefile_phase2 all_phase2 --cores 2
+# =============================================================================
+
+configfile: "config/config_phase2.yaml"
+
+ANALYSIS = config["analysis"]
+PARAMSET = config["paramset"]
+RUN = f"{ANALYSIS}_{PARAMSET}"
+
+PHASE1 = f"results/{RUN}/protein_analysis"
+OUT = f"results/{RUN}/phase2"
+
+CONSURF_ROOT = f"{PHASE1}/stage3_quality_assessment_conservation_analysis/consurf_analysis"
+MSA_ROOT = f"{PHASE1}/stage2_multiple_sequence_alignments_topology/mafft_alignments_with_3d"
+EPITOPE_ROOT = f"{PHASE1}/stage4_epitope_predictions_and_reports/epitope_prediction_results"
+STRUCTURE_MAPPING = f"data/protein_structures/{RUN}_fasta_structure_mapping_final.tsv"
+
+
+rule all_phase2:
+    input:
+        f"{OUT}/binder_structures.tsv",
+        f"{OUT}/binder_contacts.tsv",
+        f"{OUT}/binder_conservation.tsv",
+        f"{OUT}/binder_summary.tsv",
+        f"{OUT}/epitope_binder_overlap.tsv",
+        f"{OUT}/phase2_report.html",
+
+
+# Step 1: which downloaded structures were solved with a binder bound
+rule scan_binders:
+    input:
+        structures_sentinel=f"data/protein_structures/{RUN}_structures_complete.sentinel",
+    output:
+        binder_table=f"{OUT}/binder_structures.tsv",
+    params:
+        structure_dir=config["binders"]["structure_dir"],
+    script:
+        "scripts/phase2/scan_structures_for_binders.py"
+
+
+# Step 2: which target residues each binder actually touches
+rule binder_contacts:
+    input:
+        binder_table=f"{OUT}/binder_structures.tsv",
+    output:
+        contact_table=f"{OUT}/binder_contacts.tsv",
+    params:
+        structure_dir=config["binders"]["structure_dir"],
+        contact_cutoff=config["binders"]["contact_cutoff"],
+    script:
+        "scripts/phase2/extract_binder_contacts.py"
+
+
+# Step 3: how conserved is each footprint, and in which species does it hold
+rule binder_conservation:
+    input:
+        contact_table=f"{OUT}/binder_contacts.tsv",
+        structure_mapping=STRUCTURE_MAPPING,
+        consurf_sentinels=expand(
+            f"{CONSURF_ROOT}/gram_{{group}}/.consurf_complete.sentinel",
+            group=config["groups"]),
+    output:
+        conservation_table=f"{OUT}/binder_conservation.tsv",
+        summary_table=f"{OUT}/binder_summary.tsv",
+    params:
+        consurf_root=CONSURF_ROOT,
+        msa_root=MSA_ROOT,
+        groups=config["groups"],
+    script:
+        "scripts/phase2/score_binder_conservation.py"
+
+
+# Step 4: do phase 1's predicted epitopes sit where a binder actually binds
+rule epitope_binder_overlap:
+    input:
+        conservation_table=f"{OUT}/binder_conservation.tsv",
+        epitope_sentinels=expand(
+            f"{EPITOPE_ROOT}/gram_{{group}}/filtered_epitopes_complete.sentinel",
+            group=config["groups"]),
+    output:
+        overlap_table=f"{OUT}/epitope_binder_overlap.tsv",
+    params:
+        epitope_root=EPITOPE_ROOT,
+    script:
+        "scripts/phase2/epitope_binder_overlap.py"
+
+
+# Step 5: the report
+rule phase2_report:
+    input:
+        summary_table=f"{OUT}/binder_summary.tsv",
+        conservation_table=f"{OUT}/binder_conservation.tsv",
+        overlap_table=f"{OUT}/epitope_binder_overlap.tsv",
+        binder_table=f"{OUT}/binder_structures.tsv",
+    output:
+        report=f"{OUT}/phase2_report.html",
+    params:
+        analysis=ANALYSIS,
+        paramset=PARAMSET,
+        structure_dir=config["binders"]["structure_dir"],
+        conservation=config["conservation"],
+        report_config=config["report"],
+    script:
+        "scripts/phase2/make_phase2_report.py"

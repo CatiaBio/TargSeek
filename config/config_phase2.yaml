@@ -1,0 +1,54 @@
+# TargSeek phase 2: known-binder conservation analysis
+# =============================================================================
+# Phase 1 asks "which epitopes look promising?". Phase 2 asks a different
+# question of the same proteins: was this protein's structure solved with a
+# nanobody, Fab or peptide bound, and are the residues that binder grips
+# conserved across our species? A binder whose footprint is variable will only
+# work in the strain it was raised against.
+#
+# Phase 2 reads phase 1's outputs; it does not re-download or re-align anything.
+# =============================================================================
+
+# Which phase 1 run to analyse. Must match a completed analysis.
+analysis: "analysis2"
+paramset: "params2"
+
+groups:
+  - positive
+  - negative
+
+# -----------------------------------------------------------------------------
+# Binder detection
+# -----------------------------------------------------------------------------
+binders:
+  # A chain is a binder when its source organism is not the target bacterium.
+  # Detection joins COMPND (chain) to SOURCE (organism) through MOL_ID, because
+  # chain names carry no clue: the BamA nanobody chain is called "NANOF7".
+  structure_dir: "data/protein_structures/pdb_files"
+
+  # Heavy-atom distance for a contact, in angstroms. 4.5 covers hydrogen bonds
+  # and salt bridges; 4.0 is stricter, 5.0 includes looser van der Waals.
+  contact_cutoff: 4.5
+
+# -----------------------------------------------------------------------------
+# Conservation thresholds
+# -----------------------------------------------------------------------------
+conservation:
+  # ConSurf grades run 1-9, 9 being most conserved. 7+ counts as conserved.
+  conserved_grade: 7
+  # A species counts as retaining the footprint at this residue identity.
+  species_identity_threshold: 90
+  # Verdict bands, in % of contacts that are highly conserved
+  broad_threshold: 70
+  partial_threshold: 40
+
+# -----------------------------------------------------------------------------
+# Report
+# -----------------------------------------------------------------------------
+report:
+  # Show at most this many binders per protein in the detail section
+  max_binders_per_gene: 12
+  # Include peptide/small-molecule binders alongside nanobodies and antibodies.
+  # They bind far more conserved sites (drugs target essential machinery), so
+  # they are worth seeing, but they are not antibody epitopes.
+  include_small_molecules: true
