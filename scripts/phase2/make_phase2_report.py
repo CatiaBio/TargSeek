@@ -30,6 +30,21 @@ BINDER_LABEL = {
 }
 
 
+def find_figure(figures_dir, gene, pdb_id, binder_molecule, target_chain):
+    """Locate the render for one footprint, matching how it was named."""
+    if not figures_dir or not os.path.isdir(figures_dir):
+        return None
+    safe = "".join(ch if ch.isalnum() or ch in "-_" else "_"
+                   for ch in binder_molecule)[:28]
+    exact = Path(figures_dir) / f"{gene}_{pdb_id}_{safe}_{target_chain}.png"
+    if exact.exists():
+        return exact
+    # fall back to any render for this gene/structure
+    for candidate in sorted(Path(figures_dir).glob(f"{gene}_{pdb_id}_*.png")):
+        return candidate
+    return None
+
+
 def read_tsv(path):
     if not path or not os.path.exists(path):
         return []
@@ -54,7 +69,7 @@ def verdict_badge(pct_conserved, broad, partial):
 
 
 def build(summary_rows, conservation_rows, overlap_rows, binder_rows, cfg, report_cfg,
-          analysis, paramset):
+          analysis, paramset, figures_dir=None):
     broad = float(cfg.get("broad_threshold", 70))
     partial = float(cfg.get("partial_threshold", 40))
     include_sm = bool(report_cfg.get("include_small_molecules", True))
@@ -179,6 +194,17 @@ def build(summary_rows, conservation_rows, overlap_rows, binder_rows, cfg, repor
         nav_main.append(("overlap", "Epitope overlap", None))
 
     # ---- per protein ------------------------------------------------------
+    def figure_html(row):
+        path = find_figure(figures_dir, row["gene"], row["pdb_id"],
+                           row["binder_molecule"], row["target_chain"])
+        if path is None:
+            return ""
+        return rt.structure_figure(
+            path, [],
+            caption=(f'{row["binder_molecule"]} on {row["gene"]} ({row["pdb_id"]}). '
+                     f'Grey is the protein, the binder is outlined; contact residues '
+                     f'are coloured by conservation - blue conserved, red variable.'))
+
     nav_genes = []
     by_gene = defaultdict(list)
     for row in summary_rows:
@@ -221,7 +247,8 @@ def build(summary_rows, conservation_rows, overlap_rows, binder_rows, cfg, repor
                 f'</div>{verdict_badge(pct, broad, partial)}'
                 f'<p class="muted" style="margin-top:8px">Footprint (residue, position, '
                 f'ConSurf grade): {positions}'
-                f'{" …" if len(contacts) > 40 else ""}</p>')
+                f'{" …" if len(contacts) > 40 else ""}</p>'
+                + figure_html(row))
 
         sections.append(rt.section(anchor, gene, "".join(blocks)))
         nav_genes.append((anchor, gene, len(by_gene[gene])))
@@ -286,6 +313,7 @@ def main():
         cfg = dict(snakemake.params.conservation or {})
         cfg.setdefault("contact_cutoff", 4.5)
         report_cfg = dict(snakemake.params.report_config or {})
+        figures_dir = str(Path(snakemake.output.report).parent / "figures")
     else:
         args = sys.argv[1:]
         base = args[0] if args else "results/phase2"
@@ -298,10 +326,11 @@ def main():
         cfg = {"conserved_grade": 7, "broad_threshold": 70,
                "partial_threshold": 40, "contact_cutoff": 4.5}
         report_cfg = {"max_binders_per_gene": 12, "include_small_molecules": True}
+        figures_dir = f"{base}/figures"
 
     html = build(read_tsv(summary_path), read_tsv(conservation_path),
                  read_tsv(overlap_path), read_tsv(binder_path),
-                 cfg, report_cfg, analysis, paramset)
+                 cfg, report_cfg, analysis, paramset, figures_dir)
 
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)

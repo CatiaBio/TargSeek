@@ -32,6 +32,7 @@ rule all_phase2:
         f"{OUT}/binder_conservation.tsv",
         f"{OUT}/binder_summary.tsv",
         f"{OUT}/epitope_binder_overlap.tsv",
+        f"{OUT}/figures/.render_complete.sentinel",
         f"{OUT}/phase2_report.html",
 
 
@@ -94,9 +95,25 @@ rule epitope_binder_overlap:
         "scripts/phase2/epitope_binder_overlap.py"
 
 
-# Step 5: the report
+# Step 5: draw each footprint on the structure, coloured by conservation
+rule render_footprints:
+    input:
+        conservation_table=f"{OUT}/binder_conservation.tsv",
+        binder_table=f"{OUT}/binder_structures.tsv",
+    output:
+        sentinel=f"{OUT}/figures/.render_complete.sentinel",
+    params:
+        structure_dir=config["binders"]["structure_dir"],
+        out_dir=f"{OUT}/figures",
+        figure=config.get("figure", {}),
+    script:
+        "scripts/phase2/render_binder_footprints.py"
+
+
+# Step 6: the report
 rule phase2_report:
     input:
+        render_sentinel=f"{OUT}/figures/.render_complete.sentinel",
         summary_table=f"{OUT}/binder_summary.tsv",
         conservation_table=f"{OUT}/binder_conservation.tsv",
         overlap_table=f"{OUT}/epitope_binder_overlap.tsv",
