@@ -377,7 +377,7 @@ paths:
 
   # Integrated epitope analysis (combining BepiPred, ConSurf, and Topology)
   integrated_epitope_analysis:
-    output_dir: "results/{analysis}_{paramset}/protein_analysis/integrated_epitope_analysis"
+    output_dir: "results/{analysis}_{paramset}/protein_analysis/stage4_epitope_predictions_and_reports/final_reports"
     sentinel: "results/{analysis}_{paramset}/protein_analysis/integrated_epitope_analysis/integrated_analysis_complete.sentinel"
 
   # -------------------------------------------------------------------------

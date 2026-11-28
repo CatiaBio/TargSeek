@@ -66,6 +66,9 @@ rule stage4_epitope_predictions:
                analysis=config["species_batches"], paramset=config["quickgo_paramsets"], group=["positive", "negative"]),
         # Stage 4: BepiPred / DiscoTope consensus
         expand("results/{analysis}_{paramset}/protein_analysis/stage4_epitope_predictions_and_reports/final_reports/gram_{group}/epitope_consensus_gram_{group}.tsv",
+               analysis=config["species_batches"], paramset=config["quickgo_paramsets"], group=["positive", "negative"]),
+        # Stage 4: PyMOL renders of epitopes on the structure
+        expand("results/{analysis}_{paramset}/protein_analysis/stage4_epitope_predictions_and_reports/visualization_outputs/gram_{group}/visualization_complete.sentinel",
                analysis=config["species_batches"], paramset=config["quickgo_paramsets"], group=["positive", "negative"])
 
 # Legacy target rules for backward compatibility
@@ -126,6 +129,9 @@ rule all_analysis:
                analysis=config["species_batches"], paramset=config["quickgo_paramsets"], group=["positive", "negative"]),
         # Stage 4: BepiPred / DiscoTope consensus
         expand("results/{analysis}_{paramset}/protein_analysis/stage4_epitope_predictions_and_reports/final_reports/gram_{group}/epitope_consensus_gram_{group}.tsv",
+               analysis=config["species_batches"], paramset=config["quickgo_paramsets"], group=["positive", "negative"]),
+        # Stage 4: PyMOL renders of epitopes on the structure
+        expand("results/{analysis}_{paramset}/protein_analysis/stage4_epitope_predictions_and_reports/visualization_outputs/gram_{group}/visualization_complete.sentinel",
                analysis=config["species_batches"], paramset=config["quickgo_paramsets"], group=["positive", "negative"])
 
 

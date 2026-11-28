@@ -10,13 +10,15 @@ import pandas as pd
 import subprocess
 from pathlib import Path
 
-def find_integrated_analysis_files(base_dir):
+def find_integrated_analysis_files(base_dir, group=None):
     """Find all integrated epitope analysis files"""
 
     integrated_files = []
 
-    # Look for integrated analysis files in both gram types
-    for gram_type in ['positive', 'negative']:
+    # Look for integrated analysis files. The Snakemake rule runs once per
+    # group, so restrict to that group rather than redoing both each time.
+    groups = [group] if group else ['positive', 'negative']
+    for gram_type in groups:
         gram_dir = os.path.join(base_dir, f"gram_{gram_type}")
 
         if not os.path.exists(gram_dir):
@@ -50,17 +52,21 @@ def find_integrated_analysis_files(base_dir):
 
     return integrated_files
 
-def run_comprehensive_visualizations(analysis, paramset):
+def run_comprehensive_visualizations(analysis, paramset, group=None):
     """Run comprehensive visualizations for all genes"""
 
-    # Find all integrated analysis files
-    base_dir = f"results/{analysis}_{paramset}/protein_analysis/integrated_epitope_analysis"
+    # Reports moved into the stage-4 layout; fall back to the old path
+    # so earlier runs still work.
+    base_dir = (f"results/{analysis}_{paramset}/protein_analysis/"
+                f"stage4_epitope_predictions_and_reports/final_reports")
+    if not os.path.exists(base_dir):
+        base_dir = f"results/{analysis}_{paramset}/protein_analysis/integrated_epitope_analysis"
 
     if not os.path.exists(base_dir):
         print(f"Integrated analysis directory not found: {base_dir}")
         return
 
-    integrated_files = find_integrated_analysis_files(base_dir)
+    integrated_files = find_integrated_analysis_files(base_dir, group)
 
     if not integrated_files:
         print("No integrated epitope analysis files found")
@@ -153,10 +159,11 @@ def main():
     parser = argparse.ArgumentParser(description='Run comprehensive epitope visualizations for all genes')
     parser.add_argument('--analysis', required=True, help='Analysis name (e.g., analysis1)')
     parser.add_argument('--paramset', required=True, help='Parameter set (e.g., params1)')
+    parser.add_argument('--group', help='Restrict to one gram group (positive/negative)')
 
     args = parser.parse_args()
 
-    run_comprehensive_visualizations(args.analysis, args.paramset)
+    run_comprehensive_visualizations(args.analysis, args.paramset, args.group)
 
 if __name__ == "__main__":
     main()
