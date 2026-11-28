@@ -49,6 +49,22 @@ SUMMARY_COLUMNS = ["gene", "pdb_id", "binder_molecule", "binder_type", "target_c
 # Conservative substitutions - a different residue that usually preserves binding
 SIMILAR = [set("AVLIM"), set("FYW"), set("ST"), set("DE"), set("KR"), set("NQ"), set("GP")]
 
+THREE_TO_ONE = {
+    "ALA": "A", "ARG": "R", "ASN": "N", "ASP": "D", "CYS": "C", "GLN": "Q",
+    "GLU": "E", "GLY": "G", "HIS": "H", "ILE": "I", "LEU": "L", "LYS": "K",
+    "MET": "M", "PHE": "F", "PRO": "P", "SER": "S", "THR": "T", "TRP": "W",
+    "TYR": "Y", "VAL": "V",
+}
+
+# ConSurf grades belong to the structure the pipeline selected for the MSA, so a
+# contact taken from a different structure of the "same" protein is only
+# comparable if the two share a residue numbering. When they do not - nlpD was
+# matched to a Campylobacter M23 peptidase while ConSurf scored an E. coli
+# AlphaFold model - every mapped grade is meaningless. Checking that the contact
+# residue is the residue ConSurf expects catches that: bamA agrees 475/475,
+# nlpD agreed 2/33.
+MIN_RESIDUE_AGREEMENT = 0.8
+
 
 def read_tsv(path):
     with open(path) as handle:
@@ -256,6 +272,28 @@ def main():
         rows.append(row)
         per_binder[(gene, contact["pdb_id"], contact["binder_molecule"],
                     contact["binder_type"], contact["target_chain"])].append(row)
+
+    # ---- drop structures whose numbering does not match the reference -----
+    checked = defaultdict(lambda: [0, 0])
+    for row in rows:
+        expected = THREE_TO_ONE.get(row["res_name"].upper())
+        observed = (row.get("consurf_residue") or "").upper()
+        if not expected or not observed:
+            continue
+        key = (row["gene"], row["pdb_id"])
+        checked[key][1] += 1
+        if expected == observed:
+            checked[key][0] += 1
+
+    rejected = {k: v for k, v in checked.items()
+                if v[1] and v[0] / v[1] < MIN_RESIDUE_AGREEMENT}
+    if rejected:
+        print("\nDropped - residue numbering does not match the structure ConSurf scored:")
+        for (gene, pdb), (ok, total) in sorted(rejected.items()):
+            print(f"  {gene} / {pdb}: only {ok}/{total} contacts "
+                  f"({ok / total * 100:.0f}%) are the residue ConSurf expects")
+        rows = [r for r in rows if (r["gene"], r["pdb_id"]) not in rejected]
+        per_binder = {k: v for k, v in per_binder.items() if (k[0], k[1]) not in rejected}
 
     # ---- summaries -------------------------------------------------------
     summaries = []
