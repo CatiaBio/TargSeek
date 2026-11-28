@@ -60,6 +60,13 @@ structure_selection:
   max_structures_per_gene: 1
   # Minimum combined score to include a structure (0.0-1.0)
   min_similarity_score: 0.1
+  # Hard floor on sequence identity between the structure and the gene's own
+  # MSA. The combined score gives length half the weight, so a structure of
+  # roughly the right size passed even at 13% identity - and epitopes are
+  # predicted from the structure's sequence, so that would be the wrong
+  # protein's epitopes. 0.30 is the usual floor for assuming two proteins are
+  # structurally equivalent.
+  min_sequence_identity: 0.30
   # Minimum coverage percentage of common amino acid stretches (0-100)
   min_coverage_percentage: 10.0
   # Similarity calculation method: "local_alignment", "global_alignment", or "lcs"

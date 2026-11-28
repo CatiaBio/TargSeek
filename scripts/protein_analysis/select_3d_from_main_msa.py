@@ -273,7 +273,8 @@ def select_best_3d_structure(gene_name: str, main_msa_dir: Path, structure_dir: 
                            similarity_method: str, min_similarity_score: float,
                            max_structures: int = 1, scoring_weights: dict = None,
                            enable_prefilter: bool = False, max_length_deviation: float = 0.5,
-                           manual_overrides: dict = None) -> list:
+                           manual_overrides: dict = None,
+                           min_sequence_identity: float = 0.30) -> list:
     """Select the best 3D structure for a gene based on similarity to main MSA"""
 
     # Step 0: Check for manual override first
@@ -285,6 +286,8 @@ def select_best_3d_structure(gene_name: str, main_msa_dir: Path, structure_dir: 
     # Default scoring weights if not provided
     if scoring_weights is None:
         scoring_weights = {'length': 0.5, 'similarity': 0.3, 'coverage': 0.2}
+
+    rejected_low_identity = []
 
     # Step 1: Load main MSA sequences (randomly select 5) - SAME SET FOR ALL STRUCTURE EVALUATIONS
     main_msa_file = main_msa_dir / f"{gene_name}.fasta"
@@ -386,7 +389,22 @@ def select_best_3d_structure(gene_name: str, main_msa_dir: Path, structure_dir: 
         logging.debug(f"      Coverage score: {coverage_score:.3f}")
         logging.debug(f"      Combined score: {combined_score:.3f}")
 
-        # Step 5: Apply minimum threshold to combined score
+        # Step 5a: sequence identity is a hard gate, not a weighted term.
+        # The combined score gives length half the weight, and length says
+        # nothing about whether this is the right protein: a structure with 13%
+        # identity but a matching length still scored 0.66 against a 0.1
+        # threshold. Below ~30% identity two proteins cannot be assumed
+        # structurally equivalent, and epitopes predicted from the structure's
+        # sequence would belong to the wrong protein.
+        if similarity_score < min_sequence_identity:
+            rejected_low_identity.append(
+                (gene_name, structure_seq.structure_file, similarity_score))
+            logging.warning(
+                f"      Rejected {structure_seq.structure_file}: sequence identity "
+                f"{similarity_score:.0%} is below the {min_sequence_identity:.0%} floor")
+            continue
+
+        # Step 5b: Apply minimum threshold to combined score
         if combined_score >= min_similarity_score:
             # Extract metadata from structure sequence
             pdb_id = structure_seq.structure_file.replace('.fasta', '').split('_')[0]
@@ -419,6 +437,12 @@ def select_best_3d_structure(gene_name: str, main_msa_dir: Path, structure_dir: 
     structure_scores.sort(key=lambda x: x['combined_score'], reverse=True)
     selected_structures = structure_scores[:max_structures]
 
+    if rejected_low_identity:
+        worst = max(r[2] for r in rejected_low_identity)
+        logging.warning(
+            f"  {len(rejected_low_identity)} structure(s) for {gene_name} rejected on "
+            f"sequence identity (best was {worst:.0%}, floor {min_sequence_identity:.0%})")
+
     logging.info(f"  Selected {len(selected_structures)}/{len(structure_sequences)} 3D structures for {gene_name}")
     if selected_structures:
         best_struct = selected_structures[0]
@@ -449,6 +473,8 @@ def main():
         # Get scoring weights from config
         scoring_weights = snakemake.config.get('structure_selection', {}).get('scoring_weights',
                                              {'length': 0.5, 'similarity': 0.3, 'coverage': 0.2})
+        min_sequence_identity = float(snakemake.config.get('structure_selection', {}).get(
+            'min_sequence_identity', 0.30))
 
         # Get length filtering parameters
         length_config = snakemake.config.get('structure_selection', {}).get('length_filtering', {})
@@ -476,6 +502,7 @@ def main():
         group = "test_group"
         similarity_method = "local_alignment"
         min_similarity_score = 0.1
+        min_sequence_identity = 0.30
         max_structures = 1
         structure_base_dir = Path("data/protein_structures")
 
@@ -533,7 +560,8 @@ def main():
         selected_structures = select_best_3d_structure(
             gene_name, main_msa_dir, structure_dir,
             "length_similarity_coverage", min_similarity_score, max_structures,
-            scoring_weights, enable_prefilter, max_length_deviation, manual_overrides
+            scoring_weights, enable_prefilter, max_length_deviation, manual_overrides,
+            min_sequence_identity=min_sequence_identity
         )
 
         if selected_structures:
